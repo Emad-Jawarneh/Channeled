@@ -137,6 +137,17 @@ public static class AuthEndpoints
         .AllowAnonymous()
         .RequireRateLimiting("auth");
 
+        group.MapPost("/register", async Task<IResult> (
+            RegisterRequest body,
+            IAuthService auth,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            return ToHttp(await auth.RegisterAsync(body, CreateContext(http), ct));
+        })
+        .AllowAnonymous()
+        .RequireRateLimiting("auth");
+
         group.MapPost("/forgot-password", async Task<IResult> (
             ForgotPasswordRequest body,
             IAuthService auth,

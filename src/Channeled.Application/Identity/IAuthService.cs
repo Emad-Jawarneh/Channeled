@@ -18,6 +18,8 @@ public interface IAuthService
 
     Task<AppResult<AuthUserDto>> AcceptInvitationAsync(AcceptInvitationRequest request, RequestContext context, CancellationToken ct = default);
 
+    Task<AppResult<AuthUserDto>> RegisterAsync(RegisterRequest request, RequestContext context, CancellationToken ct = default);
+
     Task<AppResult> ForgotPasswordAsync(ForgotPasswordRequest request, RequestContext context, CancellationToken ct = default);
 
     /// <summary>Raw reset token returned only for tests / email stub in M1.</summary>

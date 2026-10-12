@@ -71,6 +71,57 @@ if (args.Contains("seed-operator", StringComparer.OrdinalIgnoreCase))
     return 0;
 }
 
+if (args.Contains("ensure-user", StringComparer.OrdinalIgnoreCase))
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    await db.Database.MigrateAsync();
+    var users = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+    var email = GetArg(args, "--email") ?? throw new InvalidOperationException("Provide --email");
+    var password = GetArg(args, "--password") ?? throw new InvalidOperationException("Provide --password");
+    var name = GetArg(args, "--name") ?? "User";
+    var admin = args.Contains("--admin", StringComparer.OrdinalIgnoreCase);
+
+    var user = await users.FindByEmailAsync(email);
+    if (user is null)
+    {
+        user = new AppUser
+        {
+            Id = UuidV7.NewGuid(),
+            Email = email,
+            UserName = email,
+            DisplayName = name,
+            EmailConfirmed = true,
+            IsPlatformAdmin = admin,
+            Status = "active",
+        };
+        var created = await users.CreateAsync(user, password);
+        if (!created.Succeeded)
+        {
+            Console.Error.WriteLine(string.Join("; ", created.Errors.Select(e => e.Description)));
+            return 1;
+        }
+
+        Console.WriteLine($"Created user {email} admin={admin}");
+        return 0;
+    }
+
+    user.DisplayName = name;
+    user.IsPlatformAdmin = admin || user.IsPlatformAdmin;
+    user.Status = "active";
+    await users.UpdateAsync(user);
+    var token = await users.GeneratePasswordResetTokenAsync(user);
+    var reset = await users.ResetPasswordAsync(user, token, password);
+    if (!reset.Succeeded)
+    {
+        Console.Error.WriteLine(string.Join("; ", reset.Errors.Select(e => e.Description)));
+        return 1;
+    }
+
+    Console.WriteLine($"Updated user {email} admin={user.IsPlatformAdmin}");
+    return 0;
+}
+
 if (args.Contains("backup", StringComparer.OrdinalIgnoreCase))
 {
     await using var scope = app.Services.CreateAsyncScope();
@@ -239,6 +290,7 @@ app.Use(async (context, next) =>
         // Login/accept/forgot/reset/csrf bootstrap are anonymous and CSRF-exempt for first cookie issuance.
         var path = context.Request.Path.Value ?? "";
         var exempt = path.StartsWith("/api/v1/auth/login", StringComparison.OrdinalIgnoreCase)
+                     || path.StartsWith("/api/v1/auth/register", StringComparison.OrdinalIgnoreCase)
                      || path.StartsWith("/api/v1/auth/invitations/accept", StringComparison.OrdinalIgnoreCase)
                      || path.StartsWith("/api/v1/auth/forgot-password", StringComparison.OrdinalIgnoreCase)
                      || path.StartsWith("/api/v1/auth/reset-password", StringComparison.OrdinalIgnoreCase)

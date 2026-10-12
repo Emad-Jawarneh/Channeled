@@ -63,6 +63,28 @@ public class AuthAbusePathTests : IClassFixture<AuthApiFactory>, IAsyncLifetime
     }
 
     [Fact]
+    public async Task Register_creates_account_and_signs_in()
+    {
+        var register = await _client.PostAsJsonAsync(
+            "/api/v1/auth/register",
+            new RegisterRequest("newuser@example.com", "New User", "NewUserPassword1!"));
+        register.StatusCode.Should().Be(HttpStatusCode.OK);
+        var created = await register.Content.ReadFromJsonAsync<AuthUserDto>();
+        created!.Email.Should().Be("newuser@example.com");
+        created.IsPlatformAdmin.Should().BeFalse();
+
+        var me = await _client.GetAsync("/api/v1/auth/me");
+        me.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await me.Content.ReadFromJsonAsync<AuthUserDto>())!.Email.Should().Be("newuser@example.com");
+
+        var duplicate = await _client.PostAsJsonAsync(
+            "/api/v1/auth/register",
+            new RegisterRequest("newuser@example.com", "Other", "NewUserPassword1!"));
+        duplicate.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await duplicate.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString().Should().Be("conflict");
+    }
+
+    [Fact]
     public async Task Invitation_reject_expired_and_reused_tokens()
     {
         await LoginAsAdminAsync();
@@ -85,6 +107,9 @@ public class AuthAbusePathTests : IClassFixture<AuthApiFactory>, IAsyncLifetime
             new AcceptInvitationRequest(created.RawToken, "Other", "MemberPassword1"));
         reuse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         (await reuse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString().Should().Be("invalid_token");
+
+        await LoginAsAdminAsync();
+        await EnsureCsrfAsync();
 
         var expiredInvite = await _client.PostAsJsonAsync(
             "/api/v1/auth/invitations",

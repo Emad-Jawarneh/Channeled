@@ -22,6 +22,8 @@ public sealed record InvitationCreatedDto(Guid InvitationId, string RawToken, Da
 
 public sealed record AcceptInvitationRequest(string Token, string DisplayName, string Password);
 
+public sealed record RegisterRequest(string Email, string DisplayName, string Password);
+
 public sealed record ForgotPasswordRequest(string Email);
 
 public sealed record ResetPasswordRequest(string Token, string NewPassword);

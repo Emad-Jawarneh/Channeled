@@ -70,32 +70,7 @@ public sealed class AuthService(
         }
 
         await userManager.ResetAccessFailedCountAsync(user);
-
-        var session = new UserSession
-        {
-            Id = UuidV7.NewGuid(),
-            UserId = user.Id,
-            CreatedAt = clock.UtcNow,
-            LastSeenAt = clock.UtcNow,
-            Ip = context.Ip,
-            UserAgent = Truncate(context.UserAgent, 512),
-        };
-        db.UserSessions.Add(session);
-
-        user.LastLoginAt = clock.UtcNow;
-        await userManager.UpdateAsync(user);
-
-        var extraClaims = new List<System.Security.Claims.Claim>
-        {
-            new("sid", session.Id.ToString("D")),
-        };
-        if (user.IsPlatformAdmin)
-        {
-            extraClaims.Add(new System.Security.Claims.Claim("is_platform_admin", "true"));
-        }
-
-        await signInManager.SignInWithClaimsAsync(user, isPersistent: true, extraClaims);
-
+        await SignInWithSessionAsync(user, context, ct);
         await WriteAuditAsync(user.Id, AuditEventType.LoginSuccess, "user", user.Id.ToString(), context, ct);
         await db.SaveChangesAsync(ct);
 
@@ -270,6 +245,62 @@ public sealed class AuthService(
         invitation.AcceptedAt = clock.UtcNow;
         await WriteAuditAsync(user.Id, AuditEventType.InviteAccept, "invitation", invitation.Id.ToString(), context, ct);
         await WriteAuditAsync(user.Id, AuditEventType.UserCreate, "user", user.Id.ToString(), context, ct);
+        await SignInWithSessionAsync(user, context, ct);
+        await WriteAuditAsync(user.Id, AuditEventType.LoginSuccess, "user", user.Id.ToString(), context, ct);
+        await db.SaveChangesAsync(ct);
+
+        return AppResult<AuthUserDto>.Ok(ToDto(user));
+    }
+
+    public async Task<AppResult<AuthUserDto>> RegisterAsync(
+        RegisterRequest request,
+        RequestContext context,
+        CancellationToken ct = default)
+    {
+        EmailAddress email;
+        try
+        {
+            email = EmailAddress.Parse(request.Email);
+        }
+        catch (ArgumentException ex)
+        {
+            return AppResult<AuthUserDto>.Fail(ErrorCodes.Validation, ex.Message);
+        }
+
+        if (string.IsNullOrWhiteSpace(request.DisplayName))
+        {
+            return AppResult<AuthUserDto>.Fail(ErrorCodes.Validation, "Display name is required.");
+        }
+
+        if (!PasswordRules.IsValid(request.Password))
+        {
+            return AppResult<AuthUserDto>.Fail(ErrorCodes.Validation, $"Password must be at least {PasswordRules.MinLength} characters.");
+        }
+
+        if (await userManager.FindByEmailAsync(email.Value) is not null)
+        {
+            return AppResult<AuthUserDto>.Fail(ErrorCodes.Conflict, "An account with this email already exists.");
+        }
+
+        var user = new AppUser
+        {
+            Id = UuidV7.NewGuid(),
+            Email = email.Value,
+            UserName = email.Value,
+            DisplayName = request.DisplayName.Trim(),
+            EmailConfirmed = true,
+            Status = "active",
+        };
+
+        var create = await userManager.CreateAsync(user, request.Password);
+        if (!create.Succeeded)
+        {
+            return AppResult<AuthUserDto>.Fail(ErrorCodes.Validation, string.Join("; ", create.Errors.Select(e => e.Description)));
+        }
+
+        await WriteAuditAsync(user.Id, AuditEventType.UserCreate, "user", user.Id.ToString(), context, ct);
+        await SignInWithSessionAsync(user, context, ct);
+        await WriteAuditAsync(user.Id, AuditEventType.LoginSuccess, "user", user.Id.ToString(), context, ct);
         await db.SaveChangesAsync(ct);
 
         return AppResult<AuthUserDto>.Ok(ToDto(user));
@@ -454,6 +485,34 @@ public sealed class AuthService(
             ct);
 
         return raw;
+    }
+
+    private async Task SignInWithSessionAsync(AppUser user, RequestContext context, CancellationToken ct)
+    {
+        var session = new UserSession
+        {
+            Id = UuidV7.NewGuid(),
+            UserId = user.Id,
+            CreatedAt = clock.UtcNow,
+            LastSeenAt = clock.UtcNow,
+            Ip = context.Ip,
+            UserAgent = Truncate(context.UserAgent, 512),
+        };
+        db.UserSessions.Add(session);
+
+        user.LastLoginAt = clock.UtcNow;
+        await userManager.UpdateAsync(user);
+
+        var extraClaims = new List<System.Security.Claims.Claim>
+        {
+            new("sid", session.Id.ToString("D")),
+        };
+        if (user.IsPlatformAdmin)
+        {
+            extraClaims.Add(new System.Security.Claims.Claim("is_platform_admin", "true"));
+        }
+
+        await signInManager.SignInWithClaimsAsync(user, isPersistent: true, extraClaims);
     }
 
     private async Task WriteAuditAsync(

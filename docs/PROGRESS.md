@@ -4,22 +4,20 @@
 
 | Milestone | Status | Evidence |
 |-----------|--------|----------|
-| M0–M6 | ✅ Complete | Prior gates |
-| M7 Operations | ✅ Complete | `RestoreDrillTests`; `./ci.sh` green |
-| M8 Hardening | ⏸ | — |
+| M0–M7 | ✅ Complete | Prior gates |
+| M8 Hardening | ✅ Complete | Playwright e2e + axe; `docs/SECURITY.md`; load-test script; `./ci.sh` green |
 
-## M7 exit gate
+## M8 exit gate
 
-- [x] Backups: `pg_dump` + object copy + manifest + post-backup verification
-- [x] Guided restore with maintenance mode; store↔DB reconciliation
-- [x] Scripted restore drill reproduces data with **zero** reconcile diffs
-- [x] Health (API/DB/store/disk/jobs), `/metrics`, correlation IDs, operator alerts
-- [x] Install scripts + operator guide (`ops/`, `docs/OPERATOR_GUIDE.md`)
-- [x] `./ci.sh` green
+- [x] Playwright e2e: sign in; upload; rename; move; delete; restore; invite/accept; role change; private channel; personal copy; admin audit
+- [x] Accessibility (axe) pass on channel browser
+- [x] `docs/SECURITY.md` ASVS L2 filled
+- [x] Load test script (CI reduced profile; full 200/50/1M documented)
+- [x] README quickstart; `./ci.sh` green
 
-## M7 notes
+## M8 notes
 
-- `IBackupService` / `BackupEntity`; CLI: `backup`, `restore`, `reconcile-store`, `restore-drill`
-- Scripts: `ops/backup/{backup,restore,restore-drill}.sh`; Caddy/nginx samples; Windows service stub
-- Admin `POST /backups/run` creates real packages; restore via admin controlled by `Backup:RestoreViaAdmin`
-- Daily `BackupHostedService` when background jobs enabled
+- SPA: rail/sidebar/main/details; routes for login, invite, reset, channel files, personal, search, team settings, admin
+- Upload tray with multipart concurrency; list refresh on upload complete
+- `scripts/e2e.sh`, `scripts/load-test.mjs`; `ensure-user` CLI for e2e admin
+- Playwright OS deps: `sudo npx playwright install-deps` (once per machine)

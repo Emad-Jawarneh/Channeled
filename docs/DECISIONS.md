@@ -40,6 +40,11 @@
 **Decision:** M1 uses `platform_invitations` (email + hashed token) for account creation before teams exist. Team-scoped invitations remain M2.
 **Reason:** AGENTS requires invitation-only signup in M1; team_id invites need M2 teams.
 
+## 2026-10-12 — Open self-registration
+
+**Decision:** `POST /api/v1/auth/register` creates a normal (non-admin) account and signs the user in. Platform and team invitations remain available.
+**Reason:** Product requirement that signups are not invitation-only; invitations still cover team join and optional admin-provisioned accounts.
+
 ## 2026-10-12 — Identity keys
 
 **Decision:** ASP.NET Identity with `Guid` keys generated as UUIDv7 in application code.
@@ -104,3 +109,13 @@
 
 **Decision:** `Backup:RestoreViaAdmin` defaults true in production; false under Testing / API test factory. Catalog tests audit `BackupRestore` without running `pg_restore` against the shared live pool.
 **Reason:** Full restore terminates backends and is covered by `RestoreDrillTests` / `ops/backup/restore-drill.sh`.
+
+## 2026-10-12 — M8 SPA in Hardening
+
+**Decision:** Full SPA (rail/sidebar/main/details) ships in M8 alongside Playwright e2e, because earlier milestones delivered API-first surfaces and AGENTS places Playwright in M8.
+**Reason:** Wireframe routes and e2e flows require UI; M7 was operations-only.
+
+## 2026-10-12 — Load test profiles
+
+**Decision:** CI runs a reduced concurrency/latency profile (`LOAD_USERS`/`LOAD_ITERATIONS`). Full AGENTS scale (200 users, 50 teams, 1M files, ~2 TB) is documented and operator-run after bench seed; object corpus for 2 TB is not required for the latency harness.
+**Reason:** CI machines cannot hold a 2 TB store; metadata bench + concurrent list/search still validates scale path.

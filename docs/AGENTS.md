@@ -69,8 +69,8 @@ Platform admin flag grants `/admin/*` only (users, teams, quotas, audit, backups
 </authorization>
 
 <api>
-REST, JSON, `/api/v1`, RFC 7807 errors with a stable `code`, cursor pagination (`cursor`, `limit` max 200), idempotency-key support on upload completion and invitations, OpenAPI published. Groups: Auth (login, logout, forgot/reset password, sessions list/revoke) · Me (profile, teams, storage) · Teams · Members and Invitations · Channels (+ private membership) · Items/Files in channels (list with folder/sort/type/uploader filters, details, rename, move, delete, content download with range support) · Uploads (start, put part n, complete, abort, list parts for resume) · Personal (files, folders, recent, starred, copy-to-channel) · Trash (list, restore) · Search (`scope=channel|team|personal`) · Admin (dashboard, users CRUD/disable/reset/quota, teams, audit list + CSV/JSON export, backups list/run, health).
-Account creation is by invitation or operator only. No open sign-up.
+REST, JSON, `/api/v1`, RFC 7807 errors with a stable `code`, cursor pagination (`cursor`, `limit` max 200), idempotency-key support on upload completion and invitations, OpenAPI published. Groups: Auth (register, login, logout, forgot/reset password, sessions list/revoke, invitations) · Me (profile, teams, storage) · Teams · Members and Invitations · Channels (+ private membership) · Items/Files in channels (list with folder/sort/type/uploader filters, details, rename, move, delete, content download with range support) · Uploads (start, put part n, complete, abort, list parts for resume) · Personal (files, folders, recent, starred, copy-to-channel) · Trash (list, restore) · Search (`scope=channel|team|personal`) · Admin (dashboard, users CRUD/disable/reset/quota, teams, audit list + CSV/JSON export, backups list/run, health).
+Account creation is open self-registration, invitation, or operator. Team membership remains invitation-based.
 </api>
 
 <storage_flow>

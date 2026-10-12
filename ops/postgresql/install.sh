@@ -32,12 +32,19 @@ BEGIN
   END IF;
 END
 \$\$;
+ALTER ROLE ${DB_USER} CREATEDB;
 SELECT 'CREATE DATABASE ${DB_NAME} OWNER ${DB_USER}'
 WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '${DB_NAME}')\gexec
+SELECT 'CREATE DATABASE ${DB_NAME}_test OWNER ${DB_USER}'
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '${DB_NAME}_test')\gexec
+SELECT 'CREATE DATABASE ${DB_NAME}_restore_drill OWNER ${DB_USER}'
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '${DB_NAME}_restore_drill')\gexec
 SQL
 
 sudo -u postgres psql -v ON_ERROR_STOP=1 -d "${DB_NAME}" -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+sudo -u postgres psql -v ON_ERROR_STOP=1 -d "${DB_NAME}_test" -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+sudo -u postgres psql -v ON_ERROR_STOP=1 -d "${DB_NAME}_restore_drill" -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
 
-echo "PostgreSQL ready: database=${DB_NAME} user=${DB_USER}"
+echo "PostgreSQL ready: database=${DB_NAME} (+ _test, _restore_drill) user=${DB_USER}"
 echo "Connection string example:"
 echo "  Host=localhost;Database=${DB_NAME};Username=${DB_USER};Password=***"

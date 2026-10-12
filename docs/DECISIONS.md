@@ -94,3 +94,13 @@
 
 **Decision:** Platform admin APIs cover dashboard, users, team quotas, audit export, health, and backup/config/purge/download audit stubs. Personal space remains owner-only; admin never bypasses personal authorization.
 **Reason:** AGENTS: `/admin/*` only for platform admin; personal isolation from M4 stands.
+
+## 2026-10-12 — Backup package format
+
+**Decision:** Each backup is a directory: `database.dump` (`pg_dump -Fc`), `objects/` (keyed files), `manifest.json` (key, size, SHA-256). Restore filters EXTENSION TOC entries so non-superuser `pg_restore` works when `pg_trgm` is owned by postgres.
+**Reason:** M7 requires consistent DB + object + manifest with verification; app role typically cannot DROP EXTENSION.
+
+## 2026-10-12 — Admin restore in test hosts
+
+**Decision:** `Backup:RestoreViaAdmin` defaults true in production; false under Testing / API test factory. Catalog tests audit `BackupRestore` without running `pg_restore` against the shared live pool.
+**Reason:** Full restore terminates backends and is covered by `RestoreDrillTests` / `ops/backup/restore-drill.sh`.

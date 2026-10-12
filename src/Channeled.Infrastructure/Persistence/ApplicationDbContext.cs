@@ -2,6 +2,7 @@ using Channeled.Domain.Audit;
 using Channeled.Infrastructure.Files;
 using Channeled.Infrastructure.Identity;
 using Channeled.Infrastructure.Jobs;
+using Channeled.Infrastructure.Operations;
 using Channeled.Infrastructure.Teams;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -30,6 +31,7 @@ public sealed class ApplicationDbContext : IdentityDbContext<AppUser, AppRole, G
     public DbSet<UploadPartEntity> UploadParts => Set<UploadPartEntity>();
     public DbSet<FileStarEntity> FileStars => Set<FileStarEntity>();
     public DbSet<JobEntity> Jobs => Set<JobEntity>();
+    public DbSet<BackupEntity> Backups => Set<BackupEntity>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -196,6 +198,18 @@ public sealed class ApplicationDbContext : IdentityDbContext<AppUser, AppRole, G
             entity.Property(x => x.Error).HasMaxLength(2000);
             entity.HasIndex(x => x.Type);
             entity.HasIndex(x => x.CreatedAt);
+        });
+
+        builder.Entity<BackupEntity>(entity =>
+        {
+            entity.ToTable("backups");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Directory).HasMaxLength(1024).IsRequired();
+            entity.Property(x => x.Kind).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.State).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.Error).HasMaxLength(2000);
+            entity.HasIndex(x => x.CreatedAt);
+            entity.HasIndex(x => x.Kind);
         });
     }
 }

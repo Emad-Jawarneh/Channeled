@@ -25,7 +25,9 @@ public class HealthEndpointTests : IClassFixture<AuthApiFactory>
         var body = await response.Content.ReadFromJsonAsync<HealthBody>();
         body.Should().NotBeNull();
         body!.Status.Should().Be("ok");
+        body.Database.Should().BeTrue();
+        body.Store.Should().BeTrue();
     }
 
-    private sealed record HealthBody(string Status, string? Store);
+    private sealed record HealthBody(string Status, bool Api, bool Database, bool Store, bool Disk);
 }

@@ -1,0 +1,11 @@
+# Reverse proxy with TLS for Channeled (adjust domain).
+{$CHANNELED_DOMAIN:localhost} {
+	encode gzip
+	reverse_proxy 127.0.0.1:5000
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		X-Frame-Options DENY
+	}
+}

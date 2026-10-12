@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Channeled.Application.Abstractions.Operations;
 using Channeled.Application.Abstractions.Results;
 using Channeled.Application.Abstractions.Storage;
 using Channeled.Application.Abstractions.Time;
@@ -10,7 +11,6 @@ using Channeled.Domain.Errors;
 using Channeled.Domain.Identity;
 using Channeled.Infrastructure.Files;
 using Channeled.Infrastructure.Identity;
-using Channeled.Infrastructure.Jobs;
 using Channeled.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -23,7 +23,9 @@ public sealed class AdminService(
     UserManager<AppUser> userManager,
     IClock clock,
     IFileStore store,
-    IOptions<FileStoreOptions> storeOptions) : IAdminService
+    IBackupService backups,
+    ISystemHealthService health,
+    IOptions<BackupOptions> backupOptions) : IAdminService
 {
     public async Task<AppResult<AdminDashboardDto>> GetDashboardAsync(Guid actorId, CancellationToken ct = default)
     {
@@ -51,34 +53,16 @@ public sealed class AdminService(
             return NotFound<AdminHealthDto>();
         }
 
-        var dbOk = false;
-        try
-        {
-            dbOk = await db.Database.CanConnectAsync(ct);
-        }
-        catch
-        {
-            dbOk = false;
-        }
-
-        var storeOk = true;
-        try
-        {
-            _ = await store.ExistsAsync("healthcheck-missing-object", ct);
-        }
-        catch
-        {
-            storeOk = false;
-        }
-
-        var pending = await db.Jobs.CountAsync(j => j.State == "pending" || j.State == "running", ct);
-        var status = dbOk && storeOk ? "ok" : "degraded";
+        var report = await health.CheckAsync(ct);
         return AppResult<AdminHealthDto>.Ok(new AdminHealthDto(
-            status,
-            dbOk,
-            storeOk,
-            storeOptions.Value.Kind.ToString(),
-            pending));
+            report.Status,
+            report.Database,
+            report.Store,
+            report.Disk,
+            report.DiskFreeBytes,
+            report.StoreKind,
+            report.PendingJobs,
+            report.Detail));
     }
 
     public async Task<AppResult<IReadOnlyList<AdminUserDto>>> ListUsersAsync(Guid actorId, CancellationToken ct = default)
@@ -406,12 +390,9 @@ public sealed class AdminService(
             return NotFound<IReadOnlyList<AdminBackupDto>>();
         }
 
-        var jobs = await db.Jobs.AsNoTracking()
-            .Where(j => j.Type == "backup")
-            .OrderByDescending(j => j.CreatedAt)
-            .Take(50)
-            .ToListAsync(ct);
-        IReadOnlyList<AdminBackupDto> list = jobs.Select(j => new AdminBackupDto(j.Id, j.Type, j.CreatedAt, j.State)).ToList();
+        var list = (await backups.ListAsync(ct))
+            .Select(b => new AdminBackupDto(b.Id, b.Id.ToString("N"), b.Kind, b.CreatedAt, b.State, b.VerifiedAt, b.ObjectCount, b.TotalBytes))
+            .ToList();
         return AppResult<IReadOnlyList<AdminBackupDto>>.Ok(list);
     }
 
@@ -422,20 +403,11 @@ public sealed class AdminService(
             return NotFound<AdminBackupDto>();
         }
 
-        var job = new JobEntity
-        {
-            Id = UuidV7.NewGuid(),
-            Type = "backup",
-            State = "completed",
-            CreatedAt = clock.UtcNow,
-            StartedAt = clock.UtcNow,
-            CompletedAt = clock.UtcNow,
-            DetailsJson = """{"note":"M6 stub backup"}""",
-        };
-        db.Jobs.Add(job);
-        await WriteAuditAsync(actorId, AuditEventType.BackupRun, "backup", job.Id.ToString(), null, context, ct);
+        var info = await backups.CreateAsync("ondemand", ct);
+        await WriteAuditAsync(actorId, AuditEventType.BackupRun, "backup", info.Id.ToString(), null, context, ct);
         await db.SaveChangesAsync(ct);
-        return AppResult<AdminBackupDto>.Ok(new AdminBackupDto(job.Id, job.Type, job.CreatedAt, job.State));
+        return AppResult<AdminBackupDto>.Ok(new AdminBackupDto(
+            info.Id, info.Id.ToString("N"), info.Kind, info.CreatedAt, info.State, info.VerifiedAt, info.ObjectCount, info.TotalBytes));
     }
 
     public async Task<AppResult> RecordConfigChangeAsync(
@@ -501,6 +473,11 @@ public sealed class AdminService(
         if (!await IsAdminAsync(actorId, ct))
         {
             return NotFound();
+        }
+
+        if (backupOptions.Value.RestoreViaAdmin)
+        {
+            await backups.RestoreAsync(backupId, ct);
         }
 
         await WriteAuditAsync(actorId, AuditEventType.BackupRestore, "backup", backupId.ToString(), null, context, ct);

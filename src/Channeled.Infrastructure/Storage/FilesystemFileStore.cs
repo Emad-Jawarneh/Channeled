@@ -230,6 +230,30 @@ public sealed class FilesystemFileStore : IFileStore
         return Task.CompletedTask;
     }
 
+    public Task<IReadOnlyList<string>> ListObjectKeysAsync(CancellationToken cancellationToken = default)
+    {
+        if (!Directory.Exists(_root))
+        {
+            return Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
+        }
+
+        var keys = new List<string>();
+        foreach (var path in Directory.EnumerateFiles(_root, "*", SearchOption.AllDirectories))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var relative = Path.GetRelativePath(_root, path);
+            if (relative.StartsWith(".multipart", StringComparison.Ordinal)
+                || relative.EndsWith(".meta.json", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            keys.Add(relative.Replace(Path.DirectorySeparatorChar, '/'));
+        }
+
+        return Task.FromResult<IReadOnlyList<string>>(keys);
+    }
+
     private MultipartState GetUpload(string uploadId)
     {
         if (_uploads.TryGetValue(uploadId, out var state))

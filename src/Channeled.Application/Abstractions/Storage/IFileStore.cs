@@ -43,4 +43,7 @@ public interface IFileStore
         string objectKey,
         string uploadId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Lists object keys (excludes multipart scratch and metadata sidecars).</summary>
+    Task<IReadOnlyList<string>> ListObjectKeysAsync(CancellationToken cancellationToken = default);
 }

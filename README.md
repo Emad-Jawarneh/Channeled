@@ -13,9 +13,9 @@ Self-hosted, multi-team file-sharing platform.
 
 ## Status
 
-**M0–M6 complete** (foundations, identity, teams/channels, files, personal space, search/quotas, admin/audit). Next: **M7 SPA**.
+**M0–M7 complete** (through operations: backups, restore drill, health/metrics). Next: **M8 Hardening** (SPA e2e, security, load).
 
-The web UI today is mainly **login + health**. Teams, files, personal space, search, and admin are available via the **API** (cookie auth).
+The web UI today is mainly **login + health**. Teams, files, personal space, search, admin, and backups are available via the **API** (cookie auth).
 
 ## Stack
 
@@ -150,3 +150,14 @@ Fail-closed: restore/build, unit + integration + API tests, web typecheck/lint/t
 ```
 
 Integration gate: `dotnet test tests/Channeled.Tests.Integration --filter MillionFileBench` (p95 list/search ≤ 500 ms on 1M rows).
+
+## Backups / restore drill (M7)
+
+```bash
+./ops/backup/backup.sh ondemand
+./ops/backup/restore.sh <backup-guid>
+./ops/backup/restore-drill.sh
+# or: dotnet test tests/Channeled.Tests.Integration --filter RestoreDrill
+```
+
+See [`docs/OPERATOR_GUIDE.md`](docs/OPERATOR_GUIDE.md).

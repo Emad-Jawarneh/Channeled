@@ -170,6 +170,32 @@ public sealed class S3FileStore : IFileStore, IAsyncDisposable
             cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<IReadOnlyList<string>> ListObjectKeysAsync(CancellationToken cancellationToken = default)
+    {
+        var keys = new List<string>();
+        string? token = null;
+        do
+        {
+            var response = await _client.ListObjectsV2Async(
+                new ListObjectsV2Request
+                {
+                    BucketName = _bucket,
+                    ContinuationToken = token,
+                },
+                cancellationToken).ConfigureAwait(false);
+
+            foreach (var obj in response.S3Objects)
+            {
+                keys.Add(obj.Key);
+            }
+
+            token = response.IsTruncated ? response.NextContinuationToken : null;
+        }
+        while (token is not null);
+
+        return keys;
+    }
+
     public ValueTask DisposeAsync()
     {
         if (_ownsClient)

@@ -4,20 +4,22 @@
 
 | Milestone | Status | Evidence |
 |-----------|--------|----------|
-| M0–M5 | ✅ Complete | Prior gates |
-| M6 Administration | ✅ Complete | `AdminCatalogAndImmutabilityTests`; `./ci.sh` green |
-| M7–M8 | ⏸ | — |
+| M0–M6 | ✅ Complete | Prior gates |
+| M7 Operations | ✅ Complete | `RestoreDrillTests`; `./ci.sh` green |
+| M8 Hardening | ⏸ | — |
 
-## M6 exit gate
+## M7 exit gate
 
-- [x] Dashboard, users/teams management, audit viewer + CSV/JSON export
-- [x] Every audit catalog event emitted and asserted (`Every_audit_catalog_event_is_emitted`)
-- [x] `audit_events` rejects UPDATE/DELETE for app role (trigger + REVOKE; immutability tests)
+- [x] Backups: `pg_dump` + object copy + manifest + post-backup verification
+- [x] Guided restore with maintenance mode; store↔DB reconciliation
+- [x] Scripted restore drill reproduces data with **zero** reconcile diffs
+- [x] Health (API/DB/store/disk/jobs), `/metrics`, correlation IDs, operator alerts
+- [x] Install scripts + operator guide (`ops/`, `docs/OPERATOR_GUIDE.md`)
 - [x] `./ci.sh` green
 
-## M6 notes
+## M7 notes
 
-- `AuditEventType` + `AuditCatalog` cover the AGENTS catalog
-- `IAdminService` / `/api/v1/admin/*`: dashboard, health, users CRUD/disable/reset, teams list/quota, audit list/export, backup stubs, config/download/purge audit hooks
-- Migration `AuditAppendOnly`: deny UPDATE/DELETE triggers on `audit_events`; REVOKE for role `channeled`
-- Team invite revoke + channel update; auth change-password emit catalog events
+- `IBackupService` / `BackupEntity`; CLI: `backup`, `restore`, `reconcile-store`, `restore-drill`
+- Scripts: `ops/backup/{backup,restore,restore-drill}.sh`; Caddy/nginx samples; Windows service stub
+- Admin `POST /backups/run` creates real packages; restore via admin controlled by `Backup:RestoreViaAdmin`
+- Daily `BackupHostedService` when background jobs enabled

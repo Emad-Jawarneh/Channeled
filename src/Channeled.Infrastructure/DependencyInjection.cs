@@ -1,4 +1,5 @@
 using Channeled.Application.Abstractions.Email;
+using Channeled.Application.Abstractions.Operations;
 using Channeled.Application.Abstractions.Storage;
 using Channeled.Application.Abstractions.Time;
 using Channeled.Application.Admin;
@@ -13,6 +14,7 @@ using Channeled.Infrastructure.Admin;
 using Channeled.Infrastructure.Email;
 using Channeled.Infrastructure.Files;
 using Channeled.Infrastructure.Identity;
+using Channeled.Infrastructure.Operations;
 using Channeled.Infrastructure.Persistence;
 using Channeled.Infrastructure.Personal;
 using Channeled.Infrastructure.Search;
@@ -39,6 +41,9 @@ public static class DependencyInjection
         services.Configure<UploadLimitsOptions>(configuration.GetSection(UploadLimitsOptions.SectionName));
         services.Configure<SearchBenchOptions>(configuration.GetSection(SearchBenchOptions.SectionName));
         services.Configure<AuditOptions>(configuration.GetSection(AuditOptions.SectionName));
+        services.Configure<BackupOptions>(configuration.GetSection(BackupOptions.SectionName));
+        services.Configure<MaintenanceOptions>(configuration.GetSection(MaintenanceOptions.SectionName));
+        services.Configure<OperationsOptions>(configuration.GetSection(OperationsOptions.SectionName));
 
         var connectionString = configuration.GetConnectionString("Postgres")
             ?? throw new InvalidOperationException("Connection string 'Postgres' is required.");
@@ -93,6 +98,11 @@ public static class DependencyInjection
         services.AddScoped<IUsageService, UsageService>();
         services.AddScoped<IQuotaReconciliationService, QuotaReconciliationService>();
         services.AddScoped<IAdminService, AdminService>();
+        services.AddSingleton<IMaintenanceMode, MaintenanceMode>();
+        services.AddSingleton<IOperatorAlertService, OperatorAlertService>();
+        services.AddScoped<IStoreReconciliationService, StoreReconciliationService>();
+        services.AddScoped<IBackupService, BackupService>();
+        services.AddScoped<ISystemHealthService, SystemHealthService>();
         services.AddSingleton<IFileStore>(sp =>
         {
             var options = sp.GetRequiredService<IOptions<FileStoreOptions>>().Value;
@@ -107,6 +117,7 @@ public static class DependencyInjection
         if (!configuration.GetValue("DisableBackgroundJobs", false))
         {
             services.AddHostedService<QuotaReconciliationHostedService>();
+            services.AddHostedService<BackupHostedService>();
         }
 
         return services;

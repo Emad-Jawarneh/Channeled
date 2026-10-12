@@ -15,8 +15,11 @@ public sealed record AdminHealthDto(
     string Status,
     bool Database,
     bool Store,
+    bool Disk,
+    long DiskFreeBytes,
     string StoreKind,
-    int PendingJobs);
+    int PendingJobs,
+    string? Detail);
 
 public sealed record AdminUserDto(
     Guid Id,
@@ -75,6 +78,14 @@ public sealed record AuditEventDto(
 
 public sealed record AuditListResponse(IReadOnlyList<AuditEventDto> Items, string? NextCursor);
 
-public sealed record AdminBackupDto(Guid Id, string Name, DateTimeOffset CreatedAt, string State);
+public sealed record AdminBackupDto(
+    Guid Id,
+    string Name,
+    string Kind,
+    DateTimeOffset CreatedAt,
+    string State,
+    DateTimeOffset? VerifiedAt,
+    int ObjectCount,
+    long TotalBytes);
 
 public sealed record ResetUserPasswordRequest(string NewPassword);

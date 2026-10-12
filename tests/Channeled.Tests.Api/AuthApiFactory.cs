@@ -26,6 +26,9 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
                 ["MigrateOnStartup"] = "false",
                 ["FileStore:Kind"] = "FileSystem",
                 ["FileStore:RootPath"] = Path.Combine(Path.GetTempPath(), "channeled-api-tests-" + Guid.NewGuid().ToString("N")),
+                ["Backup:RootPath"] = Path.Combine(Path.GetTempPath(), "channeled-api-backups-" + Guid.NewGuid().ToString("N")),
+                ["Backup:RestoreViaAdmin"] = "false",
+                ["DisableBackgroundJobs"] = "true",
             });
         });
 
@@ -45,6 +48,7 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
 
         await db.Database.ExecuteSqlRawAsync("""
             TRUNCATE TABLE
+              "backups",
               "jobs",
               "file_stars",
               "upload_parts",

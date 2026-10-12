@@ -109,6 +109,27 @@ public static class AdminEndpoints
             Guid id, IAdminService svc, ClaimsPrincipal p, HttpContext http, CancellationToken ct) =>
             await RequireUser(p, async userId => ToHttp(await svc.RecordBackupRestoreAsync(userId, id, Ctx(http), ct))));
 
+        admin.MapPost("/jobs/store-reconcile", async Task<IResult> (
+            Channeled.Application.Abstractions.Operations.IStoreReconciliationService reconcile,
+            IAuthService auth,
+            ClaimsPrincipal p,
+            CancellationToken ct) =>
+        {
+            if (!TryUser(p, out var userId))
+            {
+                return Problem(ErrorCodes.Unauthorized, "Not authenticated.", StatusCodes.Status401Unauthorized);
+            }
+
+            var me = await auth.GetCurrentUserAsync(userId, ct);
+            if (!me.Succeeded || me.Value is null || !me.Value.IsPlatformAdmin)
+            {
+                return Results.NotFound();
+            }
+
+            var report = await reconcile.ReconcileAsync(ct);
+            return Results.Ok(report);
+        });
+
         admin.MapPost("/config", async Task<IResult> (
             ConfigChangeBody body, IAdminService svc, ClaimsPrincipal p, HttpContext http, CancellationToken ct) =>
             await RequireUser(p, async userId => ToHttp(await svc.RecordConfigChangeAsync(userId, body.Key, body.Value, Ctx(http), ct))));

@@ -1,9 +1,12 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, NavLink, useNavigate, useParams } from "react-router-dom";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { teamsApi } from "../api/channeled";
+import { CreateTeamDialog } from "../features/teams/CreateTeamDialog";
+import { createTeamWithGeneral } from "../features/teams/createTeam";
 import { UploadTray } from "../uploads/UploadTray";
+import { ThemeToggle } from "../theme/ThemeToggle";
 import { Button } from "../ui/Button";
 import styles from "./AppShell.module.css";
 
@@ -18,22 +21,42 @@ export function AppShell({ children, sidebar, details, title }: AppShellProps) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const params = useParams();
+  const queryClient = useQueryClient();
+  const [createOpen, setCreateOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const teams = useQuery({
     queryKey: ["teams"],
     queryFn: () => teamsApi.list(),
     enabled: !!user,
   });
 
+  async function onCreateTeam(name: string) {
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const team = await createTeamWithGeneral(name);
+      await queryClient.invalidateQueries({ queryKey: ["teams"] });
+      setCreateOpen(false);
+      navigate(`/t/${team.slug}/c/general`);
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : "Could not create team.");
+    } finally {
+      setCreating(false);
+    }
+  }
+
   return (
     <div className={styles.shell} data-has-details={details ? "true" : "false"}>
       <aside className={styles.rail} aria-label="Team rail">
-        <Link to="/me/files" className={styles.brand} data-testid="brand">
+        <Link to="/" className={styles.brand} data-testid="brand">
           C
         </Link>
         <nav className={styles.railNav} aria-label="Teams">
-          <NavLink to="/me/files" className={styles.railItem} title="My files" data-testid="rail-me">
+          <NavLink to="/me/files" className={`${styles.railItem} ${styles.railMe}`} title="My files" data-testid="rail-me">
             Me
           </NavLink>
+          <div className={styles.railDivider} aria-hidden="true" />
           {(teams.data ?? []).map((team) => (
             <NavLink
               key={team.id}
@@ -45,6 +68,19 @@ export function AppShell({ children, sidebar, details, title }: AppShellProps) {
               {team.name.slice(0, 2).toUpperCase()}
             </NavLink>
           ))}
+          <button
+            type="button"
+            className={`${styles.railItem} ${styles.railAdd}`}
+            title="Create team"
+            aria-label="Create team"
+            data-testid="rail-create-team"
+            onClick={() => {
+              setCreateError(null);
+              setCreateOpen(true);
+            }}
+          >
+            +
+          </button>
         </nav>
         <div className={styles.railFooter}>
           <NavLink to="/search" className={styles.railItem} title="Search">
@@ -54,6 +90,11 @@ export function AppShell({ children, sidebar, details, title }: AppShellProps) {
             <NavLink to="/admin/dashboard" className={styles.railItem} title="Admin" data-testid="rail-admin">
               Ad
             </NavLink>
+          )}
+          {user && (
+            <span className={styles.railItem} title={user.displayName} aria-hidden="true">
+              {user.displayName.slice(0, 2).toUpperCase()}
+            </span>
           )}
         </div>
       </aside>
@@ -75,8 +116,11 @@ export function AppShell({ children, sidebar, details, title }: AppShellProps) {
 
       <main className={styles.main}>
         <header className={styles.topbar}>
-          <h1 className={styles.pageTitle}>{title ?? "Channeled"}</h1>
+          <h1 className={styles.pageTitle}>
+            <strong>{title ?? "Channeled"}</strong>
+          </h1>
           <div className={styles.topActions}>
+            <ThemeToggle compact />
             {user && (
               <span className={styles.user} data-testid="current-user">
                 {user.displayName}
@@ -95,7 +139,7 @@ export function AppShell({ children, sidebar, details, title }: AppShellProps) {
             )}
           </div>
         </header>
-        {children}
+        <div className={styles.content}>{children}</div>
       </main>
 
       {details && (
@@ -104,6 +148,15 @@ export function AppShell({ children, sidebar, details, title }: AppShellProps) {
         </aside>
       )}
       <UploadTray />
+      <CreateTeamDialog
+        open={createOpen}
+        busy={creating}
+        error={createError}
+        onClose={() => {
+          if (!creating) setCreateOpen(false);
+        }}
+        onCreate={onCreateTeam}
+      />
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { ItemKind, personalApi, teamsApi, type FileItem } from "../../api/channe
 import { AppShell } from "../../components/AppShell";
 import { useUploads } from "../../uploads/UploadContext";
 import { Button } from "../../ui/Button";
+import { UploadButton } from "../files/UploadButton";
 import styles from "../files/FileBrowser.module.css";
 
 type Mode = "files" | "recent" | "starred" | "trash";
@@ -64,20 +65,14 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
     <AppShell title="My files" sidebar={sidebar} details={selected ? <p>{selected.name}</p> : null}>
       <div className={styles.toolbar}>
         {!trash && mode === "files" && (
-          <label className={styles.upload}>
-            Upload
-            <input
-              data-testid="personal-file-input"
-              type="file"
-              multiple
-              onChange={(e) => {
-                const files = [...(e.target.files ?? [])];
-                if (files.length) uploads.enqueuePersonal(files);
-                e.target.value = "";
-                void qc.invalidateQueries({ queryKey: ["personal"] });
-              }}
-            />
-          </label>
+          <UploadButton
+            testId="personal-file-input"
+            label="Upload files"
+            onFiles={(files) => {
+              uploads.enqueuePersonal(files);
+              void qc.invalidateQueries({ queryKey: ["personal"] });
+            }}
+          />
         )}
       </div>
 

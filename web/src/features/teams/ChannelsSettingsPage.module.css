@@ -1,0 +1,74 @@
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-5);
+}
+
+.item {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.itemHead {
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+}
+
+.joinLink {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.joinLink code {
+  display: block;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-bg);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  word-break: break-all;
+}
+
+.label {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.muted {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.joinBlock {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.requestList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.requestList li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.requestActions {
+  display: flex;
+  gap: var(--space-2);
+}

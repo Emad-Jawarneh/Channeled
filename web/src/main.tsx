@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router-dom";
 import { App } from "./App";
 import { AuthProvider } from "./auth/AuthContext";
+import { ThemeProvider } from "./theme/ThemeContext";
 import { UploadProvider } from "./uploads/UploadContext";
 import "./styles/tokens.css";
 
@@ -22,11 +23,13 @@ createRoot(root).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <AuthProvider>
-          <UploadProvider>
-            <App />
-          </UploadProvider>
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <UploadProvider>
+              <App />
+            </UploadProvider>
+          </AuthProvider>
+        </ThemeProvider>
       </BrowserRouter>
     </QueryClientProvider>
   </StrictMode>,

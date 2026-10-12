@@ -45,6 +45,31 @@
 **Decision:** `POST /api/v1/auth/register` creates a normal (non-admin) account and signs the user in. Platform and team invitations remain available.
 **Reason:** Product requirement that signups are not invitation-only; invitations still cover team join and optional admin-provisioned accounts.
 
+## 2026-10-12 — Channel public join links
+
+**Decision:** Every channel exposes a stable public path `/join/{team}/{channel}`. Team members without private-channel access can create a pending `channel_join_requests` row; users with `ManageChannelMembership` approve (upsert `channel_members`) or reject.
+**Reason:** Shareable, non-secret invitation links with human review instead of auto-grant.
+
+## 2026-10-12 — UI mockup system
+
+**Decision:** SPA visual system follows `docs/design/Channeled – UI Mockups.html`: Manrope, ink `#373f51`, soft teal `#66acb7`, rail/sidebar/main/details shell, split auth screens.
+**Reason:** Product-provided mockups are the source of truth for layout and brand.
+
+## 2026-10-13 — Dark mode
+
+**Decision:** App-wide light/dark toggle via `data-theme` on `html`, CSS variable swap, preference in `localStorage` (`channeled-theme`), toggle in shell/landing navbars (not a floating overlay).
+**Reason:** Readable UI in both environments without maintaining separate style trees.
+
+## 2026-10-13 — Optional multi-team creation
+
+**Decision:** Team creation is optional at welcome (skip to My files). Users may create multiple teams anytime via the rail “+” dialog; API already allowed this.
+**Reason:** Personal space should work without a team; orgs often need more than one team.
+
+## 2026-10-13 — File vs text channels
+
+**Decision:** Channels have `Kind` (`File` | `Text`). Sidebar lists them in separate sections. File channels keep uploads/folders; text channels are labeled context spaces only (no messaging product — chat remains out of scope). File APIs reject text-channel targets.
+**Reason:** Clear separation of file workspaces from organizational labels without building chat.
+
 ## 2026-10-12 — Identity keys
 
 **Decision:** ASP.NET Identity with `Guid` keys generated as UUIDv7 in application code.

@@ -424,12 +424,16 @@ public sealed partial class TeamService(
             return AppResult<ChannelDto>.Fail(ErrorCodes.Conflict, "Channel name already exists.");
         }
 
+        var kind = request.Kind is ChannelKind.File or ChannelKind.Text
+            ? request.Kind
+            : ChannelKind.File;
         var channel = new ChannelEntity
         {
             Id = UuidV7.NewGuid(),
             TeamId = loaded.Team.Id,
             Name = name,
             Description = request.Description?.Trim(),
+            Kind = kind,
             Visibility = request.Visibility,
             CreatedAt = clock.UtcNow,
         };
@@ -692,6 +696,248 @@ public sealed partial class TeamService(
         return AppResult.Ok();
     }
 
+    public async Task<AppResult<ChannelJoinInfoDto>> GetChannelJoinInfoAsync(
+        Guid userId,
+        string slug,
+        string channelName,
+        CancellationToken ct = default)
+    {
+        var membership = await LoadTeamMembershipAsync(userId, slug, ct);
+        if (membership is null)
+        {
+            return NotFoundTeam<ChannelJoinInfoDto>();
+        }
+
+        var channel = await db.Channels.AsNoTracking().FirstOrDefaultAsync(
+            c => c.TeamId == membership.Team.Id && c.Name.ToLower() == channelName.ToLower(),
+            ct);
+        if (channel is null)
+        {
+            return NotFoundChannel<ChannelJoinInfoDto>();
+        }
+
+        var cm = await db.ChannelMembers.AsNoTracking()
+            .FirstOrDefaultAsync(m => m.ChannelId == channel.Id && m.UserId == userId, ct);
+        var hasAccess = authorizer.Authorize(
+            ChannelContext(userId, AuthAction.ViewChannel, membership, channel, cm is not null, cm?.CanWrite ?? false, cm?.CanManage ?? false)).Allowed;
+
+        Guid? pendingId = null;
+        if (!hasAccess && channel.Visibility == ChannelVisibility.Private)
+        {
+            var pending = await db.ChannelJoinRequests.AsNoTracking()
+                .FirstOrDefaultAsync(
+                    r => r.ChannelId == channel.Id && r.UserId == userId && r.Status == ChannelJoinRequestStatus.Pending,
+                    ct);
+            pendingId = pending?.Id;
+        }
+
+        return AppResult<ChannelJoinInfoDto>.Ok(new ChannelJoinInfoDto(
+            membership.Team.Slug,
+            channel.Name,
+            channel.Visibility,
+            hasAccess,
+            pendingId,
+            $"/join/{membership.Team.Slug}/{channel.Name}"));
+    }
+
+    public async Task<AppResult<ChannelJoinRequestDto>> RequestChannelJoinAsync(
+        Guid userId,
+        string slug,
+        string channelName,
+        RequestContext context,
+        CancellationToken ct = default)
+    {
+        var membership = await LoadTeamMembershipAsync(userId, slug, ct);
+        if (membership is null)
+        {
+            return NotFoundTeam<ChannelJoinRequestDto>();
+        }
+
+        var channel = await db.Channels.FirstOrDefaultAsync(
+            c => c.TeamId == membership.Team.Id && c.Name.ToLower() == channelName.ToLower(),
+            ct);
+        if (channel is null)
+        {
+            return NotFoundChannel<ChannelJoinRequestDto>();
+        }
+
+        if (channel.Visibility != ChannelVisibility.Private)
+        {
+            return AppResult<ChannelJoinRequestDto>.Fail(
+                ErrorCodes.Validation,
+                "Open channels are available to all team members — no join request needed.");
+        }
+
+        var cm = await db.ChannelMembers.AsNoTracking()
+            .FirstOrDefaultAsync(m => m.ChannelId == channel.Id && m.UserId == userId, ct);
+        var hasAccess = authorizer.Authorize(
+            ChannelContext(userId, AuthAction.ViewChannel, membership, channel, cm is not null, cm?.CanWrite ?? false, cm?.CanManage ?? false)).Allowed;
+        if (hasAccess)
+        {
+            return AppResult<ChannelJoinRequestDto>.Fail(ErrorCodes.Conflict, "You already have access to this channel.");
+        }
+
+        var existing = await db.ChannelJoinRequests
+            .FirstOrDefaultAsync(
+                r => r.ChannelId == channel.Id && r.UserId == userId && r.Status == ChannelJoinRequestStatus.Pending,
+                ct);
+        if (existing is not null)
+        {
+            return AppResult<ChannelJoinRequestDto>.Ok(await ToJoinRequestDtoAsync(existing, ct));
+        }
+
+        var row = new ChannelJoinRequestEntity
+        {
+            Id = UuidV7.NewGuid(),
+            ChannelId = channel.Id,
+            UserId = userId,
+            Status = ChannelJoinRequestStatus.Pending,
+            CreatedAt = clock.UtcNow,
+        };
+        db.ChannelJoinRequests.Add(row);
+        await WriteAuditAsync(
+            userId,
+            AuditEventType.ChannelChange,
+            "channel_join_request",
+            row.Id.ToString(),
+            membership.Team.Id,
+            context,
+            ct,
+            """{"action":"join_request_create"}""");
+        await db.SaveChangesAsync(ct);
+        return AppResult<ChannelJoinRequestDto>.Ok(await ToJoinRequestDtoAsync(row, ct));
+    }
+
+    public async Task<AppResult<IReadOnlyList<ChannelJoinRequestDto>>> ListChannelJoinRequestsAsync(
+        Guid userId,
+        string slug,
+        string channelName,
+        CancellationToken ct = default)
+    {
+        var loaded = await LoadTeamAndChannelAsync(userId, slug, channelName, ct);
+        if (loaded is null
+            || !authorizer.Authorize(ChannelContext(userId, AuthAction.ManageChannelMembership, loaded.TeamMembership, loaded.Channel, loaded.IsChannelMember, loaded.CanWrite, loaded.CanManage)).Allowed)
+        {
+            return NotFoundChannel<IReadOnlyList<ChannelJoinRequestDto>>();
+        }
+
+        var rows = await db.ChannelJoinRequests.AsNoTracking()
+            .Where(r => r.ChannelId == loaded.Channel.Id && r.Status == ChannelJoinRequestStatus.Pending)
+            .OrderBy(r => r.CreatedAt)
+            .ToListAsync(ct);
+
+        var userIds = rows.Select(r => r.UserId).ToList();
+        var users = await userManager.Users.AsNoTracking()
+            .Where(u => userIds.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, ct);
+
+        IReadOnlyList<ChannelJoinRequestDto> dtos = rows.Select(r =>
+        {
+            users.TryGetValue(r.UserId, out var u);
+            return new ChannelJoinRequestDto(
+                r.Id,
+                r.UserId,
+                u?.Email ?? "",
+                u?.DisplayName ?? "",
+                r.Status,
+                r.CreatedAt);
+        }).ToList();
+
+        return AppResult<IReadOnlyList<ChannelJoinRequestDto>>.Ok(dtos);
+    }
+
+    public async Task<AppResult> ApproveChannelJoinRequestAsync(
+        Guid userId,
+        string slug,
+        string channelName,
+        Guid requestId,
+        ApproveChannelJoinRequestRequest request,
+        RequestContext context,
+        CancellationToken ct = default)
+    {
+        var loaded = await LoadTeamAndChannelAsync(userId, slug, channelName, ct);
+        if (loaded is null
+            || !authorizer.Authorize(ChannelContext(userId, AuthAction.ManageChannelMembership, loaded.TeamMembership, loaded.Channel, loaded.IsChannelMember, loaded.CanWrite, loaded.CanManage)).Allowed)
+        {
+            return NotFoundChannel();
+        }
+
+        var row = await db.ChannelJoinRequests
+            .FirstOrDefaultAsync(r => r.Id == requestId && r.ChannelId == loaded.Channel.Id, ct);
+        if (row is null || row.Status != ChannelJoinRequestStatus.Pending)
+        {
+            return AppResult.Fail(ErrorCodes.NotFound, "Join request not found.");
+        }
+
+        var upsert = await UpsertChannelMemberAsync(
+            userId,
+            slug,
+            channelName,
+            new UpsertChannelMemberRequest(row.UserId, request.CanWrite, request.CanManage),
+            context,
+            ct);
+        if (!upsert.Succeeded)
+        {
+            return upsert;
+        }
+
+        row.Status = ChannelJoinRequestStatus.Approved;
+        row.DecidedAt = clock.UtcNow;
+        row.DecidedByUserId = userId;
+        await db.SaveChangesAsync(ct);
+        return AppResult.Ok();
+    }
+
+    public async Task<AppResult> RejectChannelJoinRequestAsync(
+        Guid userId,
+        string slug,
+        string channelName,
+        Guid requestId,
+        RequestContext context,
+        CancellationToken ct = default)
+    {
+        var loaded = await LoadTeamAndChannelAsync(userId, slug, channelName, ct);
+        if (loaded is null
+            || !authorizer.Authorize(ChannelContext(userId, AuthAction.ManageChannelMembership, loaded.TeamMembership, loaded.Channel, loaded.IsChannelMember, loaded.CanWrite, loaded.CanManage)).Allowed)
+        {
+            return NotFoundChannel();
+        }
+
+        var row = await db.ChannelJoinRequests
+            .FirstOrDefaultAsync(r => r.Id == requestId && r.ChannelId == loaded.Channel.Id, ct);
+        if (row is null || row.Status != ChannelJoinRequestStatus.Pending)
+        {
+            return AppResult.Fail(ErrorCodes.NotFound, "Join request not found.");
+        }
+
+        row.Status = ChannelJoinRequestStatus.Rejected;
+        row.DecidedAt = clock.UtcNow;
+        row.DecidedByUserId = userId;
+        await WriteAuditAsync(
+            userId,
+            AuditEventType.ChannelChange,
+            "channel_join_request",
+            row.Id.ToString(),
+            loaded.TeamMembership.Team.Id,
+            context,
+            ct,
+            """{"action":"join_request_reject"}""");
+        await db.SaveChangesAsync(ct);
+        return AppResult.Ok();
+    }
+
+    private async Task<ChannelJoinRequestDto> ToJoinRequestDtoAsync(ChannelJoinRequestEntity row, CancellationToken ct)
+    {
+        var user = await userManager.FindByIdAsync(row.UserId.ToString());
+        return new ChannelJoinRequestDto(
+            row.Id,
+            row.UserId,
+            user?.Email ?? "",
+            user?.DisplayName ?? "",
+            row.Status,
+            row.CreatedAt);
+    }
+
     private async Task<TeamMembership?> LoadTeamMembershipAsync(Guid userId, string slug, CancellationToken ct)
     {
         var team = await db.Teams.FirstOrDefaultAsync(t => t.Slug == slug, ct);
@@ -772,7 +1018,8 @@ public sealed partial class TeamService(
         string targetId,
         Guid? teamId,
         RequestContext context,
-        CancellationToken ct)
+        CancellationToken ct,
+        string detailsJson = "{}")
     {
         db.AuditEvents.Add(new AuditEvent
         {
@@ -783,7 +1030,7 @@ public sealed partial class TeamService(
             TeamId = teamId,
             TargetType = targetType,
             TargetId = targetId,
-            DetailsJson = "{}",
+            DetailsJson = detailsJson,
             Ip = Truncate(context.Ip, 64),
             UserAgent = Truncate(context.UserAgent, 512),
         });
@@ -814,7 +1061,7 @@ public sealed partial class TeamService(
         new(team.Id, team.Name, team.Slug, team.Description, team.QuotaBytes, team.ArchivedAt, role);
 
     private static ChannelDto ToChannelDto(ChannelEntity channel) =>
-        new(channel.Id, channel.TeamId, channel.Name, channel.Description, channel.Visibility, channel.ArchivedAt);
+        new(channel.Id, channel.TeamId, channel.Name, channel.Description, channel.Visibility, channel.Kind, channel.ArchivedAt);
 
     private static AppResult NotFoundTeam() =>
         AppResult.Fail(ErrorCodes.NotFound, "Team not found.");

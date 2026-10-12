@@ -39,7 +39,14 @@ export async function api<T>(
   const method = (init.method ?? "GET").toUpperCase();
   const mutating = method !== "GET" && method !== "HEAD" && method !== "OPTIONS";
 
-  if (mutating && !path.includes("/auth/login") && !path.includes("/auth/csrf")) {
+  const csrfExempt =
+    path.includes("/auth/login") ||
+    path.includes("/auth/register") ||
+    path.includes("/auth/csrf") ||
+    path.includes("/auth/invitations/accept") ||
+    path.includes("/auth/forgot-password") ||
+    path.includes("/auth/reset-password");
+  if (mutating && !csrfExempt) {
     headers.set("X-CSRF-TOKEN", await ensureCsrf());
   }
 

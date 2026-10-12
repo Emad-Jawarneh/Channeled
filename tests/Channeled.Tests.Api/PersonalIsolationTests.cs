@@ -69,7 +69,7 @@ public class PersonalIsolationTests : IClassFixture<AuthApiFactory>, IAsyncLifet
         _teamSlug = team!.Slug;
         (await _owner.PostAsJsonAsync(
             $"/api/v1/teams/{_teamSlug}/channels",
-            new CreateChannelRequest("general", null, ChannelVisibility.Open))).EnsureSuccessStatusCode();
+            new CreateChannelRequest("general", null, ChannelVisibility.Open, ChannelKind.File))).EnsureSuccessStatusCode();
 
         _personalFileId = await UploadPersonalAsync(_owner, "secret.txt", "top-secret-bytes");
     }

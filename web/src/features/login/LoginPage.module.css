@@ -1,18 +1,157 @@
 .page {
+  position: relative;
   min-height: 100vh;
-  display: grid;
-  place-items: center;
+  min-height: 100dvh;
+  display: flex;
+  flex-wrap: wrap;
+  background: var(--color-surface);
+}
+
+.heroTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.hero {
+  position: relative;
+  flex: 1 1 520px;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 70% 55% at 0% 0%, color-mix(in srgb, var(--color-accent-bright) 48%, transparent), transparent 58%),
+    radial-gradient(ellipse 50% 45% at 100% 90%, color-mix(in srgb, #3ec4d4 32%, transparent), transparent 55%),
+    var(--gradient-teal-soft);
+  color: var(--color-text);
+  padding: 56px 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.hero::after {
+  content: "";
+  position: absolute;
+  right: -15%;
+  bottom: -25%;
+  width: 55%;
+  height: 65%;
+  background: var(--gradient-teal);
+  opacity: 0.28;
+  filter: blur(52px);
+  pointer-events: none;
+}
+
+.hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+.brandRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 800;
+  font-size: 20px;
+  margin: 0;
+}
+
+.logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--color-accent-strong);
+  color: var(--color-bg);
+  font-weight: 800;
+  font-size: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.heroTitle {
+  margin: 0 0 14px;
+  font-size: clamp(1.75rem, 4vw, 2.625rem);
+  font-weight: 700;
+  line-height: 1.15;
+  max-width: 18ch;
+}
+
+.heroLede {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 16px;
+  max-width: 460px;
+  line-height: 1.45;
+}
+
+.heroPoints {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.heroPoints p {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.heroPoints p::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  flex-shrink: 0;
+}
+
+.panel {
+  position: relative;
+  flex: 1 1 480px;
+  background: var(--color-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: var(--space-6);
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .form {
-  width: min(24rem, 100%);
+  width: min(26.25rem, 100%);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  padding: var(--space-6);
+  padding: 36px;
   display: grid;
-  gap: var(--space-4);
+  gap: 18px;
+  box-shadow: var(--shadow-card);
+}
+
+.brandLink {
+  margin: 0;
+  font-weight: 800;
+  font-size: var(--text-sm);
+}
+
+.brandLink a {
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.form h1,
+.form h2 {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 .hint {
@@ -23,17 +162,25 @@
 
 .label {
   display: grid;
-  gap: var(--space-2);
-  font-size: var(--text-sm);
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .input {
   font: inherit;
-  padding: var(--space-2) var(--space-3);
+  font-weight: 500;
+  height: 44px;
+  padding: 0 12px;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: 12px;
   background: var(--color-surface);
   color: var(--color-text);
+}
+
+.input:focus {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
 }
 
 .error {
@@ -42,27 +189,24 @@
   font-size: var(--text-sm);
 }
 
-.brandLink {
-  margin: 0;
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: var(--text-sm);
-}
-
-.brandLink a {
-  color: var(--color-text);
-  text-decoration: none;
-}
-
-.form h1 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: var(--text-xl);
-  letter-spacing: -0.03em;
-}
-
 .footer {
   margin: 0;
   font-size: var(--text-sm);
   color: var(--color-text-muted);
+}
+
+.footer a {
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+@media (max-width: 900px) {
+  .hero {
+    min-height: auto;
+    padding: 32px 24px;
+  }
+
+  .panel {
+    min-height: auto;
+  }
 }

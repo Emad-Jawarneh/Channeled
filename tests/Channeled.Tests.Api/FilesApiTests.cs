@@ -57,7 +57,7 @@ public class FilesApiTests : IClassFixture<AuthApiFactory>, IAsyncLifetime
         _slug = team!.Slug;
         (await _owner.PostAsJsonAsync(
             $"/api/v1/teams/{_slug}/channels",
-            new CreateChannelRequest("general", null, ChannelVisibility.Open))).EnsureSuccessStatusCode();
+            new CreateChannelRequest("general", null, ChannelVisibility.Open, ChannelKind.File))).EnsureSuccessStatusCode();
     }
 
     public Task DisposeAsync() => Task.CompletedTask;

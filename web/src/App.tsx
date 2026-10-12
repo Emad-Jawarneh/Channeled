@@ -7,6 +7,9 @@ import { PersonalFilesPage } from "./features/personal/PersonalFilesPage";
 import { SearchPage } from "./features/search/SearchPage";
 import { MembersPage } from "./features/teams/MembersPage";
 import { ChannelsSettingsPage } from "./features/teams/ChannelsSettingsPage";
+import { JoinChannelPage } from "./features/teams/JoinChannelPage";
+import { TextChannelPage } from "./features/teams/TextChannelPage";
+import { ChannelKind, teamsApi } from "./api/channeled";
 import {
   AdminAuditPage,
   AdminDashboardPage,
@@ -17,16 +20,30 @@ import {
 } from "./features/admin/AdminPages";
 import { useAuth } from "./auth/AuthContext";
 import { useQuery } from "@tanstack/react-query";
-import { teamsApi } from "./api/channeled";
 import { AppShell } from "./components/AppShell";
-import { Button } from "./ui/Button";
-import { useState } from "react";
 import { LandingPage } from "./features/landing/LandingPage";
 import { SignupPage } from "./features/signup/SignupPage";
+import { WelcomePage } from "./features/welcome/WelcomePage";
 import { RequireAuth } from "./auth/RequireAuth";
 
 function ChannelRoute({ trash = false }: { trash?: boolean }) {
   const { team = "", channel = "general" } = useParams();
+  const channels = useQuery({
+    queryKey: ["channels", team],
+    queryFn: () => teamsApi.channels(team),
+    enabled: !!team,
+  });
+
+  if (channels.isLoading) {
+    return <p className="loading-session">Loading…</p>;
+  }
+
+  const current = (channels.data ?? []).find((c) => c.name === channel);
+  const kind = current?.kind ?? ChannelKind.File;
+  if (kind === ChannelKind.Text && !trash) {
+    return <TextChannelPage teamSlug={team} channelName={channel} />;
+  }
+
   return <FileBrowser teamSlug={team} channelName={channel} trash={trash} />;
 }
 
@@ -58,11 +75,9 @@ function HomeRedirect() {
     queryFn: () => teamsApi.list(),
     enabled: !!user,
   });
-  const [name, setName] = useState("Demo Team");
-  const [creating, setCreating] = useState(false);
 
   if (teams.isLoading) {
-    return <p>Loading teams…</p>;
+    return <WelcomePage loadingTeams />;
   }
 
   const first = teams.data?.[0];
@@ -70,32 +85,7 @@ function HomeRedirect() {
     return <Navigate to={`/t/${first.slug}/c/general`} replace />;
   }
 
-  return (
-    <AppShell title="Welcome">
-      <p>Create your first team to get started.</p>
-      <form
-        onSubmit={async (e) => {
-          e.preventDefault();
-          setCreating(true);
-          try {
-            const team = await teamsApi.create(name);
-            await teamsApi.createChannel(team.slug, "general", 0);
-            window.location.href = `/t/${team.slug}/c/general`;
-          } finally {
-            setCreating(false);
-          }
-        }}
-      >
-        <label>
-          Team name
-          <input data-testid="create-team-name" value={name} onChange={(e) => setName(e.target.value)} required />
-        </label>
-        <Button type="submit" variant="primary" disabled={creating} data-testid="create-team">
-          Create team
-        </Button>
-      </form>
-    </AppShell>
-  );
+  return <WelcomePage />;
 }
 
 export function App() {
@@ -106,6 +96,14 @@ export function App() {
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/invite/:token" element={<InvitePage />} />
       <Route path="/reset/:token" element={<ResetPage />} />
+      <Route
+        path="/join/:team/:channel"
+        element={
+          <RequireAuth>
+            <JoinChannelPage />
+          </RequireAuth>
+        }
+      />
       <Route
         path="/me/files"
         element={

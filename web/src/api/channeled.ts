@@ -23,6 +23,7 @@ export type Channel = {
   name: string;
   description?: string | null;
   visibility: number;
+  kind: number;
   archivedAt?: string | null;
 };
 
@@ -53,6 +54,24 @@ export type TeamMember = {
   joinedAt: string;
 };
 
+export type ChannelJoinInfo = {
+  teamSlug: string;
+  channelName: string;
+  visibility: number;
+  hasAccess: boolean;
+  pendingRequestId?: string | null;
+  joinPath: string;
+};
+
+export type ChannelJoinRequest = {
+  id: string;
+  userId: string;
+  email: string;
+  displayName: string;
+  status: number;
+  createdAt: string;
+};
+
 export type AuditEvent = {
   id: string;
   occurredAt: string;
@@ -69,6 +88,7 @@ export type AuditEvent = {
 export const ItemKind = { File: 0, Folder: 1 } as const;
 export const MemberRole = { Viewer: 0, Member: 1, Admin: 2, Owner: 3 } as const;
 export const ChannelVisibility = { Open: 0, Private: 1 } as const;
+export const ChannelKind = { File: 0, Text: 1 } as const;
 
 export const authApi = {
   me: () => api<AuthUser>("/api/v1/auth/me"),
@@ -98,10 +118,21 @@ export const teamsApi = {
     api<Team>("/api/v1/teams/", { method: "POST", json: { name, description: description ?? null } }),
   get: (slug: string) => api<Team>(`/api/v1/teams/${slug}`),
   channels: (slug: string) => api<Channel[]>(`/api/v1/teams/${slug}/channels`),
-  createChannel: (slug: string, name: string, visibility: number, description?: string) =>
+  createChannel: (
+    slug: string,
+    name: string,
+    visibility: number,
+    description?: string | null,
+    kind: number = ChannelKind.File,
+  ) =>
     api<Channel>(`/api/v1/teams/${slug}/channels`, {
       method: "POST",
-      json: { name, description: description ?? null, visibility },
+      json: {
+        name,
+        description: description ?? null,
+        visibility,
+        kind: kind ?? ChannelKind.File,
+      },
     }),
   members: (slug: string) => api<TeamMember[]>(`/api/v1/teams/${slug}/members`),
   changeRole: (slug: string, userId: string, role: number) =>
@@ -120,6 +151,21 @@ export const teamsApi = {
     api<void>(`/api/v1/teams/${slug}/channels/${channel}/members`, {
       method: "PUT",
       json: { userId, canWrite, canManage },
+    }),
+  channelJoinInfo: (slug: string, channel: string) =>
+    api<ChannelJoinInfo>(`/api/v1/teams/${slug}/channels/${channel}/join`),
+  requestChannelJoin: (slug: string, channel: string) =>
+    api<ChannelJoinRequest>(`/api/v1/teams/${slug}/channels/${channel}/join-requests`, { method: "POST" }),
+  listChannelJoinRequests: (slug: string, channel: string) =>
+    api<ChannelJoinRequest[]>(`/api/v1/teams/${slug}/channels/${channel}/join-requests`),
+  approveChannelJoin: (slug: string, channel: string, requestId: string) =>
+    api<void>(`/api/v1/teams/${slug}/channels/${channel}/join-requests/${requestId}/approve`, {
+      method: "POST",
+      json: {},
+    }),
+  rejectChannelJoin: (slug: string, channel: string, requestId: string) =>
+    api<void>(`/api/v1/teams/${slug}/channels/${channel}/join-requests/${requestId}/reject`, {
+      method: "POST",
     }),
 };
 

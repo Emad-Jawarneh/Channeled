@@ -1,0 +1,72 @@
+.side {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.hero {
+  max-width: 36rem;
+  padding: var(--space-2) 0;
+}
+
+.kicker {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.title {
+  margin: 0 0 var(--space-3);
+  font-size: clamp(1.75rem, 4vw, 2.25rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.lede {
+  margin: 0 0 var(--space-5);
+  color: var(--color-text-muted);
+  font-size: 1.05rem;
+  line-height: 1.5;
+}
+
+.meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: 0 0 var(--space-5);
+}
+
+.meta div {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface);
+}
+
+.meta dt {
+  margin: 0 0 0.25rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.meta dd {
+  margin: 0;
+  font-weight: 700;
+}
+
+.note {
+  margin: 0;
+  padding: var(--space-4);
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--color-accent) 30%, var(--color-border));
+  background: color-mix(in srgb, var(--color-soft) 70%, var(--color-surface));
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}

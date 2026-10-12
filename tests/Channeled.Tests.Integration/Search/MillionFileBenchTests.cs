@@ -51,7 +51,7 @@ public class MillionFileBenchTests
 
         await db.Database.ExecuteSqlRawAsync("""
             TRUNCATE TABLE "upload_parts", "upload_sessions", "file_stars", "files", "folders",
-              "channel_members", "channels", "team_invitations", "team_members", "teams", "jobs"
+              "channel_join_requests", "channel_members", "channels", "team_invitations", "team_members", "teams", "jobs"
             RESTART IDENTITY CASCADE;
             """);
 

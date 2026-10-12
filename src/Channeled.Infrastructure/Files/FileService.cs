@@ -99,6 +99,11 @@ public sealed class FileService(
             return NotFoundChannel<ItemListResponse>();
         }
 
+        if (channel.Channel.Kind == ChannelKind.Text)
+        {
+            return AppResult<ItemListResponse>.Fail(ErrorCodes.Validation, "Text channels do not store files.");
+        }
+
         var limit = Math.Clamp(query.Limit <= 0 ? 50 : query.Limit, 1, 200);
         var trashOnly = query.TrashOnly;
         var folderId = query.FolderId;
@@ -136,6 +141,9 @@ public sealed class FileService(
             "size" or "size_asc" => items.OrderBy(i => i.SizeBytes ?? -1),
             "size_desc" => items.OrderByDescending(i => i.SizeBytes ?? -1),
             "created" or "created_asc" => items.OrderBy(i => i.CreatedAt),
+            "created_desc" => items.OrderByDescending(i => i.CreatedAt),
+            "updated" or "updated_asc" => items.OrderBy(i => i.UpdatedAt).ThenBy(i => i.Id),
+            "updated_desc" => items.OrderByDescending(i => i.UpdatedAt).ThenByDescending(i => i.Id),
             _ => items.OrderByDescending(i => i.UpdatedAt).ThenBy(i => i.Id),
         };
 
@@ -505,6 +513,11 @@ public sealed class FileService(
         if (!Allow(userId, AuthAction.UploadFile, channel))
         {
             return NotFoundChannel<StartUploadResponse>();
+        }
+
+        if (channel.Channel.Kind == ChannelKind.Text)
+        {
+            return AppResult<StartUploadResponse>.Fail(ErrorCodes.Validation, "Text channels do not store files.");
         }
 
         var fileName = request.FileName?.Trim() ?? "";

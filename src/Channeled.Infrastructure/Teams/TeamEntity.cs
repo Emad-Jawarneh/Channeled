@@ -33,12 +33,14 @@ public sealed class ChannelEntity
     public Guid TeamId { get; set; }
     public string Name { get; set; } = "";
     public string? Description { get; set; }
+    public ChannelKind Kind { get; set; } = ChannelKind.File;
     public ChannelVisibility Visibility { get; set; } = ChannelVisibility.Open;
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? ArchivedAt { get; set; }
 
     public TeamEntity? Team { get; set; }
     public List<ChannelMemberEntity> Members { get; set; } = [];
+    public List<ChannelJoinRequestEntity> JoinRequests { get; set; } = [];
 }
 
 public sealed class ChannelMemberEntity
@@ -47,6 +49,19 @@ public sealed class ChannelMemberEntity
     public Guid UserId { get; set; }
     public bool CanWrite { get; set; }
     public bool CanManage { get; set; }
+
+    public ChannelEntity? Channel { get; set; }
+}
+
+public sealed class ChannelJoinRequestEntity
+{
+    public Guid Id { get; set; }
+    public Guid ChannelId { get; set; }
+    public Guid UserId { get; set; }
+    public ChannelJoinRequestStatus Status { get; set; } = ChannelJoinRequestStatus.Pending;
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? DecidedAt { get; set; }
+    public Guid? DecidedByUserId { get; set; }
 
     public ChannelEntity? Channel { get; set; }
 }

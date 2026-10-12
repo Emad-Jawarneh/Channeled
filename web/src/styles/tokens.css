@@ -1,16 +1,33 @@
 :root {
-  /* Neutral palette */
-  --color-bg: #f7f7f5;
-  --color-surface: #ffffff;
-  --color-border: #d9d9d4;
-  --color-text: #1c1c1a;
-  --color-text-muted: #5c5c56;
-  --color-accent: #0f6e56;
-  --color-accent-contrast: #ffffff;
-  --color-danger: #9b1c1c;
-  --color-focus: #1d4e89;
+  color-scheme: light;
 
-  /* Spacing scale */
+  /* From docs/design/Channeled – UI Mockups.html */
+  --color-bg: #edeff3;
+  --color-surface: #ffffff;
+  --color-border: #d0d4dc;
+  --color-text: #373f51;
+  --color-text-muted: #5b6272;
+  --color-accent: #66acb7;
+  --color-accent-bright: #4fd0df;
+  --color-accent-contrast: #000000;
+  --color-accent-strong: #373f51;
+  --color-soft: #ddeef1;
+  --gradient-teal: linear-gradient(135deg, #3ec4d4 0%, #66acb7 45%, #7ad8e0 100%);
+  --gradient-teal-soft: linear-gradient(160deg, #f8fbfd 0%, #e7f6f8 40%, #d5f0f4 100%);
+  --gradient-cta: linear-gradient(135deg, #2a9aab 0%, #66acb7 50%, #4fd0df 100%);
+  --cta-glow-a: color-mix(in srgb, var(--color-accent-bright) 70%, transparent);
+  --cta-glow-b: color-mix(in srgb, #2eb8c9 55%, transparent);
+  --cta-glow-opacity: 0.35;
+  --color-rail: #d0d4dc;
+  --color-danger: #b42318;
+  --color-danger-border: #daa49a;
+  --color-focus: #6183a8;
+  --color-row-hover: #f6f7fa;
+  --color-table-head: #f3f4f7;
+  --color-row-line: #e6e8ed;
+  --color-preview-chrome: #f6f7f9;
+  --color-on-accent: #ffffff;
+
   --space-1: 0.25rem;
   --space-2: 0.5rem;
   --space-3: 0.75rem;
@@ -19,19 +36,53 @@
   --space-6: 2rem;
   --space-8: 3rem;
 
-  /* Type scale */
-  --font-sans: "Source Sans 3", "Segoe UI", sans-serif;
-  --font-display: "Fraunces", "Source Serif 4", Georgia, serif;
+  --font-sans: "Manrope", "Segoe UI", sans-serif;
+  --font-display: "Manrope", "Segoe UI", sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;
-  --text-md: 1rem;
-  --text-lg: 1.25rem;
-  --text-xl: 1.75rem;
+  --text-md: 0.875rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.5rem;
 
-  --radius-sm: 0.25rem;
-  --radius-md: 0.5rem;
+  --radius-sm: 0.625rem;
+  --radius-md: 0.875rem;
+  --radius-pill: 999px;
+  --shadow-card: 0 1px 2px rgba(55, 63, 81, 0.05), 0 8px 24px rgba(55, 63, 81, 0.05);
+  --shadow-btn: 0 4px 12px rgba(102, 172, 183, 0.45);
   --shadow-focus: 0 0 0 3px color-mix(in srgb, var(--color-focus) 35%, transparent);
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+
+  --color-bg: #11151c;
+  --color-surface: #1a2030;
+  --color-border: #2c3448;
+  --color-text: #e7ebf3;
+  --color-text-muted: #9aa6bc;
+  --color-accent: #66acb7;
+  --color-accent-bright: #5ad8e6;
+  --color-accent-contrast: #061014;
+  --color-accent-strong: #e7ebf3;
+  --color-soft: #1c2a32;
+  --gradient-teal: linear-gradient(135deg, #3ec4d4 0%, #66acb7 45%, #7ad8e0 100%);
+  --gradient-teal-soft: linear-gradient(160deg, #121820 0%, #17242c 42%, #163038 100%);
+  --gradient-cta: linear-gradient(135deg, #152228 0%, #1a343c 42%, #234850 100%);
+  --cta-glow-a: color-mix(in srgb, #3ec4d4 28%, transparent);
+  --cta-glow-b: color-mix(in srgb, #66acb7 22%, transparent);
+  --cta-glow-opacity: 0.18;
+  --color-rail: #151b28;
+  --color-danger: #f97066;
+  --color-danger-border: #912018;
+  --color-focus: #7ea4cc;
+  --color-row-hover: #222a3a;
+  --color-table-head: #1c2434;
+  --color-row-line: #2a3346;
+  --color-preview-chrome: #222a3a;
+  --color-on-accent: #ffffff;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35), 0 12px 32px rgba(0, 0, 0, 0.28);
+  --shadow-btn: 0 4px 14px rgba(64, 180, 196, 0.35);
 }
 
 *,
@@ -50,6 +101,7 @@ body,
 body {
   font-family: var(--font-sans);
   font-size: var(--text-md);
+  font-weight: 500;
   color: var(--color-text);
   background: var(--color-bg);
 }
@@ -57,9 +109,8 @@ body {
 :focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
-  box-shadow: var(--shadow-focus);
 }
 
 a {
-  color: var(--color-accent);
+  color: var(--color-text);
 }

@@ -233,6 +233,78 @@ public static class TeamEndpoints
             return ToHttp(await teamsSvc.RemoveChannelMemberAsync(userId, slug, channelName, memberUserId, Ctx(http), ct));
         });
 
+        teams.MapGet("/{slug}/channels/{channelName}/join", async Task<IResult> (string slug, string channelName, ITeamService teamsSvc, ClaimsPrincipal principal, CancellationToken ct) =>
+        {
+            if (!TryUser(principal, out var userId))
+            {
+                return Unauthorized();
+            }
+
+            return ToHttp(await teamsSvc.GetChannelJoinInfoAsync(userId, slug, channelName, ct));
+        });
+
+        teams.MapPost("/{slug}/channels/{channelName}/join-requests", async Task<IResult> (string slug, string channelName, ITeamService teamsSvc, ClaimsPrincipal principal, HttpContext http, CancellationToken ct) =>
+        {
+            if (!TryUser(principal, out var userId))
+            {
+                return Unauthorized();
+            }
+
+            return ToHttp(await teamsSvc.RequestChannelJoinAsync(userId, slug, channelName, Ctx(http), ct));
+        });
+
+        teams.MapGet("/{slug}/channels/{channelName}/join-requests", async Task<IResult> (string slug, string channelName, ITeamService teamsSvc, ClaimsPrincipal principal, CancellationToken ct) =>
+        {
+            if (!TryUser(principal, out var userId))
+            {
+                return Unauthorized();
+            }
+
+            return ToHttp(await teamsSvc.ListChannelJoinRequestsAsync(userId, slug, channelName, ct));
+        });
+
+        teams.MapPost("/{slug}/channels/{channelName}/join-requests/{requestId:guid}/approve", async Task<IResult> (
+            string slug,
+            string channelName,
+            Guid requestId,
+            ApproveChannelJoinRequestRequest? body,
+            ITeamService teamsSvc,
+            ClaimsPrincipal principal,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            if (!TryUser(principal, out var userId))
+            {
+                return Unauthorized();
+            }
+
+            return ToHttp(await teamsSvc.ApproveChannelJoinRequestAsync(
+                userId,
+                slug,
+                channelName,
+                requestId,
+                body ?? new ApproveChannelJoinRequestRequest(),
+                Ctx(http),
+                ct));
+        });
+
+        teams.MapPost("/{slug}/channels/{channelName}/join-requests/{requestId:guid}/reject", async Task<IResult> (
+            string slug,
+            string channelName,
+            Guid requestId,
+            ITeamService teamsSvc,
+            ClaimsPrincipal principal,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            if (!TryUser(principal, out var userId))
+            {
+                return Unauthorized();
+            }
+
+            return ToHttp(await teamsSvc.RejectChannelJoinRequestAsync(userId, slug, channelName, requestId, Ctx(http), ct));
+        });
+
         return teams;
     }
 

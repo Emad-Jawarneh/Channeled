@@ -1,0 +1,338 @@
+.page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-wrap: wrap;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+}
+
+.hero {
+  position: relative;
+  overflow: hidden;
+  flex: 1 1 520px;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(1.5rem, 4vh, 2.5rem);
+  padding: clamp(1.75rem, 4vw, 3.5rem) clamp(1.5rem, 4vw, 4rem);
+  background:
+    radial-gradient(ellipse 70% 55% at 0% 0%, color-mix(in srgb, var(--color-accent-bright) 48%, transparent), transparent 58%),
+    radial-gradient(ellipse 50% 45% at 100% 90%, color-mix(in srgb, #3ec4d4 32%, transparent), transparent 55%),
+    var(--gradient-teal-soft);
+}
+
+.hero::after {
+  content: "";
+  position: absolute;
+  right: -15%;
+  bottom: -25%;
+  width: 55%;
+  height: 65%;
+  background: var(--gradient-teal);
+  opacity: 0.28;
+  filter: blur(52px);
+  pointer-events: none;
+}
+
+.hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+.heroTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.brandRow {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 800;
+  font-size: 20px;
+}
+
+.logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--color-accent-strong);
+  color: var(--color-bg);
+  font-weight: 800;
+  font-size: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.heroCopy {
+  max-width: 28rem;
+}
+
+.eyebrow {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.heroTitle {
+  margin: 0 0 var(--space-3);
+  font-size: clamp(2rem, 5vw, 3.25rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+}
+
+.heroLede {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 1.05rem;
+  line-height: 1.5;
+}
+
+.flow {
+  list-style: none;
+  margin: auto 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+}
+
+.flowItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.flowCard {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 10.5rem;
+  padding: 0.65rem 0.85rem;
+  background: var(--color-surface);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 32%, var(--color-border));
+  border-radius: 14px;
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--color-accent-bright) 16%, transparent);
+}
+
+.flowIcon {
+  display: grid;
+  place-items: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 11px;
+  background:
+    radial-gradient(circle at 30% 25%, color-mix(in srgb, var(--color-accent-bright) 32%, var(--color-surface)), transparent 55%),
+    color-mix(in srgb, var(--color-soft) 75%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--color-accent) 26%, var(--color-border));
+}
+
+.flowIcon svg {
+  width: 1.45rem;
+  height: 1.45rem;
+}
+
+.flowLabel {
+  font-weight: 800;
+  font-size: 0.85rem;
+  letter-spacing: -0.02em;
+}
+
+.flowArrow {
+  width: 2px;
+  height: 0.9rem;
+  margin: 0.3rem 0;
+  background: var(--gradient-teal);
+  position: relative;
+}
+
+.flowArrow::after {
+  content: "";
+  position: absolute;
+  left: -3px;
+  bottom: -2px;
+  border: 4px solid transparent;
+  border-top-color: var(--color-accent-bright);
+}
+
+.panel {
+  flex: 1 1 480px;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  background: var(--color-bg);
+}
+
+.loading {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-weight: 700;
+}
+
+.form {
+  width: min(26.25rem, 100%);
+  display: grid;
+  gap: 1rem;
+  padding: 2.25rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+}
+
+.kicker {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.form h2 {
+  margin: 0;
+  font-size: clamp(1.5rem, 3vw, 1.85rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.hint {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.hint strong {
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.label {
+  display: grid;
+  gap: 0.4rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.input {
+  font: inherit;
+  font-weight: 500;
+  height: 2.75rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.input::placeholder {
+  color: color-mix(in srgb, var(--color-text-muted) 80%, transparent);
+}
+
+.input:focus {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.error {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+}
+
+.formActions {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.skip {
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.skip:hover {
+  color: var(--color-text);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.footer {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.signOut {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+@media (max-width: 900px) {
+  .hero {
+    min-height: auto;
+  }
+
+  .panel {
+    min-height: auto;
+  }
+
+  .flow {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.5rem;
+    margin-top: 0.5rem;
+  }
+
+  .flowItem {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .flowArrow {
+    width: 0.9rem;
+    height: 2px;
+    margin: 0;
+  }
+
+  .flowArrow::after {
+    left: auto;
+    right: -2px;
+    bottom: auto;
+    top: -3px;
+    border-top-color: transparent;
+    border-left-color: var(--color-accent-bright);
+  }
+
+  .flowCard {
+    min-width: 0;
+  }
+}

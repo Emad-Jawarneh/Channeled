@@ -617,6 +617,9 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
 
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -634,6 +637,39 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("channels", (string)null);
+                });
+
+            modelBuilder.Entity("Channeled.Infrastructure.Teams.ChannelJoinRequestEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ChannelId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("DecidedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DecidedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChannelId", "Status");
+
+                    b.HasIndex("ChannelId", "UserId", "Status");
+
+                    b.ToTable("channel_join_requests", (string)null);
                 });
 
             modelBuilder.Entity("Channeled.Infrastructure.Teams.ChannelMemberEntity", b =>
@@ -930,6 +966,17 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                     b.Navigation("Team");
                 });
 
+            modelBuilder.Entity("Channeled.Infrastructure.Teams.ChannelJoinRequestEntity", b =>
+                {
+                    b.HasOne("Channeled.Infrastructure.Teams.ChannelEntity", "Channel")
+                        .WithMany("JoinRequests")
+                        .HasForeignKey("ChannelId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Channel");
+                });
+
             modelBuilder.Entity("Channeled.Infrastructure.Teams.ChannelMemberEntity", b =>
                 {
                     b.HasOne("Channeled.Infrastructure.Teams.ChannelEntity", "Channel")
@@ -1021,6 +1068,8 @@ namespace Channeled.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Channeled.Infrastructure.Teams.ChannelEntity", b =>
                 {
+                    b.Navigation("JoinRequests");
+
                     b.Navigation("Members");
                 });
 

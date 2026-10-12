@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import { authApi, teamsApi } from "../../api/channeled";
 import { clearCsrf, ensureCsrf } from "../../api/http";
+import { ThemeToggle } from "../../theme/ThemeToggle";
 import { Button } from "../../ui/Button";
 import styles from "../login/LoginPage.module.css";
 
@@ -38,7 +39,10 @@ export function InvitePage() {
   return (
     <main className={styles.page}>
       <form className={styles.form} onSubmit={onSubmit} data-testid="invite-form">
-        <h1>Accept invitation</h1>
+        <div className={styles.heroTop}>
+          <h1 style={{ margin: 0 }}>Accept invitation</h1>
+          <ThemeToggle compact />
+        </div>
         <label className={styles.label}>
           Invite type
           <select value={mode} onChange={(e) => setMode(e.target.value as "platform" | "team")}>

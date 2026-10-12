@@ -31,4 +31,10 @@ public interface ITeamService
     Task<AppResult<IReadOnlyList<ChannelMemberDto>>> ListChannelMembersAsync(Guid userId, string slug, string channelName, CancellationToken ct = default);
     Task<AppResult> UpsertChannelMemberAsync(Guid userId, string slug, string channelName, UpsertChannelMemberRequest request, RequestContext context, CancellationToken ct = default);
     Task<AppResult> RemoveChannelMemberAsync(Guid userId, string slug, string channelName, Guid memberUserId, RequestContext context, CancellationToken ct = default);
+
+    Task<AppResult<ChannelJoinInfoDto>> GetChannelJoinInfoAsync(Guid userId, string slug, string channelName, CancellationToken ct = default);
+    Task<AppResult<ChannelJoinRequestDto>> RequestChannelJoinAsync(Guid userId, string slug, string channelName, RequestContext context, CancellationToken ct = default);
+    Task<AppResult<IReadOnlyList<ChannelJoinRequestDto>>> ListChannelJoinRequestsAsync(Guid userId, string slug, string channelName, CancellationToken ct = default);
+    Task<AppResult> ApproveChannelJoinRequestAsync(Guid userId, string slug, string channelName, Guid requestId, ApproveChannelJoinRequestRequest request, RequestContext context, CancellationToken ct = default);
+    Task<AppResult> RejectChannelJoinRequestAsync(Guid userId, string slug, string channelName, Guid requestId, RequestContext context, CancellationToken ct = default);
 }

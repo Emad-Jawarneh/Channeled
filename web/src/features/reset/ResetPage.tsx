@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { authApi } from "../../api/channeled";
+import { ThemeToggle } from "../../theme/ThemeToggle";
 import { Button } from "../../ui/Button";
 import styles from "../login/LoginPage.module.css";
 
@@ -24,7 +25,10 @@ export function ResetPage() {
   return (
     <main className={styles.page}>
       <form className={styles.form} onSubmit={onSubmit}>
-        <h1>Reset password</h1>
+        <div className={styles.heroTop}>
+          <h1 style={{ margin: 0 }}>Reset password</h1>
+          <ThemeToggle compact />
+        </div>
         <label className={styles.label}>
           New password
           <input

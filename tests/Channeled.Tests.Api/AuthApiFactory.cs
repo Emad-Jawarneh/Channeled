@@ -55,6 +55,7 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
               "upload_sessions",
               "files",
               "folders",
+              "channel_join_requests",
               "channel_members",
               "channels",
               "team_invitations",

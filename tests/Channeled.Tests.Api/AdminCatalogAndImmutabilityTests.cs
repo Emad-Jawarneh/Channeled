@@ -128,14 +128,14 @@ public class AdminCatalogAndImmutabilityTests : IClassFixture<AuthApiFactory>, I
 
         (await _admin.PostAsJsonAsync(
             $"/api/v1/teams/{slug}/channels",
-            new CreateChannelRequest("general", "g", ChannelVisibility.Open))).EnsureSuccessStatusCode();
+            new CreateChannelRequest("general", "g", ChannelVisibility.Open, ChannelKind.File))).EnsureSuccessStatusCode();
         (await _admin.PutAsJsonAsync(
             $"/api/v1/teams/{slug}/channels/general",
             new UpdateChannelRequest(null, "updated"))).EnsureSuccessStatusCode();
 
         (await _admin.PostAsJsonAsync(
             $"/api/v1/teams/{slug}/channels",
-            new CreateChannelRequest("secret", null, ChannelVisibility.Private))).EnsureSuccessStatusCode();
+            new CreateChannelRequest("secret", null, ChannelVisibility.Private, ChannelKind.File))).EnsureSuccessStatusCode();
         (await _admin.PutAsJsonAsync(
             $"/api/v1/teams/{slug}/channels/secret/members",
             new UpsertChannelMemberRequest(memberUser, true, false))).EnsureSuccessStatusCode();

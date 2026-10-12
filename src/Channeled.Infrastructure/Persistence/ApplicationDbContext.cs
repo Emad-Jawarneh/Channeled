@@ -24,6 +24,7 @@ public sealed class ApplicationDbContext : IdentityDbContext<AppUser, AppRole, G
     public DbSet<TeamMemberEntity> TeamMembers => Set<TeamMemberEntity>();
     public DbSet<ChannelEntity> Channels => Set<ChannelEntity>();
     public DbSet<ChannelMemberEntity> ChannelMembers => Set<ChannelMemberEntity>();
+    public DbSet<ChannelJoinRequestEntity> ChannelJoinRequests => Set<ChannelJoinRequestEntity>();
     public DbSet<TeamInvitationEntity> TeamInvitations => Set<TeamInvitationEntity>();
     public DbSet<FolderEntity> Folders => Set<FolderEntity>();
     public DbSet<FileEntity> Files => Set<FileEntity>();
@@ -118,6 +119,15 @@ public sealed class ApplicationDbContext : IdentityDbContext<AppUser, AppRole, G
             entity.ToTable("channel_members");
             entity.HasKey(x => new { x.ChannelId, x.UserId });
             entity.HasOne(x => x.Channel).WithMany(c => c.Members).HasForeignKey(x => x.ChannelId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<ChannelJoinRequestEntity>(entity =>
+        {
+            entity.ToTable("channel_join_requests");
+            entity.HasKey(x => x.Id);
+            entity.HasOne(x => x.Channel).WithMany(c => c.JoinRequests).HasForeignKey(x => x.ChannelId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.ChannelId, x.Status });
+            entity.HasIndex(x => new { x.ChannelId, x.UserId, x.Status });
         });
 
         builder.Entity<TeamInvitationEntity>(entity =>

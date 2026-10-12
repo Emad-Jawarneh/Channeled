@@ -65,7 +65,7 @@ public class TeamsApi404Tests : IClassFixture<AuthApiFactory>, IAsyncLifetime
 
         var channel = await _ownerClient.PostAsJsonAsync(
             $"/api/v1/teams/{_teamSlug}/channels",
-            new CreateChannelRequest("secret", null, ChannelVisibility.Private));
+            new CreateChannelRequest("secret", null, ChannelVisibility.Private, ChannelKind.File));
         channel.EnsureSuccessStatusCode();
     }
 

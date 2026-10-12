@@ -1,15 +1,14 @@
 using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
-using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace Channeled.Tests.Api;
 
-public class HealthEndpointTests : IClassFixture<WebApplicationFactory<Program>>
+public class HealthEndpointTests : IClassFixture<AuthApiFactory>
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly AuthApiFactory _factory;
 
-    public HealthEndpointTests(WebApplicationFactory<Program> factory)
+    public HealthEndpointTests(AuthApiFactory factory)
     {
         _factory = factory;
     }

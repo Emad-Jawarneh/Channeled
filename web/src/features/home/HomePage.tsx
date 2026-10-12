@@ -24,7 +24,7 @@ export function HomePage() {
       <p>
         API health:{" "}
         {health.isLoading && "checking…"}
-        {health.isError && "unreachable (start the API on :5000)"}
+        {health.isError && "unreachable (start the API)"}
         {health.data && health.data.status}
       </p>
       <Button variant="primary" type="button" disabled>

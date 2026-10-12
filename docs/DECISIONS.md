@@ -34,3 +34,13 @@
 
 **Decision:** `Microsoft.AspNetCore.OpenApi` 10.0.12 (not 10.0.0).
 **Reason:** 10.0.0 pulled vulnerable `Microsoft.OpenApi` 2.0.0 (NU1903).
+
+## 2026-10-12 — M1 platform invitations
+
+**Decision:** M1 uses `platform_invitations` (email + hashed token) for account creation before teams exist. Team-scoped invitations remain M2.
+**Reason:** AGENTS requires invitation-only signup in M1; team_id invites need M2 teams.
+
+## 2026-10-12 — Identity keys
+
+**Decision:** ASP.NET Identity with `Guid` keys generated as UUIDv7 in application code.
+**Reason:** Matches domain UUIDv7 requirement; Identity stays in Infrastructure (Domain remains framework-free).

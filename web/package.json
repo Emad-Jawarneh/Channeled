@@ -1,0 +1,43 @@
+{
+  "name": "channeled-web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit --pretty false",
+    "lint": "eslint .",
+    "test": "vitest",
+    "generate:api": "openapi-typescript ../openapi/v1.json -o src/api/generated.ts"
+  },
+  "dependencies": {
+    "@radix-ui/react-slot": "1.2.3",
+    "@tanstack/react-query": "5.90.2",
+    "react": "19.1.1",
+    "react-dom": "19.1.1",
+    "react-router-dom": "7.18.4"
+  },
+  "overrides": {
+    "tinypool": "2.1.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.36.0",
+    "@testing-library/jest-dom": "6.8.0",
+    "@testing-library/react": "16.3.0",
+    "@types/react": "19.1.13",
+    "@types/react-dom": "19.1.9",
+    "@vitejs/plugin-react": "5.0.3",
+    "eslint": "9.36.0",
+    "eslint-plugin-react-hooks": "5.2.0",
+    "eslint-plugin-react-refresh": "0.4.22",
+    "globals": "16.4.0",
+    "jsdom": "27.0.0",
+    "openapi-typescript": "7.9.1",
+    "typescript": "5.9.2",
+    "typescript-eslint": "8.71.1",
+    "vite": "7.3.7",
+    "vitest": "3.2.7"
+  }
+}

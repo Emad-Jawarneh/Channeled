@@ -1,0 +1,13 @@
+[Unit]
+Description=MinIO object store for Channeled
+After=network.target
+
+[Service]
+Type=simple
+User=channeled
+ExecStart=/usr/local/bin/minio server /var/lib/channeled/minio --address 127.0.0.1:9000 --console-address 127.0.0.1:9001
+Restart=on-failure
+EnvironmentFile=-/etc/channeled/minio.env
+
+[Install]
+WantedBy=multi-user.target

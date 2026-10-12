@@ -1,0 +1,16 @@
+[Unit]
+Description=Channeled API
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=channeled
+WorkingDirectory=/opt/channeled
+ExecStart=/usr/bin/dotnet /opt/channeled/Channeled.Api.dll
+Restart=on-failure
+Environment=ASPNETCORE_URLS=http://127.0.0.1:5000
+EnvironmentFile=-/etc/channeled/channeled.env
+
+[Install]
+WantedBy=multi-user.target

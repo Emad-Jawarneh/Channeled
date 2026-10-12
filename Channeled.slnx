@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Channeled.Api/Channeled.Api.csproj" />
+    <Project Path="src/Channeled.Application/Channeled.Application.csproj" />
+    <Project Path="src/Channeled.Domain/Channeled.Domain.csproj" />
+    <Project Path="src/Channeled.Infrastructure/Channeled.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Channeled.Tests.Api/Channeled.Tests.Api.csproj" />
+    <Project Path="tests/Channeled.Tests.Integration/Channeled.Tests.Integration.csproj" />
+    <Project Path="tests/Channeled.Tests.Unit/Channeled.Tests.Unit.csproj" />
+  </Folder>
+</Solution>

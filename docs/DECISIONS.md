@@ -24,3 +24,13 @@
 
 **Decision:** CSS modules + design tokens (CSS variables). No Tailwind.
 **Reason:** Matches AGENTS (`plain CSS modules and design tokens`).
+
+## 2026-10-12 — npm audit threshold
+
+**Decision:** CI `npm audit --audit-level=high` (fail on high/critical).
+**Reason:** Remaining moderate is `@vitest/mocker` only fixed by Vitest 5 (breaking). Track Vitest 5 upgrade; do not weaken to ignore high.
+
+## 2026-10-12 — OpenAPI package version
+
+**Decision:** `Microsoft.AspNetCore.OpenApi` 10.0.12 (not 10.0.0).
+**Reason:** 10.0.0 pulled vulnerable `Microsoft.OpenApi` 2.0.0 (NU1903).

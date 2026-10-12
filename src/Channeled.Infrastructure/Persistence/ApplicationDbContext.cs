@@ -1,5 +1,6 @@
 using Channeled.Domain.Audit;
 using Channeled.Infrastructure.Identity;
+using Channeled.Infrastructure.Teams;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
@@ -16,6 +17,11 @@ public sealed class ApplicationDbContext : IdentityDbContext<AppUser, AppRole, G
     public DbSet<UserSession> UserSessions => Set<UserSession>();
     public DbSet<PlatformInvitation> PlatformInvitations => Set<PlatformInvitation>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
+    public DbSet<TeamEntity> Teams => Set<TeamEntity>();
+    public DbSet<TeamMemberEntity> TeamMembers => Set<TeamMemberEntity>();
+    public DbSet<ChannelEntity> Channels => Set<ChannelEntity>();
+    public DbSet<ChannelMemberEntity> ChannelMembers => Set<ChannelMemberEntity>();
+    public DbSet<TeamInvitationEntity> TeamInvitations => Set<TeamInvitationEntity>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -66,6 +72,51 @@ public sealed class ApplicationDbContext : IdentityDbContext<AppUser, AppRole, G
             entity.HasIndex(x => x.TokenHash).IsUnique();
             entity.Property(x => x.TokenHash).HasMaxLength(128).IsRequired();
             entity.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId);
+        });
+
+        builder.Entity<TeamEntity>(entity =>
+        {
+            entity.ToTable("teams");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Slug).HasMaxLength(120).IsRequired();
+            entity.HasIndex(x => x.Slug).IsUnique();
+            entity.Property(x => x.Description).HasMaxLength(2000);
+        });
+
+        builder.Entity<TeamMemberEntity>(entity =>
+        {
+            entity.ToTable("team_members");
+            entity.HasKey(x => new { x.TeamId, x.UserId });
+            entity.HasOne(x => x.Team).WithMany(t => t.Members).HasForeignKey(x => x.TeamId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => x.UserId);
+        });
+
+        builder.Entity<ChannelEntity>(entity =>
+        {
+            entity.ToTable("channels");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(2000);
+            entity.HasIndex(x => new { x.TeamId, x.Name }).IsUnique();
+            entity.HasOne(x => x.Team).WithMany(t => t.Channels).HasForeignKey(x => x.TeamId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<ChannelMemberEntity>(entity =>
+        {
+            entity.ToTable("channel_members");
+            entity.HasKey(x => new { x.ChannelId, x.UserId });
+            entity.HasOne(x => x.Channel).WithMany(c => c.Members).HasForeignKey(x => x.ChannelId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<TeamInvitationEntity>(entity =>
+        {
+            entity.ToTable("team_invitations");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Email).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.TokenHash).HasMaxLength(128).IsRequired();
+            entity.HasIndex(x => x.TokenHash).IsUnique();
+            entity.HasOne(x => x.Team).WithMany().HasForeignKey(x => x.TeamId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

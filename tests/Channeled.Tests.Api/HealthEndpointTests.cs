@@ -4,6 +4,7 @@ using FluentAssertions;
 
 namespace Channeled.Tests.Api;
 
+[Collection("Api")]
 public class HealthEndpointTests : IClassFixture<AuthApiFactory>
 {
     private readonly AuthApiFactory _factory;

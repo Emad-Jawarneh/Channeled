@@ -44,3 +44,13 @@
 
 **Decision:** ASP.NET Identity with `Guid` keys generated as UUIDv7 in application code.
 **Reason:** Matches domain UUIDv7 requirement; Identity stays in Infrastructure (Domain remains framework-free).
+
+## 2026-10-12 — Single IAuthorizer
+
+**Decision:** All team/channel permission checks go through one `IAuthorizer` implementation; services never branch on role strings ad hoc.
+**Reason:** AGENTS M2 gate requires one evaluator and a full role × visibility × action matrix test.
+
+## 2026-10-12 — Deny-by-default as 404
+
+**Decision:** Missing team membership or private-channel access returns `404 NotFound` (not `403`) for team/channel resources.
+**Reason:** Spec require deny-by-default that does not leak existence of hidden resources; API tests assert 404 for outsiders.

@@ -2,11 +2,14 @@ using Channeled.Application.Abstractions.Email;
 using Channeled.Application.Abstractions.Storage;
 using Channeled.Application.Abstractions.Time;
 using Channeled.Application.Identity;
+using Channeled.Application.Teams;
+using Channeled.Domain.Authorization;
 using Channeled.Domain.Identity;
 using Channeled.Infrastructure.Email;
 using Channeled.Infrastructure.Identity;
 using Channeled.Infrastructure.Persistence;
 using Channeled.Infrastructure.Storage;
+using Channeled.Infrastructure.Teams;
 using Channeled.Infrastructure.Time;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
@@ -69,7 +72,9 @@ public static class DependencyInjection
 
         services.AddSingleton<IClock, SystemClock>();
         services.AddSingleton<IEmailSender, LoggingEmailSender>();
+        services.AddSingleton<IAuthorizer, Authorizer>();
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<ITeamService, TeamService>();
         services.AddSingleton<IFileStore>(sp =>
         {
             var options = sp.GetRequiredService<IOptions<FileStoreOptions>>().Value;

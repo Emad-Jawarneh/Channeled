@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Channeled.Tests.Api;
 
+[Collection("Api")]
 public class AuthAbusePathTests : IClassFixture<AuthApiFactory>, IAsyncLifetime
 {
     private readonly AuthApiFactory _factory;

@@ -84,3 +84,13 @@
 
 **Decision:** Nightly hosted job recomputes `teams.UsageBytes` and `AspNetUsers.PersonalUsageBytes` as `SUM(files.SizeBytes)` including trashed rows (trash counts until purge). Manual trigger: `POST /api/v1/admin/jobs/quota-reconcile` (platform admin).
 **Reason:** Counters stay correct after drift; trash still occupies quota per domain rules.
+
+## 2026-10-12 — Audit append-only
+
+**Decision:** `audit_events` is append-only for the app role: BEFORE UPDATE/DELETE triggers raise; `REVOKE UPDATE, DELETE ON audit_events FROM channeled`. INSERT/SELECT remain.
+**Reason:** M6 gate — audit must be immutable for the application connection; DB enforces it even if app code is wrong.
+
+## 2026-10-12 — Admin surface vs personal
+
+**Decision:** Platform admin APIs cover dashboard, users, team quotas, audit export, health, and backup/config/purge/download audit stubs. Personal space remains owner-only; admin never bypasses personal authorization.
+**Reason:** AGENTS: `/admin/*` only for platform admin; personal isolation from M4 stands.

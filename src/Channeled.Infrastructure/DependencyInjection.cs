@@ -1,6 +1,7 @@
 using Channeled.Application.Abstractions.Email;
 using Channeled.Application.Abstractions.Storage;
 using Channeled.Application.Abstractions.Time;
+using Channeled.Application.Admin;
 using Channeled.Application.Files;
 using Channeled.Application.Identity;
 using Channeled.Application.Personal;
@@ -8,6 +9,7 @@ using Channeled.Application.Search;
 using Channeled.Application.Teams;
 using Channeled.Domain.Authorization;
 using Channeled.Domain.Identity;
+using Channeled.Infrastructure.Admin;
 using Channeled.Infrastructure.Email;
 using Channeled.Infrastructure.Files;
 using Channeled.Infrastructure.Identity;
@@ -36,6 +38,7 @@ public static class DependencyInjection
         services.Configure<FileStoreOptions>(configuration.GetSection(FileStoreOptions.SectionName));
         services.Configure<UploadLimitsOptions>(configuration.GetSection(UploadLimitsOptions.SectionName));
         services.Configure<SearchBenchOptions>(configuration.GetSection(SearchBenchOptions.SectionName));
+        services.Configure<AuditOptions>(configuration.GetSection(AuditOptions.SectionName));
 
         var connectionString = configuration.GetConnectionString("Postgres")
             ?? throw new InvalidOperationException("Connection string 'Postgres' is required.");
@@ -89,6 +92,7 @@ public static class DependencyInjection
         services.AddScoped<ISearchService, SearchService>();
         services.AddScoped<IUsageService, UsageService>();
         services.AddScoped<IQuotaReconciliationService, QuotaReconciliationService>();
+        services.AddScoped<IAdminService, AdminService>();
         services.AddSingleton<IFileStore>(sp =>
         {
             var options = sp.GetRequiredService<IOptions<FileStoreOptions>>().Value;

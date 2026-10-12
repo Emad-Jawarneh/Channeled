@@ -4,36 +4,20 @@
 
 | Milestone | Status | Evidence |
 |-----------|--------|----------|
-| M0–M4 | ✅ Complete | Prior gates |
-| M5 Search and metadata | ✅ Complete | Trigram search; usage; reconcile; 1M p95 ≤ 500 ms; `team_quota_exceeded`; `./ci.sh` green |
-| M6 Administration | ⏸ Next | — |
+| M0–M5 | ✅ Complete | Prior gates |
+| M6 Administration | ✅ Complete | `AdminCatalogAndImmutabilityTests`; `./ci.sh` green |
 | M7–M8 | ⏸ | — |
 
-## M5 exit gate
+## M6 exit gate
 
-- [x] Trigram search per scope (`channel` / `team` / `personal`) + filters
-- [x] Usage reporting (`GET /api/v1/teams/{slug}/storage`, `/me/storage`)
-- [x] Quota enforcement (`team_quota_exceeded`) + reconciliation job
-- [x] p95 list/search on seeded 1M-file dataset ≤ 500 ms
+- [x] Dashboard, users/teams management, audit viewer + CSV/JSON export
+- [x] Every audit catalog event emitted and asserted (`Every_audit_catalog_event_is_emitted`)
+- [x] `audit_events` rejects UPDATE/DELETE for app role (trigger + REVOKE; immutability tests)
 - [x] `./ci.sh` green
 
-## Seed / bench
+## M6 notes
 
-```bash
-./scripts/seed-bench-files.sh 1000000
-# or: dotnet run --project src/Channeled.Api -- seed-bench-files --count 1000000
-```
-
-## Verified
-
-```text
-dotnet test tests/Channeled.Tests.Integration --filter MillionFileBench
-# Passed (1M seed; list+search p95 < 500ms)
-
-dotnet test tests/Channeled.Tests.Api --filter SearchAndQuota
-# Passed: 4
-
-./ci.sh
-# === CI green ===
-# unit 194 · integration 5 · API 24
-```
+- `AuditEventType` + `AuditCatalog` cover the AGENTS catalog
+- `IAdminService` / `/api/v1/admin/*`: dashboard, health, users CRUD/disable/reset, teams list/quota, audit list/export, backup stubs, config/download/purge audit hooks
+- Migration `AuditAppendOnly`: deny UPDATE/DELETE triggers on `audit_events`; REVOKE for role `channeled`
+- Team invite revoke + channel update; auth change-password emit catalog events

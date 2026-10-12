@@ -87,6 +87,21 @@ public static class AuthEndpoints
             return ToHttp(await auth.RevokeSessionAsync(userId, sessionId, CreateContext(http, TryGetSessionId(principal)), ct));
         }).RequireAuthorization();
 
+        group.MapPost("/change-password", async Task<IResult> (
+            ChangePasswordRequest body,
+            IAuthService auth,
+            ClaimsPrincipal principal,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            if (!TryGetUserId(principal, out var userId))
+            {
+                return Problem(ErrorCodes.Unauthorized, "Not authenticated.", StatusCodes.Status401Unauthorized);
+            }
+
+            return ToHttp(await auth.ChangePasswordAsync(userId, body, CreateContext(http, TryGetSessionId(principal)), ct));
+        }).RequireAuthorization();
+
         group.MapPost("/invitations", async Task<IResult> (
             CreateInvitationRequest body,
             IAuthService auth,

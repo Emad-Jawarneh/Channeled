@@ -370,6 +370,33 @@ public sealed partial class TeamService(
         return AppResult<TeamDto>.Ok(ToTeamDto(invite.Team, invite.Role));
     }
 
+    public async Task<AppResult> RevokeInvitationAsync(
+        Guid userId,
+        string slug,
+        Guid invitationId,
+        RequestContext context,
+        CancellationToken ct = default)
+    {
+        var loaded = await LoadTeamMembershipAsync(userId, slug, ct);
+        if (loaded is null || !authorizer.Authorize(BaseContext(userId, AuthAction.InviteMember, loaded)).Allowed)
+        {
+            return NotFoundTeam();
+        }
+
+        var invite = await db.TeamInvitations.FirstOrDefaultAsync(
+            i => i.Id == invitationId && i.TeamId == loaded.Team.Id,
+            ct);
+        if (invite is null || invite.AcceptedAt is not null)
+        {
+            return AppResult.Fail(ErrorCodes.NotFound, "Invitation not found.");
+        }
+
+        invite.RevokedAt = clock.UtcNow;
+        await WriteAuditAsync(userId, AuditEventType.InviteRevoke, "invitation", invite.Id.ToString(), loaded.Team.Id, context, ct);
+        await db.SaveChangesAsync(ct);
+        return AppResult.Ok();
+    }
+
     public async Task<AppResult<ChannelDto>> CreateChannelAsync(
         Guid userId,
         string slug,
@@ -465,6 +492,61 @@ public sealed partial class TeamService(
             return NotFoundChannel<ChannelDto>();
         }
 
+        return AppResult<ChannelDto>.Ok(ToChannelDto(loaded.Channel));
+    }
+
+    public async Task<AppResult<ChannelDto>> UpdateChannelAsync(
+        Guid userId,
+        string slug,
+        string channelName,
+        UpdateChannelRequest request,
+        RequestContext context,
+        CancellationToken ct = default)
+    {
+        var loaded = await LoadTeamAndChannelAsync(userId, slug, channelName, ct);
+        if (loaded is null
+            || !authorizer.Authorize(ChannelContext(
+                userId,
+                AuthAction.CreateChannel,
+                loaded.TeamMembership,
+                loaded.Channel,
+                loaded.IsChannelMember,
+                loaded.CanWrite,
+                loaded.CanManage)).Allowed)
+        {
+            return NotFoundChannel<ChannelDto>();
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Name))
+        {
+            var name = request.Name.Trim();
+            var clash = await db.Channels.AnyAsync(
+                c => c.TeamId == loaded.TeamMembership.Team.Id
+                     && c.Id != loaded.Channel.Id
+                     && c.Name.ToLower() == name.ToLower(),
+                ct);
+            if (clash)
+            {
+                return AppResult<ChannelDto>.Fail(ErrorCodes.Conflict, "Channel name already exists.");
+            }
+
+            loaded.Channel.Name = name;
+        }
+
+        if (request.Description is not null)
+        {
+            loaded.Channel.Description = request.Description.Trim();
+        }
+
+        await WriteAuditAsync(
+            userId,
+            AuditEventType.ChannelChange,
+            "channel",
+            loaded.Channel.Id.ToString(),
+            loaded.TeamMembership.Team.Id,
+            context,
+            ct);
+        await db.SaveChangesAsync(ct);
         return AppResult<ChannelDto>.Ok(ToChannelDto(loaded.Channel));
     }
 

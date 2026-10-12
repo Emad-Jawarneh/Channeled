@@ -25,5 +25,7 @@ public interface IAuthService
 
     Task<AppResult> ResetPasswordAsync(ResetPasswordRequest request, RequestContext context, CancellationToken ct = default);
 
+    Task<AppResult> ChangePasswordAsync(Guid userId, ChangePasswordRequest request, RequestContext context, CancellationToken ct = default);
+
     Task<AppResult<AuthUserDto>> SeedOperatorAsync(SeedOperatorRequest request, CancellationToken ct = default);
 }

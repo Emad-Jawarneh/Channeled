@@ -131,6 +131,17 @@ public static class TeamEndpoints
             return ToHttp(await teamsSvc.AcceptInvitationAsync(userId, body, Ctx(http), ct));
         });
 
+        teams.MapPost("/{slug}/invitations/{invitationId:guid}/revoke", async Task<IResult> (
+            string slug, Guid invitationId, ITeamService teamsSvc, ClaimsPrincipal principal, HttpContext http, CancellationToken ct) =>
+        {
+            if (!TryUser(principal, out var userId))
+            {
+                return Unauthorized();
+            }
+
+            return ToHttp(await teamsSvc.RevokeInvitationAsync(userId, slug, invitationId, Ctx(http), ct));
+        });
+
         teams.MapPost("/{slug}/channels", async Task<IResult> (string slug, CreateChannelRequest body, ITeamService teamsSvc, ClaimsPrincipal principal, HttpContext http, CancellationToken ct) =>
         {
             if (!TryUser(principal, out var userId))
@@ -159,6 +170,17 @@ public static class TeamEndpoints
             }
 
             return ToHttp(await teamsSvc.GetChannelAsync(userId, slug, channelName, ct));
+        });
+
+        teams.MapPut("/{slug}/channels/{channelName}", async Task<IResult> (
+            string slug, string channelName, UpdateChannelRequest body, ITeamService teamsSvc, ClaimsPrincipal principal, HttpContext http, CancellationToken ct) =>
+        {
+            if (!TryUser(principal, out var userId))
+            {
+                return Unauthorized();
+            }
+
+            return ToHttp(await teamsSvc.UpdateChannelAsync(userId, slug, channelName, body, Ctx(http), ct));
         });
 
         teams.MapPost("/{slug}/channels/{channelName}/archive", async Task<IResult> (string slug, string channelName, ITeamService teamsSvc, ClaimsPrincipal principal, HttpContext http, CancellationToken ct) =>

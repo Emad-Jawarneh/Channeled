@@ -336,6 +336,34 @@ public sealed class AuthService(
         return AppResult.Ok();
     }
 
+    public async Task<AppResult> ChangePasswordAsync(
+        Guid userId,
+        ChangePasswordRequest request,
+        RequestContext context,
+        CancellationToken ct = default)
+    {
+        if (!PasswordRules.IsValid(request.NewPassword))
+        {
+            return AppResult.Fail(ErrorCodes.Validation, $"Password must be at least {PasswordRules.MinLength} characters.");
+        }
+
+        var user = await userManager.FindByIdAsync(userId.ToString());
+        if (user is null)
+        {
+            return AppResult.Fail(ErrorCodes.NotFound, "User not found.");
+        }
+
+        var result = await userManager.ChangePasswordAsync(user, request.CurrentPassword, request.NewPassword);
+        if (!result.Succeeded)
+        {
+            return AppResult.Fail(ErrorCodes.Validation, string.Join("; ", result.Errors.Select(e => e.Description)));
+        }
+
+        await WriteAuditAsync(userId, AuditEventType.PasswordChange, "user", userId.ToString(), context, ct);
+        await db.SaveChangesAsync(ct);
+        return AppResult.Ok();
+    }
+
     public async Task<AppResult<AuthUserDto>> SeedOperatorAsync(SeedOperatorRequest request, CancellationToken ct = default)
     {
         EmailAddress email;

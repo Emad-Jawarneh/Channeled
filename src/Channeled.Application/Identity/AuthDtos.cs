@@ -26,6 +26,8 @@ public sealed record ForgotPasswordRequest(string Email);
 
 public sealed record ResetPasswordRequest(string Token, string NewPassword);
 
+public sealed record ChangePasswordRequest(string CurrentPassword, string NewPassword);
+
 public sealed record SeedOperatorRequest(string Email, string DisplayName, string Password);
 
 public sealed record RequestContext(string Ip, string UserAgent, Guid? CurrentSessionId = null);

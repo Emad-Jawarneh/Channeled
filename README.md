@@ -13,9 +13,9 @@ Self-hosted, multi-team file-sharing platform.
 
 ## Status
 
-**M0–M5 complete** (foundations, identity, teams/channels, files, personal space, search/quotas). Next: **M6 Administration**.
+**M0–M6 complete** (foundations, identity, teams/channels, files, personal space, search/quotas, admin/audit). Next: **M7 SPA**.
 
-The web UI today is mainly **login + health**. Teams, files, personal space, and search are available via the **API** (cookie auth).
+The web UI today is mainly **login + health**. Teams, files, personal space, search, and admin are available via the **API** (cookie auth).
 
 ## Stack
 
@@ -104,6 +104,7 @@ Useful groups (all under `/api/v1`):
 | Personal | `/me/files/…`, `/me/storage` |
 | Search | `/search?q=…&scope=channel\|team\|personal` |
 | Usage | `/teams/{slug}/storage` |
+| Admin | `/admin/dashboard`, `/admin/users`, `/admin/teams`, `/admin/audit`, `/admin/audit/export` |
 
 Mutating requests need the `X-CSRF-TOKEN` header after `/auth/csrf`.
 

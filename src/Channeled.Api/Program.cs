@@ -1,4 +1,5 @@
 using System.Threading.RateLimiting;
+using Channeled.Api.Admin;
 using Channeled.Api.Auth;
 using Channeled.Api.Files;
 using Channeled.Api.Personal;
@@ -191,6 +192,7 @@ app.MapTeamEndpoints();
 app.MapFileEndpoints();
 app.MapPersonalEndpoints();
 app.MapSearchEndpoints();
+app.MapAdminEndpoints();
 
 app.Run();
 return 0;

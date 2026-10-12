@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Channeled – Wireframes</title>
+<style>
+/* Wireframe kit: plain flex, fixed sizes, no CSS variables or external fonts (best for html-to-figma) */
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#d9d9d9;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#222;padding:40px}
+h6{font-size:16px;font-weight:700;margin:0 0 12px 40px;color:#555}
+.frame{width:1440px;height:900px;background:#fff;margin:0 0 72px 40px;display:flex;overflow:hidden;border:1px solid #bbb}
+.col{display:flex;flex-direction:column}
+.row{display:flex;flex-direction:row;align-items:center}
+.gap8{gap:8px}.gap12{gap:12px}.gap16{gap:16px}
+.grow{flex:1}
+.rail{width:72px;background:#2b2b2b;padding:16px 0;align-items:center;gap:12px;flex-shrink:0}
+.team{width:44px;height:44px;border-radius:12px;background:#777;color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center}
+.team.on{background:#fff;color:#222}
+.side{width:260px;background:#f2f2f2;border-right:1px solid #ccc;padding:20px 16px;gap:4px;flex-shrink:0}
+.side .title{font-size:18px;font-weight:700;margin-bottom:4px}
+.side .sub{font-size:12px;color:#777;margin-bottom:16px}
+.side .lbl{font-size:12px;color:#777;margin:16px 0 6px}
+.nav{padding:9px 12px;border-radius:6px;color:#444}
+.nav.on{background:#d6d6d6;font-weight:700;color:#111}
+.main{flex:1;background:#fff;min-width:0}
+.top{height:64px;border-bottom:1px solid #ddd;padding:0 24px;display:flex;align-items:center;gap:16px;flex-shrink:0}
+.search{width:360px;height:36px;border:1px solid #bbb;border-radius:6px;padding:0 12px;display:flex;align-items:center;color:#888}
+.avatar{width:32px;height:32px;border-radius:16px;background:#999;flex-shrink:0}
+.btn{height:36px;padding:0 16px;border-radius:6px;border:1px solid #888;display:flex;align-items:center;justify-content:center;background:#fff;font-weight:700}
+.btn.p{background:#333;color:#fff;border-color:#333}
+.btn.d{border-color:#a33;color:#a33}
+.field{height:40px;border:1px solid #bbb;border-radius:6px;padding:0 12px;display:flex;align-items:center;color:#888;background:#fff}
+.lab{font-size:12px;font-weight:700;margin-bottom:6px}
+.pill{height:22px;padding:0 10px;border-radius:11px;background:#ddd;font-size:12px;display:inline-flex;align-items:center}
+.pill.dk{background:#555;color:#fff}
+.body{padding:24px;gap:16px;flex:1;min-height:0}
+.crumb{color:#777}
+.h1{font-size:24px;font-weight:700}
+.muted{color:#777}.small{font-size:12px}
+.tbl{border:1px solid #ddd;border-radius:6px}
+.tr{height:48px;padding:0 16px;border-bottom:1px solid #eee;display:flex;align-items:center;gap:12px}
+.tr:last-child{border-bottom:0}
+.tr.h{height:40px;background:#f2f2f2;font-weight:700;font-size:12px;color:#555}
+.tr.sel{background:#ececec}
+.cb{width:16px;height:16px;border:1px solid #888;border-radius:3px;flex-shrink:0}
+.ic{width:24px;height:24px;background:#bbb;border-radius:4px;flex-shrink:0}
+.c1{flex:1}.c2{width:90px}.c3{width:140px}.c4{width:150px}.c5{width:90px;text-align:right}
+.panel{width:320px;border-left:1px solid #ddd;padding:24px;gap:16px;flex-shrink:0;background:#fafafa}
+.prev{height:160px;background:#ddd;border:1px solid #bbb;display:flex;align-items:center;justify-content:center;color:#777}
+.kv{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #eee}
+.bar{height:8px;background:#ddd;border-radius:4px;width:100%}
+.bar i{display:block;height:8px;background:#555;border-radius:4px}
+.card{border:1px solid #ccc;border-radius:8px;padding:20px;gap:10px;background:#fff}
+.tabs{display:flex;gap:24px;border-bottom:1px solid #ddd;height:40px;align-items:flex-start}
+.tab{padding-bottom:10px;color:#777}
+.tab.on{color:#111;font-weight:700;border-bottom:2px solid #222}
+.drop{border:2px dashed #aaa;border-radius:8px;height:72px;display:flex;align-items:center;justify-content:center;color:#777}
+</style>
+</head>
+<body>
+
+<!-- 1. LOGIN -->
+<h6>1 · Sign in</h6>
+<div class="frame" style="background:#eee;align-items:center;justify-content:center">
+  <div class="col card" style="width:420px;padding:36px;gap:18px">
+    <div class="row gap8"><div class="team" style="border-radius:8px">C</div><div class="h1">Channeled</div></div>
+    <div class="muted">Sign in to your private file workspace.</div>
+    <div class="col"><div class="lab">Email</div><div class="field">name@example.com</div></div>
+    <div class="col"><div class="lab">Password</div><div class="field">••••••••••</div></div>
+    <div class="row" style="justify-content:space-between"><div class="row gap8"><div class="cb"></div><span class="small">Keep me signed in</span></div><span class="small" style="text-decoration:underline">Forgot password?</span></div>
+    <div class="btn p" style="height:44px">Sign in</div>
+    <div class="small muted" style="text-align:center">Need an account? Ask your team owner for an invitation.</div>
+  </div>
+</div>
+
+<!-- 2. FILE BROWSER -->
+<h6>2 · Channel file browser (core screen)</h6>
+<div class="frame">
+  <div class="col rail">
+    <div class="team" style="border-radius:22px;background:#999">Me</div><div style="width:32px;height:1px;background:#666"></div><div class="team on">AC</div><div class="team">DS</div><div class="team">CW</div>
+    <div class="team" style="background:#444">+</div>
+    <div class="grow"></div><div class="avatar"></div>
+  </div>
+  <div class="col side">
+    <div class="title">Acme Design</div><div class="sub">12 members · 48.2 GB used</div>
+    <div class="nav">Overview</div><div class="nav">Recent files</div>
+    <div class="lbl">Channels</div>
+    <div class="nav on"># brand-assets</div><div class="nav"># contracts</div><div class="nav"># marketing</div><div class="nav"># release-builds</div>
+    <div class="nav muted">+ New channel</div>
+    <div class="grow"></div>
+    <div class="nav">Team settings</div>
+  </div>
+  <div class="col main">
+    <div class="top"><div class="search">Search files in Acme Design</div><div class="grow"></div><div class="btn">New folder</div><div class="btn p">Upload files</div></div>
+    <div class="row grow" style="align-items:stretch;min-height:0">
+      <div class="col body">
+        <div class="col" style="gap:4px"><div class="crumb small">Acme Design / # brand-assets</div><div class="row gap12"><div class="h1">brand-assets</div><span class="pill">Private channel</span></div><div class="muted">Logos, type specimens and campaign imagery. 128 files.</div></div>
+        <div class="row gap8"><div class="btn">Name ▾</div><div class="btn">Type ▾</div><div class="btn">Uploaded by ▾</div><div class="grow"></div><div class="btn">List</div></div>
+        <div class="col tbl">
+          <div class="tr h"><div class="cb"></div><div class="c1">Name</div><div class="c2">Size</div><div class="c3">Uploaded by</div><div class="c4">Modified</div><div class="c5">Actions</div></div>
+          <div class="tr"><div class="cb"></div><div class="ic"></div><div class="c1">logo-primary.svg</div><div class="c2">42 KB</div><div class="c3">Lina H.</div><div class="c4">Oct 9, 2026</div><div class="c5">⋯</div></div>
+          <div class="tr sel"><div class="cb"></div><div class="ic"></div><div class="c1">brand-guidelines-v3.pdf</div><div class="c2">8.4 MB</div><div class="c3">Omar S.</div><div class="c4">Oct 8, 2026</div><div class="c5">⋯</div></div>
+          <div class="tr"><div class="cb"></div><div class="ic"></div><div class="c1">campaign-hero.png</div><div class="c2">3.1 MB</div><div class="c3">Lina H.</div><div class="c4">Oct 6, 2026</div><div class="c5">⋯</div></div>
+          <div class="tr"><div class="cb"></div><div class="ic"></div><div class="c1">typeface-license.docx</div><div class="c2">96 KB</div><div class="c3">Sara K.</div><div class="c4">Oct 2, 2026</div><div class="c5">⋯</div></div>
+          <div class="tr"><div class="cb"></div><div class="ic"></div><div class="c1">social-templates.zip</div><div class="c2">212 MB</div><div class="c3">Omar S.</div><div class="c4">Sep 28, 2026</div><div class="c5">⋯</div></div>
+          <div class="tr"><div class="cb"></div><div class="ic"></div><div class="c1">intro-reel.mp4</div><div class="c2">640 MB</div><div class="c3">Sara K.</div><div class="c4">Sep 21, 2026</div><div class="c5">⋯</div></div>
+        </div>
+        <div class="drop">Drop files here to upload to # brand-assets</div>
+        <div class="row small muted"><span>Showing 1–6 of 128</span><div class="grow"></div><div class="btn" style="height:30px">Previous</div>&nbsp;<div class="btn" style="height:30px">Next</div></div>
+      </div>
+      <div class="col panel">
+        <div class="row"><b>File details</b><div class="grow"></div><span class="muted">✕</span></div>
+        <div class="prev">PDF preview</div>
+        <div class="col"><b>brand-guidelines-v3.pdf</b><span class="small muted">In # brand-assets</span></div>
+        <div class="col"><div class="kv"><span class="muted">Size</span><span>8.4 MB</span></div><div class="kv"><span class="muted">Type</span><span>application/pdf</span></div><div class="kv"><span class="muted">Uploaded by</span><span>Omar S.</span></div><div class="kv"><span class="muted">Uploaded</span><span>Oct 8, 2026</span></div><div class="kv"><span class="muted">Checksum</span><span>a4f9…c21e</span></div></div>
+        <div class="btn p">Download</div><div class="btn">Rename</div><div class="btn d">Delete file</div>
+        <div class="grow"></div>
+        <div class="col gap8"><div class="row small"><span>Team storage</span><div class="grow"></div><span class="muted">48.2 of 100 GB</span></div><div class="bar"><i style="width:48%"></i></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 3. PERSONAL FILES -->
+<h6>3 · My files (personal space, outside any team or channel)</h6>
+<div class="frame">
+  <div class="col rail">
+    <div class="team on" style="border-radius:22px">Me</div><div style="width:32px;height:1px;background:#666"></div>
+    <div class="team">AC</div><div class="team">DS</div><div class="team">CW</div><div class="team" style="background:#444">+</div>
+    <div class="grow"></div><div class="avatar"></div>
+  </div>
+  <div class="col side">
+    <div class="title">My files</div><div class="sub">Private to you</div>
+    <div class="btn p" style="height:44px;margin-bottom:12px">+ New</div>
+    <div class="nav on">My files</div><div class="nav">Recent</div><div class="nav">Starred</div><div class="nav">Trash</div>
+    <div class="lbl">Folders</div>
+    <div class="nav">▸ Coursework</div><div class="nav">▾ Projects</div><div class="nav" style="padding-left:28px">Channeled</div><div class="nav" style="padding-left:28px">Hospital system</div><div class="nav">▸ Personal</div>
+    <div class="grow"></div>
+    <div class="col gap8"><div class="bar"><i style="width:22%"></i></div><div class="small muted">4.4 GB of 20 GB used</div></div>
+  </div>
+  <div class="col main">
+    <div class="top"><div class="search">Search in My files</div><div class="grow"></div><div class="btn">Upload folder</div><div class="btn p">Upload files</div></div>
+    <div class="row grow" style="align-items:stretch;min-height:0">
+      <div class="col body">
+        <div class="col" style="gap:4px"><div class="crumb small">My files / Projects</div><div class="h1">Projects</div></div>
+        <div class="row gap8"><div class="btn">Type ▾</div><div class="btn">Modified ▾</div><div class="grow"></div><div class="btn">List</div><div class="btn">Grid</div></div>
+        <div class="col gap8"><div class="small muted">Folders</div>
+          <div class="row gap12">
+            <div class="row gap8 card" style="width:240px;padding:12px 16px"><div class="ic"></div><span>Channeled</span></div>
+            <div class="row gap8 card" style="width:240px;padding:12px 16px"><div class="ic"></div><span>Hospital system</span></div>
+            <div class="row gap8 card" style="width:240px;padding:12px 16px"><div class="ic"></div><span>UX prototypes</span></div>
+          </div>
+        </div>
+        <div class="col gap8 grow" style="min-height:0"><div class="small muted">Files</div>
+          <div class="col tbl">
+            <div class="tr h"><div class="cb"></div><div class="c1">Name</div><div class="c2">Size</div><div class="c3">Owner</div><div class="c4">Modified</div><div class="c5">Actions</div></div>
+            <div class="tr"><div class="cb"></div><div class="ic"></div><div class="c1">architecture-notes.md</div><div class="c2">18 KB</div><div class="c3">me</div><div class="c4">Oct 10, 2026</div><div class="c5">⋯</div></div>
+            <div class="tr sel"><div class="cb"></div><div class="ic"></div><div class="c1">ui-wireframes-v1.fig</div><div class="c2">6.2 MB</div><div class="c3">me</div><div class="c4">Oct 9, 2026</div><div class="c5">⋯</div></div>
+            <div class="tr"><div class="cb"></div><div class="ic"></div><div class="c1">project-report-draft.docx</div><div class="c2">340 KB</div><div class="c3">me</div><div class="c4">Oct 4, 2026</div><div class="c5">⋯</div></div>
+            <div class="tr"><div class="cb"></div><div class="ic"></div><div class="c1">er-diagram.png</div><div class="c2">1.1 MB</div><div class="c3">me</div><div class="c4">Sep 30, 2026</div><div class="c5">⋯</div></div>
+          </div>
+          <div class="drop" style="margin-top:8px">Drop files here to upload to Projects</div>
+        </div>
+      </div>
+      <div class="col" style="width:240px;padding:24px 0 0 0;flex-shrink:0;position:relative">
+        <div class="col card" style="width:220px;padding:8px;gap:0;position:absolute;top:150px;right:24px;background:#fff">
+          <div class="nav">Download</div><div class="nav">Rename</div><div class="nav">Move to…</div><div class="nav">Copy to team channel…</div><div class="nav">Star</div><div class="nav">Details</div><div class="nav" style="color:#a33">Move to trash</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 4. TEAM MEMBERS -->
+<h6>4 · Team settings – Members and roles</h6>
+<div class="frame">
+  <div class="col rail"><div class="team" style="border-radius:22px;background:#999">Me</div><div style="width:32px;height:1px;background:#666"></div><div class="team on">AC</div><div class="team">DS</div><div class="team">CW</div><div class="team" style="background:#444">+</div><div class="grow"></div><div class="avatar"></div></div>
+  <div class="col side">
+    <div class="title">Acme Design</div><div class="sub">Team settings</div>
+    <div class="nav">General</div><div class="nav on">Members</div><div class="nav">Channels and access</div><div class="nav">Storage</div><div class="nav">Activity</div>
+    <div class="grow"></div><div class="nav">← Back to files</div>
+  </div>
+  <div class="col main">
+    <div class="top"><div class="h1" style="font-size:18px">Members</div><div class="grow"></div><div class="btn p">Invite member</div></div>
+    <div class="col body">
+      <div class="tabs"><div class="tab on">Members (12)</div><div class="tab">Pending invitations (2)</div></div>
+      <div class="row gap8"><div class="search" style="width:300px">Search members</div><div class="btn">Role: All ▾</div></div>
+      <div class="col tbl">
+        <div class="tr h"><div class="c1">Member</div><div class="c3">Role</div><div class="c3">Channels</div><div class="c4">Last active</div><div class="c5">Actions</div></div>
+        <div class="tr"><div class="avatar"></div><div class="c1"><b>Omar Saleh</b><br><span class="small muted">omar@acme.example</span></div><div class="c3"><span class="pill dk">Owner</span></div><div class="c3">All</div><div class="c4">Today</div><div class="c5">⋯</div></div>
+        <div class="tr"><div class="avatar"></div><div class="c1"><b>Lina Haddad</b><br><span class="small muted">lina@acme.example</span></div><div class="c3"><span class="pill dk">Admin</span></div><div class="c3">All</div><div class="c4">Today</div><div class="c5">⋯</div></div>
+        <div class="tr"><div class="avatar"></div><div class="c1"><b>Sara Khalil</b><br><span class="small muted">sara@acme.example</span></div><div class="c3"><span class="pill">Member</span></div><div class="c3">3 of 4</div><div class="c4">Yesterday</div><div class="c5">⋯</div></div>
+        <div class="tr"><div class="avatar"></div><div class="c1"><b>Yousef Nasser</b><br><span class="small muted">yousef@acme.example</span></div><div class="c3"><span class="pill">Member</span></div><div class="c3">2 of 4</div><div class="c4">Oct 7, 2026</div><div class="c5">⋯</div></div>
+        <div class="tr"><div class="avatar"></div><div class="c1"><b>Dana Fares</b><br><span class="small muted">dana@acme.example</span></div><div class="c3"><span class="pill">Viewer</span></div><div class="c3">1 of 4</div><div class="c4">Oct 3, 2026</div><div class="c5">⋯</div></div>
+      </div>
+      <div class="card" style="width:560px">
+        <b>Role permissions</b>
+        <div class="small muted">Owner: everything · Admin: members, channels, files · Member: upload and manage own files · Viewer: browse and download</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 5. ADMIN -->
+<h6>5 · Platform administration – Storage, backups and audit log</h6>
+<div class="frame">
+  <div class="col side" style="background:#2b2b2b;color:#ddd;border:0">
+    <div class="title" style="color:#fff">Channeled admin</div><div class="sub">Platform</div>
+    <div class="nav">Dashboard</div><div class="nav on" style="background:#555;color:#fff">Storage and backups</div><div class="nav">Users</div><div class="nav">Teams</div><div class="nav">Audit log</div><div class="nav">System health</div>
+    <div class="grow"></div><div class="nav">← Exit admin</div>
+  </div>
+  <div class="col main">
+    <div class="top"><div class="h1" style="font-size:18px">Storage and backups</div><div class="grow"></div><div class="btn">Restore…</div><div class="btn p">Run backup now</div></div>
+    <div class="col body">
+      <div class="row gap16" style="align-items:stretch">
+        <div class="col card grow"><span class="muted small">Object storage used</span><div class="h1">412 GB</div><div class="bar"><i style="width:41%"></i></div><span class="small muted">of 1 TB disk</span></div>
+        <div class="col card grow"><span class="muted small">Last backup</span><div class="h1">Today, 02:00</div><span class="pill dk" style="align-self:flex-start">Succeeded</span><span class="small muted">Next run tomorrow, 02:00</span></div>
+        <div class="col card grow"><span class="muted small">Services</span><div class="row gap8"><span class="pill dk">API healthy</span><span class="pill dk">Storage healthy</span></div><div class="row gap8"><span class="pill dk">Database healthy</span></div></div>
+      </div>
+      <div class="row"><b style="font-size:16px">Audit log</b><div class="grow"></div><div class="search" style="width:260px">Search events</div>&nbsp;<div class="btn">Event type ▾</div>&nbsp;<div class="btn">Export</div></div>
+      <div class="col tbl">
+        <div class="tr h"><div class="c4">Time</div><div class="c3">Actor</div><div class="c3">Event</div><div class="c1">Details</div><div class="c3">Team</div></div>
+        <div class="tr"><div class="c4">Oct 11, 09:14</div><div class="c3">Lina H.</div><div class="c3"><span class="pill">file.deleted</span></div><div class="c1">Deleted old-logo.png from # brand-assets</div><div class="c3">Acme Design</div></div>
+        <div class="tr"><div class="c4">Oct 11, 08:52</div><div class="c3">Omar S.</div><div class="c3"><span class="pill">role.changed</span></div><div class="c1">Dana F. changed from Member to Viewer</div><div class="c3">Acme Design</div></div>
+        <div class="tr"><div class="c4">Oct 11, 08:40</div><div class="c3">Unknown</div><div class="c3"><span class="pill">login.failed</span></div><div class="c1">3 failed attempts for yousef@acme.example</div><div class="c3">Platform</div></div>
+        <div class="tr"><div class="c4">Oct 11, 02:00</div><div class="c3">System</div><div class="c3"><span class="pill">backup.done</span></div><div class="c1">Backup completed, 412 GB, 18 min</div><div class="c3">Platform</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

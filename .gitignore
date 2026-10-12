@@ -1,0 +1,36 @@
+# .NET
+**/bin/
+**/obj/
+*.user
+*.suo
+.vs/
+
+# Logs / local config
+logs/
+*.log
+appsettings.*.local.json
+.env
+.env.*
+
+# IDE
+.idea/
+*.code-workspace
+
+# Object store local data
+/tmp/channeled-store/
+.data/
+.minio-data/
+
+# Web
+/web/node_modules/
+/web/dist/
+/web/coverage/
+
+# Test artifacts
+/test-results/
+**/TestResults/
+coverage/
+
+# OS
+.DS_Store
+Thumbs.db

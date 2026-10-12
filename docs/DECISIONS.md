@@ -64,3 +64,13 @@
 
 **Decision:** Filesystem multipart adapter persists `meta.json` after each part and rebuilds part indexes from `part-*` files on resume.
 **Reason:** M3 gate requires kill/resume across process restart.
+
+## 2026-10-12 — Personal space owner-only
+
+**Decision:** `AccessPersonal` / `WritePersonal` authorize solely via `IsPersonalOwner`. `IsPlatformAdmin` never grants personal access. Queries always filter `OwnerUserId == actor`.
+**Reason:** M4 gate — no other user including platform admin may reach personal content; admin is for `/admin/*` only.
+
+## 2026-10-12 — Copy to channel
+
+**Decision:** Copy streams the source object to a new `ObjectKey` and inserts a channel-scoped file row (independent bytes + metadata); audit `FileCopy` records source and target ids.
+**Reason:** Spec requires an independent server-side copy, not a shared reference.

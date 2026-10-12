@@ -23,4 +23,10 @@ public sealed class AuthorizationContext
     public bool ChannelCanManage { get; init; }
 
     public bool IsFileOwner { get; init; }
+
+    /// <summary>True when the acting user owns the personal-space resource under evaluation.</summary>
+    public bool IsPersonalOwner { get; init; }
+
+    /// <summary>Platform admin flag — must not grant personal-space access.</summary>
+    public bool IsPlatformAdmin { get; init; }
 }

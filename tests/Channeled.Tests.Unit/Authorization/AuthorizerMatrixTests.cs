@@ -146,7 +146,39 @@ public class AuthorizerMatrixTests
             AuthAction.DeleteOwnFile => role >= MemberRole.Member && channelVisible,
             AuthAction.RenameAnyFile => role >= MemberRole.Admin && channelVisible,
             AuthAction.DeleteAnyFile => role >= MemberRole.Admin && channelVisible,
+            // Personal actions are owner-scoped; team matrix always expects deny (IsPersonalOwner unset).
+            AuthAction.AccessPersonal => false,
+            AuthAction.WritePersonal => false,
             _ => false,
         };
+    }
+
+    [Fact]
+    public void Personal_owner_allowed_even_without_team_membership()
+    {
+        var ctx = new AuthorizationContext
+        {
+            UserId = Guid.NewGuid(),
+            Action = AuthAction.AccessPersonal,
+            IsTeamMember = false,
+            IsPersonalOwner = true,
+            IsPlatformAdmin = false,
+        };
+        _auth.Authorize(ctx).Allowed.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Platform_admin_does_not_access_others_personal_space()
+    {
+        var ctx = new AuthorizationContext
+        {
+            UserId = Guid.NewGuid(),
+            Action = AuthAction.AccessPersonal,
+            IsTeamMember = false,
+            IsPersonalOwner = false,
+            IsPlatformAdmin = true,
+        };
+        _auth.Authorize(ctx).Allowed.Should().BeFalse();
+        _auth.Authorize(ctx).ReasonCode.Should().Be("not_personal_owner");
     }
 }

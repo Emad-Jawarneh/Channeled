@@ -13,6 +13,7 @@ public static class ErrorCodes
     public const string CsrfRejected = "csrf_rejected";
     public const string NameConflict = "name_conflict";
     public const string TeamQuotaExceeded = "team_quota_exceeded";
+    public const string PersonalQuotaExceeded = "personal_quota_exceeded";
     public const string FileTooLarge = "file_too_large";
     public const string FolderDepthExceeded = "folder_depth_exceeded";
     public const string UploadExpired = "upload_expired";

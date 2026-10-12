@@ -34,4 +34,7 @@ public enum AuditEventType
     FolderMove = 38,
     FolderDelete = 39,
     FolderRestore = 40,
+    FileCopy = 41,
+    FileStar = 42,
+    FileUnstar = 43,
 }

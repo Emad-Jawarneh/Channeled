@@ -311,7 +311,7 @@ public static class FileEndpoints
         ErrorCodes.Forbidden => StatusCodes.Status403Forbidden,
         ErrorCodes.NotFound => StatusCodes.Status404NotFound,
         ErrorCodes.Conflict or ErrorCodes.NameConflict => StatusCodes.Status409Conflict,
-        ErrorCodes.TeamQuotaExceeded => StatusCodes.Status409Conflict,
+        ErrorCodes.TeamQuotaExceeded or ErrorCodes.PersonalQuotaExceeded => StatusCodes.Status409Conflict,
         ErrorCodes.FileTooLarge => StatusCodes.Status413PayloadTooLarge,
         ErrorCodes.InvalidToken => StatusCodes.Status400BadRequest,
         _ => StatusCodes.Status400BadRequest,

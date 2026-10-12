@@ -27,6 +27,7 @@ public sealed class ApplicationDbContext : IdentityDbContext<AppUser, AppRole, G
     public DbSet<FileEntity> Files => Set<FileEntity>();
     public DbSet<UploadSessionEntity> UploadSessions => Set<UploadSessionEntity>();
     public DbSet<UploadPartEntity> UploadParts => Set<UploadPartEntity>();
+    public DbSet<FileStarEntity> FileStars => Set<FileStarEntity>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -37,6 +38,7 @@ public sealed class ApplicationDbContext : IdentityDbContext<AppUser, AppRole, G
             entity.Property(x => x.DisplayName).HasMaxLength(200).IsRequired();
             entity.Property(x => x.Status).HasMaxLength(32).IsRequired();
             entity.HasIndex(x => x.NormalizedEmail).IsUnique();
+            entity.Property(x => x.PersonalUsageBytes).HasDefaultValue(0L);
         });
 
         builder.Entity<AuditEvent>(entity =>
@@ -173,6 +175,13 @@ public sealed class ApplicationDbContext : IdentityDbContext<AppUser, AppRole, G
             entity.ToTable("upload_parts");
             entity.HasKey(x => new { x.UploadSessionId, x.PartNumber });
             entity.Property(x => x.ETag).HasMaxLength(200).IsRequired();
+        });
+
+        builder.Entity<FileStarEntity>(entity =>
+        {
+            entity.ToTable("file_stars");
+            entity.HasKey(x => new { x.UserId, x.FileId });
+            entity.HasIndex(x => x.FileId);
         });
     }
 }

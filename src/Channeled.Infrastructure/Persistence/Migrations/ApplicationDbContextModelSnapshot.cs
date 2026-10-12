@@ -139,6 +139,24 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Channeled.Infrastructure.Files.FileStarEntity", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("FileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("StarredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("UserId", "FileId");
+
+                    b.HasIndex("FileId");
+
+                    b.ToTable("file_stars", (string)null);
+                });
+
             modelBuilder.Entity("Channeled.Infrastructure.Files.FolderEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -209,7 +227,7 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("ChannelId")
+                    b.Property<Guid?>("ChannelId")
                         .HasColumnType("uuid");
 
                     b.Property<Guid?>("CompletedFileId")
@@ -257,7 +275,7 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("TargetFolderId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("TeamId")
+                    b.Property<Guid?>("TeamId")
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("UserId")
@@ -349,6 +367,11 @@ namespace Channeled.Infrastructure.Persistence.Migrations
 
                     b.Property<long>("PersonalQuotaBytes")
                         .HasColumnType("bigint");
+
+                    b.Property<long>("PersonalUsageBytes")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L);
 
                     b.Property<string>("PhoneNumber")
                         .HasColumnType("text");

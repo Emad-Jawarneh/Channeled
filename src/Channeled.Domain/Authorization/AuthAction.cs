@@ -22,4 +22,8 @@ public enum AuthAction
     RenameAnyFile,
     DeleteAnyFile,
     Search,
+    /// <summary>Browse/download/star personal space. Owner only; platform admin does not bypass.</summary>
+    AccessPersonal,
+    /// <summary>Upload/rename/move/delete/copy-from personal space. Owner only.</summary>
+    WritePersonal,
 }

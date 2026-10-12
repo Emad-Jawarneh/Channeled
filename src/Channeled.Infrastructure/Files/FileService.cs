@@ -720,15 +720,32 @@ public sealed class FileService(
             return AppResult<FileItemDto>.Fail(ErrorCodes.Validation, "Uploaded size does not match declared size.");
         }
 
-        var team = await db.Teams.FirstAsync(t => t.Id == session.TeamId, ct);
-        if (team.UsageBytes + totalSize > team.QuotaBytes)
+        var isPersonal = session.ChannelId is null;
+        if (isPersonal)
         {
-            return AppResult<FileItemDto>.Fail(ErrorCodes.TeamQuotaExceeded, "Team quota exceeded.");
-        }
+            var user = await db.Users.FirstAsync(u => u.Id == userId, ct);
+            if (user.PersonalUsageBytes + totalSize > user.PersonalQuotaBytes)
+            {
+                return AppResult<FileItemDto>.Fail(ErrorCodes.PersonalQuotaExceeded, "Personal quota exceeded.");
+            }
 
-        if (await HasSiblingConflictAsync(session.ChannelId, session.TargetFolderId, session.FileName, null, null, ct))
+            if (await HasPersonalSiblingConflictAsync(userId, session.TargetFolderId, session.FileName, null, null, ct))
+            {
+                return AppResult<FileItemDto>.Fail(ErrorCodes.NameConflict, "An item with that name already exists.");
+            }
+        }
+        else
         {
-            return AppResult<FileItemDto>.Fail(ErrorCodes.NameConflict, "An item with that name already exists.");
+            var team = await db.Teams.FirstAsync(t => t.Id == session.TeamId, ct);
+            if (team.UsageBytes + totalSize > team.QuotaBytes)
+            {
+                return AppResult<FileItemDto>.Fail(ErrorCodes.TeamQuotaExceeded, "Team quota exceeded.");
+            }
+
+            if (await HasSiblingConflictAsync(session.ChannelId!.Value, session.TargetFolderId, session.FileName, null, null, ct))
+            {
+                return AppResult<FileItemDto>.Fail(ErrorCodes.NameConflict, "An item with that name already exists.");
+            }
         }
 
         var etags = ordered.Select(p => p.ETag).ToList();
@@ -758,6 +775,7 @@ public sealed class FileService(
             Id = session.FileId,
             FolderId = session.TargetFolderId,
             ChannelId = session.ChannelId,
+            OwnerUserId = isPersonal ? userId : null,
             Name = session.FileName,
             ContentType = session.ContentType,
             SizeBytes = totalSize,
@@ -772,7 +790,17 @@ public sealed class FileService(
         try
         {
             db.Files.Add(file);
-            team.UsageBytes += totalSize;
+            if (isPersonal)
+            {
+                var user = await db.Users.FirstAsync(u => u.Id == userId, ct);
+                user.PersonalUsageBytes += totalSize;
+            }
+            else
+            {
+                var team = await db.Teams.FirstAsync(t => t.Id == session.TeamId, ct);
+                team.UsageBytes += totalSize;
+            }
+
             session.State = UploadSessionState.Completed;
             session.CompletedFileId = file.Id;
             if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
@@ -933,6 +961,36 @@ public sealed class FileService(
             ct);
     }
 
+    private async Task<bool> HasPersonalSiblingConflictAsync(
+        Guid ownerUserId,
+        Guid? parentFolderId,
+        string name,
+        Guid? excludeFileId,
+        Guid? excludeFolderId,
+        CancellationToken ct)
+    {
+        var normalized = SiblingName.Normalize(name);
+        var fileConflict = await db.Files.AnyAsync(
+            f => f.OwnerUserId == ownerUserId
+                 && f.FolderId == parentFolderId
+                 && f.DeletedAt == null
+                 && f.Id != excludeFileId
+                 && f.Name.ToLower() == normalized,
+            ct);
+        if (fileConflict)
+        {
+            return true;
+        }
+
+        return await db.Folders.AnyAsync(
+            f => f.OwnerUserId == ownerUserId
+                 && f.ParentId == parentFolderId
+                 && f.DeletedAt == null
+                 && f.Id != excludeFolderId
+                 && f.Name.ToLower() == normalized,
+            ct);
+    }
+
     private async Task<(string Code, string Message)?> EnsureFolderDepthAsync(Guid channelId, Guid? folderId, CancellationToken ct)
     {
         if (folderId is null)
@@ -1010,10 +1068,10 @@ public sealed class FileService(
     }
 
     private static FileItemDto ToFileDto(FileEntity f) =>
-        new(f.Id, ItemKind.File, f.Name, f.FolderId, f.ChannelId!.Value, f.ContentType, f.SizeBytes, f.Sha256, f.UploadedBy, f.CreatedAt, f.UpdatedAt, f.DeletedAt);
+        new(f.Id, ItemKind.File, f.Name, f.FolderId, f.ChannelId, f.ContentType, f.SizeBytes, f.Sha256, f.UploadedBy, f.CreatedAt, f.UpdatedAt, f.DeletedAt, f.OwnerUserId);
 
     private static FileItemDto ToFolderDto(FolderEntity f) =>
-        new(f.Id, ItemKind.Folder, f.Name, f.ParentId, f.ChannelId!.Value, null, null, null, null, f.CreatedAt, f.UpdatedAt, f.DeletedAt);
+        new(f.Id, ItemKind.Folder, f.Name, f.ParentId, f.ChannelId, null, null, null, null, f.CreatedAt, f.UpdatedAt, f.DeletedAt, f.OwnerUserId);
 
     private static AppResult NotFoundChannel() =>
         AppResult.Fail(ErrorCodes.NotFound, "Channel not found.");

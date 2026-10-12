@@ -3,6 +3,7 @@ using Channeled.Application.Abstractions.Storage;
 using Channeled.Application.Abstractions.Time;
 using Channeled.Application.Files;
 using Channeled.Application.Identity;
+using Channeled.Application.Personal;
 using Channeled.Application.Teams;
 using Channeled.Domain.Authorization;
 using Channeled.Domain.Identity;
@@ -10,6 +11,7 @@ using Channeled.Infrastructure.Email;
 using Channeled.Infrastructure.Files;
 using Channeled.Infrastructure.Identity;
 using Channeled.Infrastructure.Persistence;
+using Channeled.Infrastructure.Personal;
 using Channeled.Infrastructure.Storage;
 using Channeled.Infrastructure.Teams;
 using Channeled.Infrastructure.Time;
@@ -79,6 +81,7 @@ public static class DependencyInjection
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<ITeamService, TeamService>();
         services.AddScoped<IFileService, FileService>();
+        services.AddScoped<IPersonalService, PersonalService>();
         services.AddSingleton<IFileStore>(sp =>
         {
             var options = sp.GetRequiredService<IOptions<FileStoreOptions>>().Value;

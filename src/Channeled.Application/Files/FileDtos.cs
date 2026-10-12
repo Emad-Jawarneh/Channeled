@@ -33,14 +33,16 @@ public sealed record FileItemDto(
     ItemKind Kind,
     string Name,
     Guid? FolderId,
-    Guid ChannelId,
+    Guid? ChannelId,
     string? ContentType,
     long? SizeBytes,
     string? Sha256,
     Guid? UploadedBy,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    DateTimeOffset? DeletedAt);
+    DateTimeOffset? DeletedAt,
+    Guid? OwnerUserId = null,
+    bool Starred = false);
 
 public sealed record ItemListResponse(
     IReadOnlyList<FileItemDto> Items,

@@ -35,12 +35,19 @@ public sealed class FileEntity
     public FolderEntity? Folder { get; set; }
 }
 
+public sealed class FileStarEntity
+{
+    public Guid UserId { get; set; }
+    public Guid FileId { get; set; }
+    public DateTimeOffset StarredAt { get; set; }
+}
+
 public sealed class UploadSessionEntity
 {
     public Guid Id { get; set; }
     public Guid UserId { get; set; }
-    public Guid TeamId { get; set; }
-    public Guid ChannelId { get; set; }
+    public Guid? TeamId { get; set; }
+    public Guid? ChannelId { get; set; }
     public Guid? TargetFolderId { get; set; }
     public string FileName { get; set; } = "";
     public string ContentType { get; set; } = "application/octet-stream";

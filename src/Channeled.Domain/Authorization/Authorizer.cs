@@ -10,6 +10,14 @@ public sealed class Authorizer : IAuthorizer
 {
     public AuthorizationDecision Authorize(AuthorizationContext context)
     {
+        if (context.Action is AuthAction.AccessPersonal or AuthAction.WritePersonal)
+        {
+            // Personal space is owner-only. Platform admin does not bypass.
+            return context.IsPersonalOwner
+                ? AuthorizationDecision.Allow()
+                : AuthorizationDecision.Deny("not_personal_owner");
+        }
+
         if (!context.IsTeamMember || context.TeamRole is null)
         {
             return AuthorizationDecision.Deny("not_team_member");

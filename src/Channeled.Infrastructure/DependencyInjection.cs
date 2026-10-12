@@ -4,6 +4,7 @@ using Channeled.Application.Abstractions.Time;
 using Channeled.Application.Files;
 using Channeled.Application.Identity;
 using Channeled.Application.Personal;
+using Channeled.Application.Search;
 using Channeled.Application.Teams;
 using Channeled.Domain.Authorization;
 using Channeled.Domain.Identity;
@@ -12,6 +13,7 @@ using Channeled.Infrastructure.Files;
 using Channeled.Infrastructure.Identity;
 using Channeled.Infrastructure.Persistence;
 using Channeled.Infrastructure.Personal;
+using Channeled.Infrastructure.Search;
 using Channeled.Infrastructure.Storage;
 using Channeled.Infrastructure.Teams;
 using Channeled.Infrastructure.Time;
@@ -20,6 +22,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
 namespace Channeled.Infrastructure;
@@ -32,6 +35,7 @@ public static class DependencyInjection
     {
         services.Configure<FileStoreOptions>(configuration.GetSection(FileStoreOptions.SectionName));
         services.Configure<UploadLimitsOptions>(configuration.GetSection(UploadLimitsOptions.SectionName));
+        services.Configure<SearchBenchOptions>(configuration.GetSection(SearchBenchOptions.SectionName));
 
         var connectionString = configuration.GetConnectionString("Postgres")
             ?? throw new InvalidOperationException("Connection string 'Postgres' is required.");
@@ -82,6 +86,9 @@ public static class DependencyInjection
         services.AddScoped<ITeamService, TeamService>();
         services.AddScoped<IFileService, FileService>();
         services.AddScoped<IPersonalService, PersonalService>();
+        services.AddScoped<ISearchService, SearchService>();
+        services.AddScoped<IUsageService, UsageService>();
+        services.AddScoped<IQuotaReconciliationService, QuotaReconciliationService>();
         services.AddSingleton<IFileStore>(sp =>
         {
             var options = sp.GetRequiredService<IOptions<FileStoreOptions>>().Value;
@@ -92,6 +99,11 @@ public static class DependencyInjection
                 _ => throw new InvalidOperationException($"Unknown file store kind '{options.Kind}'."),
             };
         });
+
+        if (!configuration.GetValue("DisableBackgroundJobs", false))
+        {
+            services.AddHostedService<QuotaReconciliationHostedService>();
+        }
 
         return services;
     }

@@ -2,10 +2,14 @@ using System.Threading.RateLimiting;
 using Channeled.Api.Auth;
 using Channeled.Api.Files;
 using Channeled.Api.Personal;
+using Channeled.Api.Search;
 using Channeled.Api.Teams;
 using Channeled.Application.Identity;
+using Channeled.Domain.Identity;
 using Channeled.Infrastructure;
+using Channeled.Infrastructure.Identity;
 using Channeled.Infrastructure.Persistence;
+using Channeled.Infrastructure.Search;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
@@ -60,6 +64,45 @@ if (args.Contains("seed-operator", StringComparer.OrdinalIgnoreCase))
     }
 
     Console.WriteLine($"Seeded operator {result.Value!.Email} ({result.Value.Id})");
+    return 0;
+}
+
+if (args.Contains("seed-bench-files", StringComparer.OrdinalIgnoreCase))
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    await db.Database.MigrateAsync();
+
+    var count = int.TryParse(GetArg(args, "--count"), out var n) && n > 0
+        ? n
+        : app.Configuration.GetValue("SearchBench:DefaultSeedCount", 1_000_000);
+    var email = GetArg(args, "--email") ?? "bench@example.com";
+    var password = GetArg(args, "--password") ?? "BenchPassword1!";
+
+    var users = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+    var user = await users.FindByEmailAsync(email);
+    if (user is null)
+    {
+        user = new AppUser
+        {
+            Id = UuidV7.NewGuid(),
+            Email = email,
+            UserName = email,
+            DisplayName = "Bench",
+            EmailConfirmed = true,
+            Status = "active",
+        };
+        var created = await users.CreateAsync(user, password);
+        if (!created.Succeeded)
+        {
+            Console.Error.WriteLine(string.Join("; ", created.Errors.Select(e => e.Description)));
+            return 1;
+        }
+    }
+
+    var seeder = new BenchFileSeeder(db);
+    var result = await seeder.SeedAsync(user.Id, count);
+    Console.WriteLine($"Seeded {result.Inserted} files into team '{result.TeamSlug}' channel general for {email}");
     return 0;
 }
 
@@ -147,6 +190,7 @@ app.MapAuthEndpoints();
 app.MapTeamEndpoints();
 app.MapFileEndpoints();
 app.MapPersonalEndpoints();
+app.MapSearchEndpoints();
 
 app.Run();
 return 0;

@@ -74,3 +74,13 @@
 
 **Decision:** Copy streams the source object to a new `ObjectKey` and inserts a channel-scoped file row (independent bytes + metadata); audit `FileCopy` records source and target ids.
 **Reason:** Spec requires an independent server-side copy, not a shared reference.
+
+## 2026-10-12 — M5 search and bench target
+
+**Decision:** File/channel name search uses PostgreSQL `pg_trgm` GIN indexes and `ILIKE`/`similarity()` ranking. M5 gate p95 for list and search on a 1M-file seed is **≤ 500 ms** (`SearchBench:P95MaxMilliseconds`). Seed via `scripts/seed-bench-files.sh` or `dotnet run … seed-bench-files`.
+**Reason:** AGENTS M5 gate requires measured p95 under a stated target on a scripted 1M dataset.
+
+## 2026-10-12 — Quota reconciliation
+
+**Decision:** Nightly hosted job recomputes `teams.UsageBytes` and `AspNetUsers.PersonalUsageBytes` as `SUM(files.SizeBytes)` including trashed rows (trash counts until purge). Manual trigger: `POST /api/v1/admin/jobs/quota-reconcile` (platform admin).
+**Reason:** Counters stay correct after drift; trash still occupies quota per domain rules.

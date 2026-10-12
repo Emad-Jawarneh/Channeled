@@ -1,6 +1,7 @@
 using Channeled.Domain.Audit;
 using Channeled.Infrastructure.Files;
 using Channeled.Infrastructure.Identity;
+using Channeled.Infrastructure.Jobs;
 using Channeled.Infrastructure.Teams;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -28,6 +29,7 @@ public sealed class ApplicationDbContext : IdentityDbContext<AppUser, AppRole, G
     public DbSet<UploadSessionEntity> UploadSessions => Set<UploadSessionEntity>();
     public DbSet<UploadPartEntity> UploadParts => Set<UploadPartEntity>();
     public DbSet<FileStarEntity> FileStars => Set<FileStarEntity>();
+    public DbSet<JobEntity> Jobs => Set<JobEntity>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -182,6 +184,18 @@ public sealed class ApplicationDbContext : IdentityDbContext<AppUser, AppRole, G
             entity.ToTable("file_stars");
             entity.HasKey(x => new { x.UserId, x.FileId });
             entity.HasIndex(x => x.FileId);
+        });
+
+        builder.Entity<JobEntity>(entity =>
+        {
+            entity.ToTable("jobs");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Type).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.State).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.DetailsJson).HasColumnType("jsonb");
+            entity.Property(x => x.Error).HasMaxLength(2000);
+            entity.HasIndex(x => x.Type);
+            entity.HasIndex(x => x.CreatedAt);
         });
     }
 }

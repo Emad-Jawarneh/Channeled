@@ -54,3 +54,13 @@
 
 **Decision:** Missing team membership or private-channel access returns `404 NotFound` (not `403`) for team/channel resources.
 **Reason:** Spec require deny-by-default that does not leak existence of hidden resources; API tests assert 404 for outsiders.
+
+## 2026-10-12 — M3 upload SHA-256
+
+**Decision:** SHA-256 is computed by streaming the assembled object after multipart complete; optional client `ExpectedSha256Hex` must match or the object is deleted and `checksum_mismatch` returned.
+**Reason:** Confirms integrity end-to-end without buffering the file in memory.
+
+## 2026-10-12 — Upload part persistence
+
+**Decision:** Filesystem multipart adapter persists `meta.json` after each part and rebuilds part indexes from `part-*` files on resume.
+**Reason:** M3 gate requires kill/resume across process restart.

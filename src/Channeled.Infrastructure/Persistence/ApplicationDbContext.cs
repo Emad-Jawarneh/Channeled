@@ -1,4 +1,5 @@
 using Channeled.Domain.Audit;
+using Channeled.Infrastructure.Files;
 using Channeled.Infrastructure.Identity;
 using Channeled.Infrastructure.Teams;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
@@ -22,6 +23,10 @@ public sealed class ApplicationDbContext : IdentityDbContext<AppUser, AppRole, G
     public DbSet<ChannelEntity> Channels => Set<ChannelEntity>();
     public DbSet<ChannelMemberEntity> ChannelMembers => Set<ChannelMemberEntity>();
     public DbSet<TeamInvitationEntity> TeamInvitations => Set<TeamInvitationEntity>();
+    public DbSet<FolderEntity> Folders => Set<FolderEntity>();
+    public DbSet<FileEntity> Files => Set<FileEntity>();
+    public DbSet<UploadSessionEntity> UploadSessions => Set<UploadSessionEntity>();
+    public DbSet<UploadPartEntity> UploadParts => Set<UploadPartEntity>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -117,6 +122,57 @@ public sealed class ApplicationDbContext : IdentityDbContext<AppUser, AppRole, G
             entity.Property(x => x.TokenHash).HasMaxLength(128).IsRequired();
             entity.HasIndex(x => x.TokenHash).IsUnique();
             entity.HasOne(x => x.Team).WithMany().HasForeignKey(x => x.TeamId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<FolderEntity>(entity =>
+        {
+            entity.ToTable("folders");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.HasOne(x => x.Parent).WithMany().HasForeignKey(x => x.ParentId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.ChannelId, x.ParentId, x.Name });
+            entity.HasIndex(x => new { x.OwnerUserId, x.ParentId, x.Name });
+            entity.ToTable(t => t.HasCheckConstraint(
+                "ck_folders_scope",
+                "((\"ChannelId\" IS NOT NULL AND \"OwnerUserId\" IS NULL) OR (\"ChannelId\" IS NULL AND \"OwnerUserId\" IS NOT NULL))"));
+        });
+
+        builder.Entity<FileEntity>(entity =>
+        {
+            entity.ToTable("files");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.ContentType).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Sha256).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.StorageKey).HasMaxLength(512).IsRequired();
+            entity.HasOne(x => x.Folder).WithMany().HasForeignKey(x => x.FolderId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.ChannelId, x.FolderId, x.Name });
+            entity.HasIndex(x => new { x.OwnerUserId, x.FolderId, x.Name });
+            entity.HasIndex(x => x.UploadedBy);
+            entity.ToTable(t => t.HasCheckConstraint(
+                "ck_files_scope",
+                "((\"ChannelId\" IS NOT NULL AND \"OwnerUserId\" IS NULL) OR (\"ChannelId\" IS NULL AND \"OwnerUserId\" IS NOT NULL))"));
+        });
+
+        builder.Entity<UploadSessionEntity>(entity =>
+        {
+            entity.ToTable("upload_sessions");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.FileName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.ContentType).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.MultipartId).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.ObjectKey).HasMaxLength(512).IsRequired();
+            entity.Property(x => x.IdempotencyKey).HasMaxLength(128);
+            entity.HasIndex(x => x.UserId);
+            entity.HasIndex(x => new { x.UserId, x.IdempotencyKey });
+            entity.HasMany(x => x.Parts).WithOne(p => p.Session!).HasForeignKey(p => p.UploadSessionId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<UploadPartEntity>(entity =>
+        {
+            entity.ToTable("upload_parts");
+            entity.HasKey(x => new { x.UploadSessionId, x.PartNumber });
+            entity.Property(x => x.ETag).HasMaxLength(200).IsRequired();
         });
     }
 }

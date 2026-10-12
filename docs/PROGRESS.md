@@ -6,27 +6,31 @@
 |-----------|--------|----------|
 | M0 Foundations | ✅ Complete | `./ci.sh` green |
 | M1 Identity | ✅ Complete | Auth abuse API tests |
-| M2 Teams and channels | ✅ Complete | Authorizer matrix 160+ cases; API 404 for hidden team/channel resources; `./ci.sh` green |
-| M3 Files core | ⏸ Next | — |
-| M4–M8 | ⏸ | — |
+| M2 Teams and channels | ✅ Complete | Authorizer matrix; API 404; `./ci.sh` green |
+| M3 Files core | ✅ Complete | Multipart resume; 2 GB constant-memory gate; SHA-256; API upload/trash; `./ci.sh` green |
+| M4 Personal space | ⏸ Next | — |
+| M5–M8 | ⏸ | — |
 
-## M2 exit gate
+## M3 exit gate
 
-- [x] Teams, membership, roles, ownership rules
-- [x] Channels (open/private), private membership
-- [x] Single `IAuthorizer` evaluator
-- [x] Table-driven unit test for role × visibility × action matrix
-- [x] API tests: 404 for hidden resources (outsider + private channel)
-- [x] Deny-by-default (not 403 for missing team/channel access)
+- [x] Multipart resumable upload (start / part / complete / abort / list parts)
+- [x] Browse/sort/filter/cursor pagination
+- [x] Download with ranges
+- [x] Rename/move/delete; trash/restore; folders; name conflicts
+- [x] Upload + download 2 GB with bounded working set; kill/resume; SHA-256 verified
+- [x] `./ci.sh` green
 
 ## Verified
 
 ```text
-dotnet test tests/Channeled.Tests.Unit --filter Authorizer
-# Passed: 163
+dotnet test tests/Channeled.Tests.Integration --filter Two_gigabyte
+# Passed (2 GiB multipart + SHA-256 + range; WS delta < 256 MiB)
+
+dotnet test tests/Channeled.Tests.Integration --filter Multipart_survives
+# Passed (resume across new store instance)
 
 dotnet test tests/Channeled.Tests.Api
-# Passed: 13
+# Passed: 16
 
 ./ci.sh
 # === CI green ===

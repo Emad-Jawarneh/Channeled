@@ -9,6 +9,7 @@ public sealed class TeamEntity
     public string Slug { get; set; } = "";
     public string? Description { get; set; }
     public long QuotaBytes { get; set; } = 100L * 1024 * 1024 * 1024;
+    public long UsageBytes { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? ArchivedAt { get; set; }
 

@@ -1,5 +1,6 @@
 using System.Threading.RateLimiting;
 using Channeled.Api.Auth;
+using Channeled.Api.Files;
 using Channeled.Api.Teams;
 using Channeled.Application.Identity;
 using Channeled.Infrastructure;
@@ -143,6 +144,7 @@ app.MapGet("/api/v1/health", () => Results.Ok(new { status = "ok" }))
 
 app.MapAuthEndpoints();
 app.MapTeamEndpoints();
+app.MapFileEndpoints();
 
 app.Run();
 return 0;

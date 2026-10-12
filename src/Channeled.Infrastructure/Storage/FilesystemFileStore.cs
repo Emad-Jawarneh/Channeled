@@ -156,6 +156,10 @@ public sealed class FilesystemFileStore : IFileStore
 
         var etag = $"{partNumber}-{new FileInfo(partPath).Length}";
         state.Parts[partNumber] = etag;
+        await File.WriteAllTextAsync(
+            Path.Combine(state.Directory, "meta.json"),
+            JsonSerializer.Serialize(state),
+            cancellationToken).ConfigureAwait(false);
         return etag;
     }
 
@@ -242,6 +246,17 @@ public sealed class FilesystemFileStore : IFileStore
 
         state = JsonSerializer.Deserialize<MultipartState>(File.ReadAllText(meta))
                 ?? throw new InvalidOperationException($"Corrupt multipart metadata for '{uploadId}'.");
+        // Rebuild part index from disk so resume survives process restart.
+        foreach (var partFile in Directory.EnumerateFiles(state.Directory, "part-*"))
+        {
+            var name = Path.GetFileName(partFile);
+            if (name.StartsWith("part-", StringComparison.Ordinal)
+                && int.TryParse(name.AsSpan(5), out var n))
+            {
+                state.Parts[n] = $"{n}-{new FileInfo(partFile).Length}";
+            }
+        }
+
         _uploads[uploadId] = state;
         return state;
     }

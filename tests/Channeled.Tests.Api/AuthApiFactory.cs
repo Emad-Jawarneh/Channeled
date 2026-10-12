@@ -45,6 +45,10 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
 
         await db.Database.ExecuteSqlRawAsync("""
             TRUNCATE TABLE
+              "upload_parts",
+              "upload_sessions",
+              "files",
+              "folders",
               "channel_members",
               "channels",
               "team_invitations",

@@ -16,9 +16,11 @@ type AppShellProps = {
   sidebar?: ReactNode;
   details?: ReactNode;
   title?: string;
+  /** Placed in the top bar before the theme toggle (e.g. files search). */
+  topbarExtra?: ReactNode;
 };
 
-export function AppShell({ children, sidebar, details, title }: AppShellProps) {
+export function AppShell({ children, sidebar, details, title, topbarExtra }: AppShellProps) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const params = useParams();
@@ -121,6 +123,7 @@ export function AppShell({ children, sidebar, details, title }: AppShellProps) {
             <strong>{title ?? "Channeled"}</strong>
           </h1>
           <div className={styles.topActions}>
+            {topbarExtra}
             <ThemeToggle compact />
             <NotificationBell />
             {user && (

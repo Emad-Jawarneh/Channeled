@@ -3,13 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChannelKind, ItemKind, personalApi, teamsApi, type FileItem } from "../../api/channeled";
 import { AppShell } from "../../components/AppShell";
-import {
-  describeFileKind,
-  FILE_TYPE_FILTER_OPTIONS,
-  formatFileType,
-  matchesTypeFilter,
-  type FileTypeFilter,
-} from "../../lib/describeFileKind";
+import { describeFileKind, formatFileType } from "../../lib/describeFileKind";
 import { formatBytes } from "../../lib/formatBytes";
 import { ModifiedAt } from "../../lib/formatModified";
 import { DropOverlay } from "../../uploads/DropOverlay";
@@ -18,6 +12,7 @@ import { useUploads } from "../../uploads/UploadContext";
 import { Button } from "../../ui/Button";
 import { BulkBar } from "../files/BulkBar";
 import { CreateFolderDialog } from "../files/CreateFolderDialog";
+import { FilesSearchField } from "../files/FilesSearchField";
 import { PickListDialog } from "../files/PickListDialog";
 import { SelectionControls } from "../files/SelectionControls";
 import { nextSortState, SortableTh, type SortColumn } from "../files/SortableTh";
@@ -46,7 +41,6 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nameQuery, setNameQuery] = useState("");
-  const [typeFilter, setTypeFilter] = useState<FileTypeFilter>("all");
   const [sort, setSort] = useState<SortColumn>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [menu, setMenu] = useState<MenuState | null>(null);
@@ -169,7 +163,6 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
 
   const visibleItems = useMemo(() => {
     let items = list.data?.items ?? [];
-    items = items.filter((i) => matchesTypeFilter(i, typeFilter));
     const q = nameQuery.trim().toLowerCase();
     if (q) {
       items = items.filter((i) => i.name.toLowerCase().includes(q));
@@ -182,9 +175,12 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
       if (sort === "updated") {
         return (new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime()) * dir;
       }
+      if (sort === "type") {
+        return formatFileType(a).localeCompare(formatFileType(b)) * dir;
+      }
       return a.name.localeCompare(b.name) * dir;
     });
-  }, [list.data, typeFilter, nameQuery, sort, sortDir]);
+  }, [list.data, nameQuery, sort, sortDir]);
 
   function onSortColumn(column: SortColumn) {
     const next = nextSortState(sort, sortDir, column);
@@ -330,7 +326,14 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
   );
 
   return (
-    <AppShell title={trash ? "Trash · My files" : "My files"} sidebar={<PersonalSidebar />} details={details}>
+    <AppShell
+      title={trash ? "Trash · My files" : "My files"}
+      sidebar={<PersonalSidebar />}
+      details={details}
+      topbarExtra={
+        <FilesSearchField value={nameQuery} onChange={setNameQuery} placeholder="Filter files…" />
+      }
+    >
       <DropOverlay active={dropActive} label="Drop files to upload to My files" />
 
       <div className={styles.headingBar} data-testid="dropzone">
@@ -349,6 +352,15 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
               Up
             </Button>
           )}
+          {canBulk && (
+            <SelectionControls
+              hasItems={visibleItems.length > 0}
+              disabled={bulkBusy || creatingFolder}
+              onSelectAll={selectAllVisible}
+              onSelectNone={selectNone}
+              onInvert={invertVisible}
+            />
+          )}
           {canUpload && (
             <>
               <Button
@@ -364,57 +376,6 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
               <UploadButton testId="personal-file-input" onFiles={enqueue} />
             </>
           )}
-        </div>
-      </div>
-
-      <div className={styles.controls}>
-        <label className={styles.search}>
-          <span className={styles.searchIcon} aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none">
-              <circle cx="11" cy="11" r="6.5" stroke="currentColor" strokeWidth="1.8" />
-              <path d="M16.2 16.2 20 20" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
-          </span>
-          <span className="visually-hidden">Filter by name</span>
-          <input
-            className={styles.searchInput}
-            data-testid="filter-name"
-            type="search"
-            placeholder="Filter by name"
-            value={nameQuery}
-            onChange={(e) => setNameQuery(e.target.value)}
-          />
-        </label>
-
-        <div className={styles.controlsMeta}>
-          {canBulk && (
-            <SelectionControls
-              hasItems={visibleItems.length > 0}
-              disabled={bulkBusy || creatingFolder}
-              onSelectAll={selectAllVisible}
-              onSelectNone={selectNone}
-              onInvert={invertVisible}
-            />
-          )}
-          <div className={styles.controlBlock}>
-            <span className={styles.controlLabel} id="personal-type-filter-label">
-              Type
-            </span>
-            <select
-              className={styles.filterSelect}
-              id="personal-type-filter"
-              aria-labelledby="personal-type-filter-label"
-              data-testid="filter-type"
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value as FileTypeFilter)}
-            >
-              {FILE_TYPE_FILTER_OPTIONS.map((opt) => (
-                <option key={opt.id} value={opt.id}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
         </div>
       </div>
 
@@ -479,7 +440,13 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
                   sortDir={sortDir}
                   onSort={onSortColumn}
                 />
-                <th scope="col">Type</th>
+                <SortableTh
+                  column="type"
+                  label="Type"
+                  sort={sort}
+                  sortDir={sortDir}
+                  onSort={onSortColumn}
+                />
                 <SortableTh
                   column="size"
                   label="Size"

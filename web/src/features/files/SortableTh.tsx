@@ -1,6 +1,6 @@
 import styles from "./FileBrowser.module.css";
 
-export type SortColumn = "name" | "size" | "updated";
+export type SortColumn = "name" | "type" | "size" | "updated";
 
 type Props = {
   column: SortColumn;
@@ -36,7 +36,7 @@ export function SortableTh({ column, label, sort, sortDir, onSort, testId }: Pro
   );
 }
 
-/** Name → ascending first; Size / Modified → descending first. */
+/** Name / Type → ascending first; Size / Modified → descending first. */
 export function nextSortState(
   current: SortColumn,
   currentDir: "asc" | "desc",
@@ -45,5 +45,8 @@ export function nextSortState(
   if (current === column) {
     return { sort: column, sortDir: currentDir === "asc" ? "desc" : "asc" };
   }
-  return { sort: column, sortDir: column === "name" ? "asc" : "desc" };
+  return {
+    sort: column,
+    sortDir: column === "name" || column === "type" ? "asc" : "desc",
+  };
 }

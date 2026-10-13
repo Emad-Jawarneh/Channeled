@@ -18,43 +18,39 @@ export function SelectionControls({
   if (!hasItems) return null;
 
   return (
-    <div className={styles.controlBlock} data-testid="selection-controls">
-      <span className={styles.controlLabel} id="selection-controls-label">
-        Select
-      </span>
-      <div
-        className={styles.segment}
-        role="group"
-        aria-labelledby="selection-controls-label"
+    <div
+      className={styles.segment}
+      role="group"
+      aria-label="Select"
+      data-testid="selection-controls"
+    >
+      <button
+        type="button"
+        className={styles.segmentBtn}
+        disabled={disabled}
+        data-testid="select-all-btn"
+        onClick={onSelectAll}
       >
-        <button
-          type="button"
-          className={styles.segmentBtn}
-          disabled={disabled}
-          data-testid="select-all-btn"
-          onClick={onSelectAll}
-        >
-          All
-        </button>
-        <button
-          type="button"
-          className={styles.segmentBtn}
-          disabled={disabled}
-          data-testid="select-none-btn"
-          onClick={onSelectNone}
-        >
-          None
-        </button>
-        <button
-          type="button"
-          className={styles.segmentBtn}
-          disabled={disabled}
-          data-testid="select-invert-btn"
-          onClick={onInvert}
-        >
-          Invert
-        </button>
-      </div>
+        All
+      </button>
+      <button
+        type="button"
+        className={styles.segmentBtn}
+        disabled={disabled}
+        data-testid="select-none-btn"
+        onClick={onSelectNone}
+      >
+        None
+      </button>
+      <button
+        type="button"
+        className={styles.segmentBtn}
+        disabled={disabled}
+        data-testid="select-invert-btn"
+        onClick={onInvert}
+      >
+        Invert
+      </button>
     </div>
   );
 }

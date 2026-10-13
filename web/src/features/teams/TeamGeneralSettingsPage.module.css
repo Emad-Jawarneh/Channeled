@@ -137,19 +137,6 @@
 
 .field textarea {
   min-height: 5rem;
-  resize: vertical;
-  padding: var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  background: var(--color-bg);
-  color: var(--color-text);
-  font: inherit;
-}
-
-.field textarea:focus {
-  outline: none;
-  border-color: var(--color-focus);
-  box-shadow: var(--shadow-focus);
 }
 
 .actions {
@@ -243,21 +230,10 @@
 }
 
 .roleSelect {
-  appearance: none;
-  height: 2.75rem;
   min-width: 7rem;
   max-width: 100%;
-  padding: 0 2rem 0 0.85rem;
-  border-radius: 0.75rem;
-  border: 1px solid var(--color-border);
-  background:
-    var(--color-surface)
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23888' d='M1 1l5 5 5-5'/%3E%3C/svg%3E")
-    no-repeat right 0.75rem center;
-  color: var(--color-text);
-  font: 600 0.875rem var(--font-sans);
+  font-weight: 600;
   cursor: pointer;
-  box-sizing: border-box;
 }
 
 .roleSelect:disabled {

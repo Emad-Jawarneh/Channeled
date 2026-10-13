@@ -48,6 +48,10 @@
   --radius-sm: 0.625rem;
   --radius-md: 0.875rem;
   --radius-pill: 999px;
+
+  /* Shared height for text fields, selects, and primary buttons */
+  --control-height: 2.75rem;
+  --control-padding-x: 0.85rem;
   --shadow-card: 0 1px 2px rgba(55, 63, 81, 0.05), 0 8px 24px rgba(55, 63, 81, 0.05);
   --shadow-btn: 0 4px 12px rgba(102, 172, 183, 0.45);
   --shadow-focus: 0 0 0 3px color-mix(in srgb, var(--color-focus) 35%, transparent);
@@ -136,13 +140,31 @@ button {
   font: inherit;
 }
 
-input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]),
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="hidden"]),
 select,
 textarea {
+  box-sizing: border-box;
   background: var(--color-bg);
   color: var(--color-text);
   border: 1px solid var(--color-border);
   border-radius: 12px;
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="hidden"]),
+select {
+  height: var(--control-height);
+  min-height: var(--control-height);
+  padding: 0 var(--control-padding-x);
+  line-height: 1.25;
+}
+
+textarea {
+  min-height: calc(var(--control-height) * 2.25);
+  padding: var(--space-3) var(--control-padding-x);
+  line-height: 1.4;
+  resize: vertical;
 }
 
 select {
@@ -157,7 +179,7 @@ select {
   padding-right: 2rem;
 }
 
-input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):focus,
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="hidden"]):focus,
 select:focus,
 textarea:focus {
   outline: none;

@@ -231,14 +231,7 @@
 }
 
 .input {
-  font: inherit;
-  font-weight: 500;
-  height: 2.75rem;
-  padding: 0 0.75rem;
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  background: var(--color-bg);
-  color: var(--color-text);
+  width: 100%;
 }
 
 .input::placeholder {
@@ -248,6 +241,7 @@
 .input:focus {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
+  box-shadow: none;
 }
 
 .error {

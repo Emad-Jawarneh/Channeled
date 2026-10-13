@@ -497,8 +497,9 @@ export const filesApi = {
     return api<ItemList>(`/api/v1/teams/${slug}/channels/${channel}/items${qs ? `?${qs}` : ""}`);
   },
   contentUrl: (slug: string, channel: string, id: string, opts?: { download?: boolean }) => {
-    const base = `/api/v1/teams/${slug}/channels/${channel}/items/${id}/content`;
-    return opts?.download ? `${base}?download=1` : base;
+    const base = `/api/v1/teams/${encodeURIComponent(slug)}/channels/${encodeURIComponent(channel)}/items/${encodeURIComponent(id)}/content`;
+    // ASP.NET Core bool query binding rejects "1"; must be "true"/"false".
+    return opts?.download ? `${base}?download=true` : base;
   },
   rename: (slug: string, channel: string, id: string, name: string) =>
     api<FileItem>(`/api/v1/teams/${slug}/channels/${channel}/items/${id}`, {
@@ -597,8 +598,9 @@ export const personalApi = {
     return api<ItemList>(`/api/v1/me/files/items${qs ? `?${qs}` : ""}`);
   },
   contentUrl: (id: string, opts?: { download?: boolean }) => {
-    const base = `/api/v1/me/files/items/${id}/content`;
-    return opts?.download ? `${base}?download=1` : base;
+    const base = `/api/v1/me/files/items/${encodeURIComponent(id)}/content`;
+    // ASP.NET Core bool query binding rejects "1"; must be "true"/"false".
+    return opts?.download ? `${base}?download=true` : base;
   },
   recent: () => api<ItemList>("/api/v1/me/files/recent"),
   starred: () => api<ItemList>("/api/v1/me/files/starred"),

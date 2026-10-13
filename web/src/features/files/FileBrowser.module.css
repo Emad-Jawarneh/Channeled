@@ -77,7 +77,33 @@
   display: flex;
   align-items: center;
   width: min(16rem, 36vw);
+  min-width: 0;
   flex-shrink: 1;
+}
+
+.topSearchToggle {
+  appearance: none;
+  display: grid;
+  place-items: center;
+  width: 2.35rem;
+  height: 2.35rem;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.topSearchToggle svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.topSearchToggle:hover {
+  color: var(--color-text);
+  border-color: color-mix(in srgb, var(--color-accent) 40%, var(--color-border));
 }
 
 .topSearchInput {
@@ -99,6 +125,13 @@
   outline: none;
   border-color: var(--color-focus);
   box-shadow: var(--shadow-focus);
+}
+
+@media (max-width: 900px) {
+  .topSearch {
+    width: min(14rem, 55vw);
+    flex: 1 1 auto;
+  }
 }
 
 .searchIcon {

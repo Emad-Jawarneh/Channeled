@@ -247,15 +247,15 @@ public static class PersonalEndpoints
             }
 
             var d = result.Value;
-            var disposition = download == true || !ContentTypeDetector.AllowInline(d.ContentType)
-                ? "attachment"
-                : "inline";
+            var asAttachment = download == true || !ContentTypeDetector.AllowInline(d.ContentType);
             http.Response.Headers.Append("X-Content-Type-Options", "nosniff");
-            http.Response.Headers.ContentDisposition = $"{disposition}; filename=\"{d.FileName.Replace("\"", "")}\"";
 
             if (d.IsPartial && d.SizeBytes > 0)
             {
+                var disposition = asAttachment ? "attachment" : "inline";
                 http.Response.StatusCode = StatusCodes.Status206PartialContent;
+                http.Response.Headers.ContentDisposition =
+                    $"{disposition}; filename=\"{d.FileName.Replace("\"", "")}\"";
                 http.Response.Headers.ContentRange = $"bytes {d.RangeStart}-{d.RangeEndInclusive}/{d.SizeBytes}";
                 http.Response.ContentType = d.ContentType;
                 http.Response.ContentLength = d.RangeEndInclusive - d.RangeStart + 1;
@@ -264,7 +264,11 @@ public static class PersonalEndpoints
                 return Results.Empty;
             }
 
-            return Results.Stream(d.Content, d.ContentType, fileDownloadName: null, enableRangeProcessing: false);
+            return Results.File(
+                d.Content,
+                d.ContentType,
+                fileDownloadName: asAttachment ? d.FileName : null,
+                enableRangeProcessing: false);
         });
 
         files.MapPost("/uploads", async Task<IResult> (

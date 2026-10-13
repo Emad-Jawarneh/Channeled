@@ -182,15 +182,15 @@ public static class FileEndpoints
             }
 
             var d = result.Value;
-            var disposition = download == true || !ContentTypeDetector.AllowInline(d.ContentType)
-                ? "attachment"
-                : "inline";
+            var asAttachment = download == true || !ContentTypeDetector.AllowInline(d.ContentType);
             http.Response.Headers.Append("X-Content-Type-Options", "nosniff");
-            http.Response.Headers.ContentDisposition = $"{disposition}; filename=\"{d.FileName.Replace("\"", "")}\"";
 
             if (d.IsPartial && d.SizeBytes > 0)
             {
+                var disposition = asAttachment ? "attachment" : "inline";
                 http.Response.StatusCode = StatusCodes.Status206PartialContent;
+                http.Response.Headers.ContentDisposition =
+                    $"{disposition}; filename=\"{d.FileName.Replace("\"", "")}\"";
                 http.Response.Headers.ContentRange = $"bytes {d.RangeStart}-{d.RangeEndInclusive}/{d.SizeBytes}";
                 http.Response.ContentType = d.ContentType;
                 http.Response.ContentLength = d.RangeEndInclusive - d.RangeStart + 1;
@@ -199,7 +199,12 @@ public static class FileEndpoints
                 return Results.Empty;
             }
 
-            return Results.Stream(d.Content, d.ContentType, fileDownloadName: null, enableRangeProcessing: false);
+            // Results.File sets a correct Content-Disposition when fileDownloadName is provided.
+            return Results.File(
+                d.Content,
+                d.ContentType,
+                fileDownloadName: asAttachment ? d.FileName : null,
+                enableRangeProcessing: false);
         });
 
         var uploads = app.MapGroup("/api/v1/uploads").WithTags("Uploads").RequireAuthorization();

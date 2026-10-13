@@ -92,15 +92,17 @@ export function MembersPage({ teamSlug }: { teamSlug: string }) {
           <tbody>
             {(members.data ?? []).map((m) => (
               <tr key={m.userId} data-testid={`member-${m.email}`}>
-                <td>
+                <td data-label="Member">
                   <div className={styles.member}>
                     <span className={styles.memberName}>{m.displayName}</span>
                     <span className={styles.memberEmail}>{m.email}</span>
                   </div>
                 </td>
-                <td className={styles.role}>{roleLabel[m.role] ?? m.role}</td>
+                <td className={styles.role} data-label="Role">
+                  {roleLabel[m.role] ?? m.role}
+                </td>
                 {isOwner && (
-                  <td>
+                  <td data-label="Change role">
                     {m.role !== MemberRole.Owner && m.userId !== user?.id && (
                       <select
                         data-testid={`role-${m.email}`}
@@ -121,7 +123,7 @@ export function MembersPage({ teamSlug }: { teamSlug: string }) {
                     )}
                   </td>
                 )}
-                <td className={styles.actions}>
+                <td className={styles.actions} data-label="Actions">
                   {canRemove(m) && (
                     <Button
                       type="button"

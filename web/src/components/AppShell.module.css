@@ -260,4 +260,32 @@
     border: 0;
     border-bottom: 1px solid var(--color-border);
   }
+
+  .topbar {
+    padding: 0 16px;
+    height: auto;
+    min-height: 56px;
+    flex-wrap: wrap;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+
+  .content {
+    padding: 16px;
+  }
+
+  .user {
+    display: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .content {
+    padding: 12px;
+    gap: 12px;
+  }
+
+  .details {
+    padding: 16px;
+  }
 }

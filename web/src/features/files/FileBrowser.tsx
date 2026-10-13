@@ -17,6 +17,7 @@ import { formatFileType } from "../../lib/describeFileKind";
 import { formatBytes } from "../../lib/formatBytes";
 import { ModifiedAt } from "../../lib/formatModified";
 import { triggerDownload, triggerDownloads } from "../../lib/triggerDownload";
+import { TABLET_MQ, useMediaQuery } from "../../lib/useMediaQuery";
 import { useChannelFilesChanged } from "../../realtime/useChannelHub";
 import { DropOverlay } from "../../uploads/DropOverlay";
 import { useFileDrop } from "../../uploads/useFileDrop";
@@ -86,6 +87,7 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
   useChannelFilesChanged(channelId, teamSlug, channelName);
 
   const [selected, setSelected] = useState<FileItem | null>(null);
+  const isTablet = useMediaQuery(TABLET_MQ);
   const [previewOpen, setPreviewOpen] = useState(() => {
     try {
       return localStorage.getItem("channeled.previewOpen") !== "0";
@@ -93,6 +95,8 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
       return true;
     }
   });
+  // Keep the preference, but never show the panel on tablet widths.
+  const showPreview = previewOpen && !isTablet;
 
   useEffect(() => {
     try {
@@ -450,20 +454,30 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
     return filesApi.contentUrl(teamSlug, channelName, item.id, opts);
   }
 
-  function downloadItem(item: FileItem) {
+  async function downloadItem(item: FileItem) {
     const url = contentUrlFor(item, { download: true });
     if (!url) return;
-    triggerDownload(url, item.name);
+    try {
+      setError(null);
+      await triggerDownload(url, item.name);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Download failed.");
+    }
   }
 
-  function downloadChecked() {
+  async function downloadChecked() {
     const items = visibleItems
       .filter((i) => checked.has(i.id) && i.kind === ItemKind.File)
       .map((i) => ({
         url: filesApi.contentUrl(teamSlug, channelName, i.id, { download: true }),
         fileName: i.name,
       }));
-    void triggerDownloads(items);
+    try {
+      setError(null);
+      await triggerDownloads(items);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Download failed.");
+    }
   }
 
   const details = (
@@ -599,7 +613,7 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
     <AppShell
       title={trash ? `Trash · #${channelName}` : `#${channelName}`}
       sidebar={<ChannelSidebar teamSlug={teamSlug} channelName={channelName} trash={trash} />}
-      details={previewOpen ? details : undefined}
+      details={showPreview ? details : undefined}
       topbarExtra={
         <FilesSearchField value={nameQuery} onChange={setNameQuery} placeholder="Filter files…" />
       }
@@ -653,15 +667,17 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
               >
                 New folder
               </Button>
-              <Button
-                type="button"
-                data-testid="toggle-preview"
-                aria-pressed={previewOpen}
-                title={previewOpen ? "Hide preview" : "Show preview"}
-                onClick={() => setPreviewOpen((v) => !v)}
-              >
-                {previewOpen ? "Hide preview" : "Preview"}
-              </Button>
+              {!isTablet && (
+                <Button
+                  type="button"
+                  data-testid="toggle-preview"
+                  aria-pressed={previewOpen}
+                  title={previewOpen ? "Hide preview" : "Show preview"}
+                  onClick={() => setPreviewOpen((v) => !v)}
+                >
+                  {previewOpen ? "Hide preview" : "Preview"}
+                </Button>
+              )}
               <UploadButton testId="file-input" onFiles={enqueueChannelFiles} />
             </>
           )}
@@ -1040,7 +1056,7 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
                         data-testid={`download-${menuItem.name}`}
                         onClick={() => {
                           closeMenu();
-                          downloadItem(menuItem);
+                          void downloadItem(menuItem);
                         }}
                       >
                         Download

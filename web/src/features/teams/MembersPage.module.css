@@ -5,12 +5,14 @@
   box-shadow: var(--shadow-card);
   max-width: 100%;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .table {
   width: 100%;
   border-collapse: collapse;
   background: var(--color-surface);
+  min-width: 36rem;
 }
 
 .table th,
@@ -47,16 +49,19 @@
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
-  min-width: 12rem;
+  min-width: 0;
+  max-width: 22rem;
 }
 
 .memberName {
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
 .memberEmail {
   color: var(--color-text-muted);
   font-size: 0.9em;
+  overflow-wrap: anywhere;
 }
 
 .role {
@@ -80,4 +85,82 @@
 .error {
   color: var(--color-danger);
   margin-bottom: var(--space-3);
+}
+
+/* Stack into cards on narrow screens instead of a sideways-scrolling table. */
+@media (max-width: 720px) {
+  .tableWrap {
+    overflow: visible;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+  }
+
+  .table {
+    min-width: 0;
+    border-collapse: separate;
+    border-spacing: 0 var(--space-2);
+    background: transparent;
+  }
+
+  .table thead {
+    display: none;
+  }
+
+  .table tbody tr {
+    display: grid;
+    gap: var(--space-2);
+    padding: var(--space-4);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+  }
+
+  .table tbody tr:hover {
+    background: var(--color-surface);
+  }
+
+  .table td {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 0;
+    border: 0;
+    height: auto;
+  }
+
+  .table td::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    min-width: 5.5rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+  }
+
+  .table td:first-child {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .table td:first-child::before {
+    margin-bottom: 0.15rem;
+  }
+
+  .member {
+    max-width: none;
+    width: 100%;
+  }
+
+  .actions {
+    width: auto;
+  }
+
+  .table select {
+    max-width: none;
+    flex: 1 1 auto;
+  }
 }

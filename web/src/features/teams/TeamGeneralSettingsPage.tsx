@@ -10,9 +10,8 @@ import {
 import { ApiError } from "../../api/http";
 import { AppShell } from "../../components/AppShell";
 import { Button } from "../../ui/Button";
-import styles from "../files/FileBrowser.module.css";
-import local from "./ChannelsSettingsPage.module.css";
 import { ConfirmDialog } from "./ConfirmDialog";
+import styles from "./TeamGeneralSettingsPage.module.css";
 
 function errorMessage(e: unknown, fallback: string): string {
   return e instanceof Error && e.message ? e.message : fallback;
@@ -70,30 +69,30 @@ function JoinLinkSection({ teamSlug }: { teamSlug: string }) {
   }
 
   return (
-    <section className={local.item} data-testid="join-link-section">
-      <strong>Join link</strong>
-      {link.isLoading && <p className={local.muted}>Loading…</p>}
+    <section className={styles.card} data-testid="join-link-section">
+      <h2 className={styles.cardTitle}>Join link</h2>
+      {link.isLoading && <p className={styles.muted}>Loading…</p>}
       {link.isError && (
-        <p className={local.error} role="alert">
+        <p className={styles.error} role="alert">
           The join link is unavailable. Rotate the link to create a new one.
         </p>
       )}
       {link.data && (
-        <div className={local.joinLink}>
+        <div className={styles.joinLink}>
           <code data-testid="team-join-url">{url}</code>
-          <p className={local.muted}>
+          <p className={styles.muted}>
             {link.data.expiresAt
               ? `Expires ${new Date(link.data.expiresAt).toLocaleString()}`
               : "Never expires"}
           </p>
-          <span className={local.itemActions} style={{ marginLeft: 0 }}>
+          <div className={styles.actions}>
             <Button type="button" data-testid="copy-team-join" onClick={() => void copy()}>
               {copied ? "Copied" : "Copy link"}
             </Button>
-          </span>
+          </div>
         </div>
       )}
-      <label className={local.editForm} style={{ background: "transparent", padding: 0 }}>
+      <label className={styles.field}>
         Optional expiry for the next rotated link
         <input
           type="datetime-local"
@@ -102,7 +101,7 @@ function JoinLinkSection({ teamSlug }: { teamSlug: string }) {
           onChange={(e) => setExpiry(e.target.value)}
         />
       </label>
-      <span className={local.itemActions} style={{ marginLeft: 0 }}>
+      <div className={styles.actions}>
         <Button
           type="button"
           data-testid="rotate-team-join"
@@ -114,9 +113,9 @@ function JoinLinkSection({ teamSlug }: { teamSlug: string }) {
         >
           Rotate link
         </Button>
-      </span>
+      </div>
       {actionError && !rotateOpen && (
-        <p className={local.error} role="alert">
+        <p className={styles.error} role="alert">
           {actionError}
         </p>
       )}
@@ -174,49 +173,64 @@ function PendingRequests({
   const items: TeamJoinRequest[] = requests.data ?? [];
 
   return (
-    <section className={local.item} data-testid="pending-join-requests">
-      <strong>Pending join requests</strong>
-      {requests.isLoading && <p className={local.muted}>Loading…</p>}
-      {requests.isSuccess && items.length === 0 && <p className={local.muted}>No pending requests.</p>}
-      <ul className={local.requestList}>
-        {items.map((r) => (
-          <li key={r.id} data-testid={`join-request-${r.email}`}>
-            <span>
-              {r.displayName} ({r.email})
-            </span>
-            <span className={local.requestActions}>
-              <select
-                aria-label={`Role for ${r.email}`}
-                data-testid={`join-role-${r.email}`}
-                value={roles[r.id] ?? defaultRole}
-                onChange={(e) => setRoles((prev) => ({ ...prev, [r.id]: Number(e.target.value) }))}
-              >
-                <option value={MemberRole.Viewer}>Viewer</option>
-                <option value={MemberRole.Member}>Member</option>
-              </select>
-              <Button
-                type="button"
-                variant="primary"
-                data-testid={`approve-join-${r.email}`}
-                disabled={decide.isPending}
-                onClick={() => void decide.mutateAsync({ id: r.id, action: "approve" })}
-              >
-                Approve
-              </Button>
-              <Button
-                type="button"
-                data-testid={`reject-join-${r.email}`}
-                disabled={decide.isPending}
-                onClick={() => void decide.mutateAsync({ id: r.id, action: "reject" })}
-              >
-                Reject
-              </Button>
-            </span>
-          </li>
-        ))}
-      </ul>
+    <section className={styles.card} data-testid="pending-join-requests">
+      <div className={styles.sectionHead}>
+        <h2 className={styles.cardTitle}>Pending join requests</h2>
+        {requests.isSuccess && (
+          <span className={styles.count} data-testid="pending-join-count">
+            {items.length === 0 ? "None" : `${items.length} waiting`}
+          </span>
+        )}
+      </div>
+      {requests.isLoading && <p className={styles.muted}>Loading…</p>}
+      {requests.isSuccess && items.length === 0 && (
+        <p className={styles.muted}>No one is waiting to join right now.</p>
+      )}
+      {items.length > 0 && (
+        <ul className={styles.requestList}>
+          {items.map((r) => (
+            <li key={r.id} className={styles.requestRow} data-testid={`join-request-${r.email}`}>
+              <div className={styles.person}>
+                <span className={styles.personName}>{r.displayName}</span>
+                <span className={styles.personEmail}>{r.email}</span>
+              </div>
+              <div className={styles.requestActions}>
+                <select
+                  className={styles.roleSelect}
+                  aria-label={`Role for ${r.email}`}
+                  data-testid={`join-role-${r.email}`}
+                  value={roles[r.id] ?? defaultRole}
+                  disabled={decide.isPending}
+                  onChange={(e) => setRoles((prev) => ({ ...prev, [r.id]: Number(e.target.value) }))}
+                >
+                  <option value={MemberRole.Viewer}>Viewer</option>
+                  <option value={MemberRole.Member}>Member</option>
+                </select>
+                <Button
+                  type="button"
+                  variant="primary"
+                  data-testid={`approve-join-${r.email}`}
+                  disabled={decide.isPending}
+                  onClick={() => void decide.mutateAsync({ id: r.id, action: "approve" })}
+                >
+                  Approve
+                </Button>
+                <Button
+                  type="button"
+                  className={styles.rejectBtn}
+                  data-testid={`reject-join-${r.email}`}
+                  disabled={decide.isPending}
+                  onClick={() => void decide.mutateAsync({ id: r.id, action: "reject" })}
+                >
+                  Reject
+                </Button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
       {error && (
-        <p className={local.error} role="alert">
+        <p className={styles.error} role="alert">
           {error}
         </p>
       )}
@@ -301,24 +315,24 @@ export function TeamGeneralSettingsPage({ teamSlug }: { teamSlug: string }) {
 
   return (
     <AppShell title={`${team.data?.name ?? teamSlug} · General`}>
-      {team.isLoading && <p className={styles.lede}>Loading…</p>}
+      {team.isLoading && <p className={styles.muted}>Loading…</p>}
       {team.data && (
-        <div className={local.list}>
+        <div className={styles.list}>
           {notice && (
-            <p className={local.muted} role="status" data-testid="settings-notice">
+            <p className={styles.muted} role="status" data-testid="settings-notice">
               {notice}
             </p>
           )}
           {error && (
-            <p className={local.error} role="alert" data-testid="settings-error">
+            <p className={styles.error} role="alert" data-testid="settings-error">
               {error}
             </p>
           )}
 
-          <section className={local.item}>
-            <strong>Team name</strong>
+          <section className={styles.card}>
+            <h2 className={styles.cardTitle}>Team name</h2>
             <form
-              className={styles.toolbar}
+              className={styles.actions}
               onSubmit={(e) => {
                 e.preventDefault();
                 const next = name.trim();
@@ -326,7 +340,7 @@ export function TeamGeneralSettingsPage({ teamSlug }: { teamSlug: string }) {
                 void run({ name: next }, "Team name updated.");
               }}
             >
-              <label>
+              <label className={styles.field} style={{ flex: "1 1 14rem" }}>
                 Name
                 <input
                   data-testid="team-name-input"
@@ -350,11 +364,12 @@ export function TeamGeneralSettingsPage({ teamSlug }: { teamSlug: string }) {
             </form>
           </section>
 
-          <section className={local.item}>
-            <strong>Joining</strong>
-            <label className={local.editForm} style={{ background: "transparent", padding: 0 }}>
+          <section className={styles.card}>
+            <h2 className={styles.cardTitle}>Joining</h2>
+            <label className={styles.field}>
               Join mode
               <select
+                className={styles.roleSelect}
                 data-testid="join-mode-select"
                 value={joinMode}
                 disabled={!isOwner || save.isPending}
@@ -373,15 +388,16 @@ export function TeamGeneralSettingsPage({ teamSlug }: { teamSlug: string }) {
                 <option value={TeamJoinMode.RequestToJoin}>Request to join</option>
               </select>
             </label>
-            <p className={local.muted}>
+            <p className={styles.muted}>
               {joinMode === TeamJoinMode.OpenJoin
                 ? `Anyone with the join link becomes a ${roleName} immediately.`
                 : "People with the join link send a request; an admin approves or rejects it."}
               {!isOwner && " Only the owner can change this."}
             </p>
-            <label className={local.editForm} style={{ background: "transparent", padding: 0 }}>
+            <label className={styles.field}>
               Default join role
               <select
+                className={styles.roleSelect}
                 data-testid="default-join-role-select"
                 value={defaultRole}
                 disabled={!isOwner || save.isPending}

@@ -270,6 +270,56 @@ public static class TeamEndpoints
             return ToHttp(await teamsSvc.UpdateTeamSettingsAsync(userId, slug, body, Ctx(http), ct));
         });
 
+        // ---- Team logo (Admin+ write; any member read) ----
+        teams.MapGet("/{slug}/logo", async Task<IResult> (
+            string slug, ITeamService teamsSvc, ClaimsPrincipal principal, HttpContext http, CancellationToken ct) =>
+        {
+            if (!TryUser(principal, out var userId))
+            {
+                return Unauthorized();
+            }
+
+            var result = await teamsSvc.OpenTeamLogoAsync(userId, slug, ct);
+            if (!result.Succeeded || result.Value is null)
+            {
+                return ToHttp(result);
+            }
+
+            http.Response.Headers.CacheControl = "private, max-age=3600";
+            http.Response.Headers.Append("X-Content-Type-Options", "nosniff");
+            return Results.File(result.Value.Content, result.Value.ContentType);
+        });
+
+        teams.MapPut("/{slug}/logo", async Task<IResult> (
+            string slug, ITeamService teamsSvc, ClaimsPrincipal principal, HttpContext http, CancellationToken ct) =>
+        {
+            if (!TryUser(principal, out var userId))
+            {
+                return Unauthorized();
+            }
+
+            var contentType = http.Request.ContentType ?? "";
+            return ToHttp(await teamsSvc.SetTeamLogoAsync(
+                userId,
+                slug,
+                http.Request.Body,
+                contentType,
+                http.Request.ContentLength,
+                Ctx(http),
+                ct));
+        });
+
+        teams.MapDelete("/{slug}/logo", async Task<IResult> (
+            string slug, ITeamService teamsSvc, ClaimsPrincipal principal, HttpContext http, CancellationToken ct) =>
+        {
+            if (!TryUser(principal, out var userId))
+            {
+                return Unauthorized();
+            }
+
+            return ToHttp(await teamsSvc.ClearTeamLogoAsync(userId, slug, Ctx(http), ct));
+        });
+
         teams.MapPost("/{slug}/leave", async Task<IResult> (
             string slug, ITeamService teamsSvc, ClaimsPrincipal principal, HttpContext http, CancellationToken ct) =>
         {

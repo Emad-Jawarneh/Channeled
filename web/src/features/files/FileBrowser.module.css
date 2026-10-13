@@ -293,7 +293,9 @@
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-card);
   max-width: 100%;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
 }
 
 .table {
@@ -726,7 +728,11 @@
   letter-spacing: 0.08em;
   color: var(--color-text-muted);
   font-weight: 700;
-  margin: 18px 12px 6px;
+  margin: 14px 12px 6px;
+}
+
+.sideLabelFirst {
+  margin-top: 2px;
 }
 
 .sideEmpty {
@@ -798,9 +804,19 @@
   padding-top: 0;
 }
 
+.sideLinks a {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
 .sideLinkIcon {
   flex-shrink: 0;
   color: var(--color-text-muted);
+}
+
+.sideLinks a.active .sideLinkIcon,
+.sideLinks a:hover .sideLinkIcon {
+  color: var(--color-text);
 }
 
 .dropHint {

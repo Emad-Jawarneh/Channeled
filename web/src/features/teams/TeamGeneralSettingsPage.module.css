@@ -1,3 +1,40 @@
+.page {
+  display: grid;
+  gap: var(--space-5);
+  width: 100%;
+  max-width: 52rem;
+}
+
+.pageHeader {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-accent) 75%, var(--color-text-muted));
+}
+
+.pageTitle {
+  margin: 0;
+  font-size: clamp(1.35rem, 1.15rem + 0.6vw, 1.75rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.pageLede {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  max-width: 36rem;
+}
+
 .list {
   list-style: none;
   margin: 0;
@@ -16,13 +53,56 @@
   border-radius: var(--radius-md);
   background: var(--color-surface);
   min-width: 0;
+  box-shadow: var(--shadow-card);
 }
 
 .cardTitle {
   margin: 0;
   font-size: 1rem;
-  font-weight: 700;
+  font-weight: 750;
   letter-spacing: -0.01em;
+}
+
+.cardIntro {
+  margin: -0.35rem 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.profile {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+
+.logoBlock {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: center;
+}
+
+.logoActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: center;
+}
+
+.logoHint {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  text-align: center;
+  max-width: 11rem;
+  line-height: 1.35;
+}
+
+.profileFields {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
 }
 
 .muted {
@@ -47,11 +127,29 @@
 }
 
 .field select,
-.field input {
+.field input,
+.field textarea {
   font-weight: 500;
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
+}
+
+.field textarea {
+  min-height: 5rem;
+  resize: vertical;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.field textarea:focus {
+  outline: none;
+  border-color: var(--color-focus);
+  box-shadow: var(--shadow-focus);
 }
 
 .actions {
@@ -78,8 +176,6 @@
   line-height: 1.4;
   min-width: 0;
 }
-
-/* ---- Pending join requests ---- */
 
 .sectionHead {
   display: flex;
@@ -112,7 +208,7 @@
   gap: var(--space-3) var(--space-4);
   padding: var(--space-3) var(--space-4);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: 12px;
   background: var(--color-bg);
   min-width: 0;
 }
@@ -177,10 +273,63 @@
   box-shadow: none;
 }
 
+.storageHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+}
+
+.storageFigures {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.storageFigures strong {
+  color: var(--color-text);
+  font-weight: 750;
+}
+
+.storageBar {
+  height: 0.65rem;
+  border-radius: 999px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+}
+
+.storageFill {
+  display: block;
+  height: 100%;
+  background: var(--gradient-teal, var(--color-accent));
+  border-radius: inherit;
+  transition: width 200ms ease;
+}
+
 @media (max-width: 720px) {
   .card {
     padding: var(--space-4);
     gap: var(--space-3);
+  }
+
+  .profile {
+    grid-template-columns: 1fr;
+    justify-items: stretch;
+  }
+
+  .logoBlock {
+    justify-items: start;
+  }
+
+  .logoActions {
+    justify-content: flex-start;
+  }
+
+  .logoHint {
+    text-align: left;
+    max-width: none;
   }
 
   .requestRow {

@@ -21,6 +21,12 @@ public sealed class TeamEntity
     public string? JoinTokenPrefix { get; set; }
     public DateTimeOffset? JoinTokenExpiresAt { get; set; }
 
+    /// <summary>Object-store key for the team logo; null when using initials.</summary>
+    public string? LogoObjectKey { get; set; }
+    /// <summary>image/png | image/jpeg | image/webp | image/gif</summary>
+    public string? LogoContentType { get; set; }
+    public DateTimeOffset? LogoUpdatedAt { get; set; }
+
     public List<TeamMemberEntity> Members { get; set; } = [];
     public List<ChannelEntity> Channels { get; set; } = [];
     public List<TeamJoinRequestEntity> JoinRequests { get; set; } = [];

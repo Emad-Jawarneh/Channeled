@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using Channeled.Application.Abstractions.Email;
 using Channeled.Application.Abstractions.Realtime;
 using Channeled.Application.Abstractions.Results;
+using Channeled.Application.Abstractions.Storage;
 using Channeled.Application.Abstractions.Time;
 using Channeled.Application.Identity;
 using Channeled.Application.Teams;
@@ -11,6 +12,7 @@ using Channeled.Domain.Authorization;
 using Channeled.Domain.Errors;
 using Channeled.Domain.Files;
 using Channeled.Domain.Identity;
+using Channeled.Domain.Storage;
 using Channeled.Domain.Teams;
 using Channeled.Infrastructure.Identity;
 using Channeled.Infrastructure.Jobs;
@@ -36,7 +38,8 @@ public sealed partial class TeamService(
     ChannelWriteGuard channelWriteGuard,
     IOptions<ChannelDeleteOptions> channelDeleteOptions,
     TeamJoinLinkProtector joinLinkProtector,
-    IOptions<TeamJoinOptions> joinOptions) : ITeamService
+    IOptions<TeamJoinOptions> joinOptions,
+    IFileStore store) : ITeamService
 {
     private static readonly TimeSpan InvitationLifetime = TimeSpan.FromDays(7);
 
@@ -1593,7 +1596,18 @@ public sealed partial class TeamService(
     }
 
     private static TeamDto ToTeamDto(TeamEntity team, MemberRole? role) =>
-        new(team.Id, team.Name, team.Slug, team.Description, team.QuotaBytes, team.ArchivedAt, role, team.JoinMode, team.DefaultJoinRole);
+        new(
+            team.Id,
+            team.Name,
+            team.Slug,
+            team.Description,
+            team.QuotaBytes,
+            team.ArchivedAt,
+            role,
+            team.JoinMode,
+            team.DefaultJoinRole,
+            !string.IsNullOrEmpty(team.LogoObjectKey),
+            team.LogoUpdatedAt);
 
     private static ChannelDto ToChannelDto(ChannelEntity channel) =>
         new(channel.Id, channel.TeamId, channel.Name, channel.Description, channel.Visibility, channel.Kind, channel.ArchivedAt);

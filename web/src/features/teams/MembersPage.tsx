@@ -7,6 +7,7 @@ import { AppShell } from "../../components/AppShell";
 import { Button } from "../../ui/Button";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { RoleSelect } from "./RoleSelect";
+import settingsStyles from "./TeamGeneralSettingsPage.module.css";
 import styles from "./MembersPage.module.css";
 
 const roleLabel = ["Viewer", "Member", "Admin", "Owner"];
@@ -73,7 +74,16 @@ export function MembersPage({ teamSlug }: { teamSlug: string }) {
   const busy = remove.isPending || leave.isPending;
 
   return (
-    <AppShell title={`${teamSlug} · Members`}>
+    <AppShell title={`${team.data?.name ?? teamSlug} · Members`}>
+      <div className={settingsStyles.page}>
+        <header className={settingsStyles.pageHeader}>
+          <p className={settingsStyles.eyebrow}>Team settings</p>
+          <h1 className={settingsStyles.pageTitle}>Members</h1>
+          <p className={settingsStyles.pageLede}>
+            People in this team, their roles, and who can be removed.
+          </p>
+        </header>
+
       {error && (
         <p role="alert" data-testid="members-error" className={styles.error}>
           {error}
@@ -155,6 +165,7 @@ export function MembersPage({ teamSlug }: { teamSlug: string }) {
           </Button>
         </p>
       )}
+      </div>
 
       <ConfirmDialog
         open={confirm !== null}

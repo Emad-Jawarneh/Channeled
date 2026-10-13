@@ -5,6 +5,7 @@ import { useAuth } from "../auth/AuthContext";
 import { teamsApi } from "../api/channeled";
 import { CreateTeamDialog } from "../features/teams/CreateTeamDialog";
 import { createTeamWithGeneral } from "../features/teams/createTeam";
+import { TeamMark } from "../features/teams/TeamMark";
 import { UploadTray } from "../uploads/UploadTray";
 import { ThemeToggle } from "../theme/ThemeToggle";
 import { Button } from "../ui/Button";
@@ -86,13 +87,19 @@ export function AppShell({ children, sidebar, details, title, topbarExtra }: App
                 key={team.id}
                 to={`/t/${team.slug}/c/general`}
                 className={() =>
-                  [styles.railItem, active ? styles.railItemActive : ""].filter(Boolean).join(" ")
+                  [
+                    styles.railItem,
+                    team.hasLogo ? styles.railItemLogo : "",
+                    active ? styles.railItemActive : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")
                 }
                 aria-current={active ? "page" : undefined}
                 title={team.name}
                 data-testid={`rail-team-${team.slug}`}
               >
-                {team.name.slice(0, 2).toUpperCase()}
+                <TeamMark team={team} size="md" className={styles.railMark} />
               </NavLink>
             );
           })}
@@ -151,15 +158,18 @@ export function AppShell({ children, sidebar, details, title, topbarExtra }: App
 
       <aside className={styles.sidebar} aria-label="Sidebar">
         {sidebar ?? (
-          <div>
+          <div className={styles.settingsSide}>
             <p className={styles.sidebarTitle}>{title ?? "Channeled"}</p>
             {params.team && (
-              <nav className={styles.sideNav}>
-                <NavLink to={`/t/${params.team}/settings/general`}>General</NavLink>
-                <NavLink to={`/t/${params.team}/settings/members`}>Members</NavLink>
-                <NavLink to={`/t/${params.team}/settings/channels`}>Channels</NavLink>
-                <NavLink to={`/t/${params.team}/settings/storage`}>Storage</NavLink>
-              </nav>
+              <>
+                <p className={styles.settingsLabel}>Settings</p>
+                <nav className={styles.sideNav} aria-label="Team settings">
+                  <NavLink to={`/t/${params.team}/settings/general`}>General</NavLink>
+                  <NavLink to={`/t/${params.team}/settings/members`}>Members</NavLink>
+                  <NavLink to={`/t/${params.team}/settings/channels`}>Channels</NavLink>
+                  <NavLink to={`/t/${params.team}/settings/storage`}>Storage</NavLink>
+                </nav>
+              </>
             )}
           </div>
         )}

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   MemberRole,
   TeamJoinMode,
@@ -11,6 +11,7 @@ import { ApiError } from "../../api/http";
 import { AppShell } from "../../components/AppShell";
 import { Button } from "../../ui/Button";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { TeamMark } from "./TeamMark";
 import styles from "./TeamGeneralSettingsPage.module.css";
 
 function errorMessage(e: unknown, fallback: string): string {
@@ -250,14 +251,20 @@ export function TeamGeneralSettingsPage({ teamSlug }: { teamSlug: string }) {
   const isOwner = myRole === MemberRole.Owner;
 
   const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openJoinConfirm, setOpenJoinConfirm] = useState(false);
   const [dialogError, setDialogError] = useState<string | null>(null);
+  const [logoBusy, setLogoBusy] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (team.data) setName(team.data.name);
-  }, [team.data?.name]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (team.data) {
+      setName(team.data.name);
+      setDescription(team.data.description ?? "");
+    }
+  }, [team.data?.name, team.data?.description]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pending = useQuery({
     queryKey: ["join-requests", teamSlug],
@@ -313,11 +320,54 @@ export function TeamGeneralSettingsPage({ teamSlug }: { teamSlug: string }) {
   const defaultRole = team.data?.defaultJoinRole ?? MemberRole.Viewer;
   const roleName = defaultRole === MemberRole.Member ? "Member" : "Viewer";
 
+  async function onLogoSelected(file: File | null) {
+    if (!file || !isAdmin) return;
+    setLogoBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const updated = await teamsApi.setLogo(teamSlug, file);
+      qc.setQueryData(["team", teamSlug], updated);
+      await qc.invalidateQueries({ queryKey: ["teams"] });
+      setNotice("Team logo updated.");
+    } catch (e) {
+      setError(errorMessage(e, "Could not update the logo."));
+    } finally {
+      setLogoBusy(false);
+      if (logoInputRef.current) logoInputRef.current.value = "";
+    }
+  }
+
+  async function onClearLogo() {
+    if (!isAdmin) return;
+    setLogoBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const updated = await teamsApi.clearLogo(teamSlug);
+      qc.setQueryData(["team", teamSlug], updated);
+      await qc.invalidateQueries({ queryKey: ["teams"] });
+      setNotice("Team logo removed.");
+    } catch (e) {
+      setError(errorMessage(e, "Could not remove the logo."));
+    } finally {
+      setLogoBusy(false);
+    }
+  }
+
   return (
     <AppShell title={`${team.data?.name ?? teamSlug} · General`}>
       {team.isLoading && <p className={styles.muted}>Loading…</p>}
       {team.data && (
-        <div className={styles.list}>
+        <div className={styles.page}>
+          <header className={styles.pageHeader}>
+            <p className={styles.eyebrow}>Team settings</p>
+            <h1 className={styles.pageTitle}>General</h1>
+            <p className={styles.pageLede}>
+              Brand the team, edit its profile, and control how people join.
+            </p>
+          </header>
+
           {notice && (
             <p className={styles.muted} role="status" data-testid="settings-notice">
               {notice}
@@ -329,43 +379,117 @@ export function TeamGeneralSettingsPage({ teamSlug }: { teamSlug: string }) {
             </p>
           )}
 
-          <section className={styles.card}>
-            <h2 className={styles.cardTitle}>Team name</h2>
-            <form
-              className={styles.actions}
-              onSubmit={(e) => {
-                e.preventDefault();
-                const next = name.trim();
-                if (!next || next === team.data?.name) return;
-                void run({ name: next }, "Team name updated.");
-              }}
-            >
-              <label className={styles.field} style={{ flex: "1 1 14rem" }}>
-                Name
-                <input
-                  data-testid="team-name-input"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  maxLength={200}
-                  required
-                  disabled={!isAdmin || save.isPending}
-                />
-              </label>
-              {isAdmin && (
-                <Button
-                  type="submit"
-                  variant="primary"
-                  data-testid="team-name-save"
-                  disabled={save.isPending || !name.trim() || name.trim() === team.data.name}
-                >
-                  Save
-                </Button>
-              )}
-            </form>
+          <section className={styles.card} data-testid="team-profile-card">
+            <h2 className={styles.cardTitle}>Profile</h2>
+            <p className={styles.cardIntro}>
+              The logo appears in the team rail and sidebars. Square images work best.
+            </p>
+            <div className={styles.profile}>
+              <div className={styles.logoBlock}>
+                <TeamMark team={team.data} size="lg" />
+                {isAdmin && (
+                  <>
+                    <input
+                      ref={logoInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/gif"
+                      hidden
+                      data-testid="team-logo-input"
+                      onChange={(e) => void onLogoSelected(e.target.files?.[0] ?? null)}
+                    />
+                    <div className={styles.logoActions}>
+                      <Button
+                        type="button"
+                        data-testid="team-logo-upload"
+                        disabled={logoBusy || save.isPending}
+                        onClick={() => logoInputRef.current?.click()}
+                      >
+                        {logoBusy ? "Working…" : team.data.hasLogo ? "Replace logo" : "Upload logo"}
+                      </Button>
+                      {team.data.hasLogo && (
+                        <Button
+                          type="button"
+                          data-testid="team-logo-remove"
+                          disabled={logoBusy || save.isPending}
+                          onClick={() => void onClearLogo()}
+                        >
+                          Remove
+                        </Button>
+                      )}
+                    </div>
+                    <p className={styles.logoHint}>PNG, JPEG, WebP, or GIF · max 512 KB</p>
+                  </>
+                )}
+              </div>
+
+              <form
+                className={styles.profileFields}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const nextName = name.trim();
+                  const nextDescription = description.trim();
+                  if (!nextName) return;
+                  const nameChanged = nextName !== team.data?.name;
+                  const descriptionChanged = nextDescription !== (team.data?.description ?? "");
+                  if (!nameChanged && !descriptionChanged) return;
+                  void run(
+                    {
+                      name: nameChanged ? nextName : undefined,
+                      description: descriptionChanged ? nextDescription : undefined,
+                    },
+                    "Team profile updated.",
+                  );
+                }}
+              >
+                <label className={styles.field}>
+                  Name
+                  <input
+                    data-testid="team-name-input"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    maxLength={200}
+                    required
+                    disabled={!isAdmin || save.isPending}
+                  />
+                </label>
+                <label className={styles.field}>
+                  Description
+                  <textarea
+                    data-testid="team-description-input"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    maxLength={2000}
+                    placeholder="What is this team for?"
+                    disabled={!isAdmin || save.isPending}
+                  />
+                </label>
+                {isAdmin && (
+                  <div className={styles.actions}>
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      data-testid="team-profile-save"
+                      disabled={
+                        save.isPending ||
+                        logoBusy ||
+                        !name.trim() ||
+                        (name.trim() === team.data.name &&
+                          description.trim() === (team.data.description ?? ""))
+                      }
+                    >
+                      Save profile
+                    </Button>
+                  </div>
+                )}
+              </form>
+            </div>
           </section>
 
           <section className={styles.card}>
             <h2 className={styles.cardTitle}>Joining</h2>
+            <p className={styles.cardIntro}>
+              Choose whether the join link admits people immediately or after an admin reviews them.
+            </p>
             <label className={styles.field}>
               Join mode
               <select

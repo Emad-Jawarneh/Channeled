@@ -16,7 +16,12 @@ public sealed record TeamDto(
     DateTimeOffset? ArchivedAt,
     MemberRole? MyRole,
     TeamJoinMode JoinMode,
-    MemberRole DefaultJoinRole);
+    MemberRole DefaultJoinRole,
+    bool HasLogo = false,
+    DateTimeOffset? LogoUpdatedAt = null);
+
+/// <summary>Inline team logo bytes for authenticated members.</summary>
+public sealed record TeamLogoResult(Stream Content, string ContentType);
 
 /// <summary>
 /// Partial settings update. Null fields are left unchanged.

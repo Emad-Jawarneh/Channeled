@@ -10,6 +10,7 @@ import { MembersPage } from "./features/teams/MembersPage";
 import { ChannelsSettingsPage } from "./features/teams/ChannelsSettingsPage";
 import { JoinTeamPage } from "./features/teams/JoinTeamPage";
 import { TeamGeneralSettingsPage } from "./features/teams/TeamGeneralSettingsPage";
+import { TeamStorageSettingsPage } from "./features/teams/TeamStorageSettingsPage";
 import { TextChannelPage } from "./features/teams/TextChannelPage";
 import { ChannelKind, teamsApi } from "./api/channeled";
 import {
@@ -63,6 +64,11 @@ function GeneralRoute() {
 function ChannelsRoute() {
   const { team = "" } = useParams();
   return <ChannelsSettingsPage teamSlug={team} />;
+}
+
+function StorageRoute() {
+  const { team = "" } = useParams();
+  return <TeamStorageSettingsPage teamSlug={team} />;
 }
 
 function RootGate() {
@@ -212,9 +218,7 @@ export function App() {
         path="/t/:team/settings/storage"
         element={
           <RequireAuth>
-            <AppShell title="Storage">
-              <p>Team storage is available via the API usage endpoint.</p>
-            </AppShell>
+            <StorageRoute />
           </RequireAuth>
         }
       />

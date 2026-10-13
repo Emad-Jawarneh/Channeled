@@ -22,6 +22,11 @@ public interface ITeamService
     // ---- Settings / join mode (Owner for join mode + default role; Admin+ for name/description) ----
     Task<AppResult<UpdateTeamSettingsResult>> UpdateTeamSettingsAsync(Guid userId, string slug, UpdateTeamSettingsRequest request, RequestContext context, CancellationToken ct = default);
 
+    // ---- Team logo (Admin+ write; any member can read) ----
+    Task<AppResult<TeamDto>> SetTeamLogoAsync(Guid userId, string slug, Stream content, string contentType, long? contentLength, RequestContext context, CancellationToken ct = default);
+    Task<AppResult<TeamDto>> ClearTeamLogoAsync(Guid userId, string slug, RequestContext context, CancellationToken ct = default);
+    Task<AppResult<TeamLogoResult>> OpenTeamLogoAsync(Guid userId, string slug, CancellationToken ct = default);
+
     // ---- Join link (Admin+) ----
     Task<AppResult<TeamJoinLinkDto>> GetJoinLinkAsync(Guid userId, string slug, CancellationToken ct = default);
     /// <summary>Returns the current link, creating one if the team has none (idempotent).</summary>

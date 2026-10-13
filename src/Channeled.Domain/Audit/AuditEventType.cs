@@ -56,4 +56,5 @@ public enum AuditEventType
     TeamJoinRequestWithdraw = 76,
     ChannelVisibilityChange = 77,
     MemberLeave = 78,
+    TeamLogoChange = 79,
 }

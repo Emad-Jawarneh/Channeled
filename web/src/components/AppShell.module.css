@@ -79,6 +79,23 @@
   font-size: 13px;
   font-weight: 700;
   position: relative;
+  overflow: hidden;
+  padding: 0;
+}
+
+.railItemLogo {
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--color-border) 80%, transparent);
+}
+
+.railMark {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: inherit !important;
+  background: transparent !important;
+  color: inherit !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
 }
 
 .railItemActive {
@@ -155,6 +172,24 @@
 .sidebarTitle {
   margin: 0;
   font-weight: 700;
+}
+
+.settingsSide {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  height: 100%;
+  min-height: 0;
+}
+
+.settingsLabel {
+  margin: 0;
+  padding: 0 12px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
 }
 
 .sideNav {
@@ -235,6 +270,13 @@
   gap: 16px;
   overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+/* Prevent flex-shrink from clipping tall pages (file tables, settings). */
+.content > * {
+  flex-shrink: 0;
 }
 
 .details {

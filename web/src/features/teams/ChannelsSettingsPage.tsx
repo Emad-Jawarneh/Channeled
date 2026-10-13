@@ -15,6 +15,7 @@ import { Button } from "../../ui/Button";
 import styles from "../files/FileBrowser.module.css";
 import { validateChannelName } from "./channelName";
 import local from "./ChannelsSettingsPage.module.css";
+import settingsStyles from "./TeamGeneralSettingsPage.module.css";
 import { useUploads } from "../../uploads/UploadContext";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { DeleteChannelDialog, type DeleteChannelDisposition } from "./DeleteChannelDialog";
@@ -364,7 +365,16 @@ export function ChannelsSettingsPage({ teamSlug }: { teamSlug: string }) {
     );
 
   return (
-    <AppShell title={`${teamSlug} · Channels`}>
+    <AppShell title={`${team.data?.name ?? teamSlug} · Channels`}>
+      <div className={settingsStyles.page} style={{ maxWidth: "64rem" }}>
+        <header className={settingsStyles.pageHeader}>
+          <p className={settingsStyles.eyebrow}>Team settings</p>
+          <h1 className={settingsStyles.pageTitle}>Channels</h1>
+          <p className={settingsStyles.pageLede}>
+            Create channels, change visibility, and manage who can access restricted ones.
+          </p>
+        </header>
+
       {actionError && (
         <p className={local.error} role="alert" aria-live="assertive">
           {actionError}
@@ -519,6 +529,8 @@ export function ChannelsSettingsPage({ teamSlug }: { teamSlug: string }) {
           </li>
         ))}
       </ul>
+
+      </div>
 
       <ConfirmDialog
         open={visTarget !== null}

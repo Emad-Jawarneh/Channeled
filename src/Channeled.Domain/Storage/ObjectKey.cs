@@ -11,4 +11,10 @@ public static class ObjectKey
         var hex = fileId.ToString("N");
         return $"objects/{hex[..2]}/{hex[2..4]}/{fileId:D}";
     }
+
+    public static string ForTeamLogo(Guid teamId)
+    {
+        var hex = teamId.ToString("N");
+        return $"team-logos/{hex[..2]}/{hex[2..4]}/{teamId:D}";
+    }
 }

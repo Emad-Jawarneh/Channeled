@@ -19,7 +19,21 @@ export type Team = {
   joinMode: number;
   /** MemberRole applied to joins/approvals by default (Viewer or Member). */
   defaultJoinRole: number;
+  hasLogo?: boolean;
+  logoUpdatedAt?: string | null;
 };
+
+export type TeamStorage = {
+  quotaBytes: number;
+  usageBytes: number;
+};
+
+/** Authenticated logo URL with cache-busting when the logo changes. */
+export function teamLogoUrl(team: Pick<Team, "slug" | "hasLogo" | "logoUpdatedAt">): string | null {
+  if (!team.hasLogo) return null;
+  const v = team.logoUpdatedAt ? encodeURIComponent(team.logoUpdatedAt) : "1";
+  return `/api/v1/teams/${encodeURIComponent(team.slug)}/logo?v=${v}`;
+}
 
 export type Channel = {
   id: string;
@@ -236,6 +250,18 @@ export const teamsApi = {
         confirmOpenJoinApprovePending: input.confirmOpenJoinApprovePending ?? false,
       },
     }),
+
+  setLogo: (slug: string, file: Blob) =>
+    api<Team>(`/api/v1/teams/${encodeURIComponent(slug)}/logo`, {
+      method: "PUT",
+      headers: { "Content-Type": file.type || "application/octet-stream" },
+      body: file,
+    }),
+  clearLogo: (slug: string) =>
+    api<Team>(`/api/v1/teams/${encodeURIComponent(slug)}/logo`, { method: "DELETE" }),
+
+  storage: (slug: string) =>
+    api<TeamStorage>(`/api/v1/teams/${encodeURIComponent(slug)}/storage`),
 
   // ---- Join link (Admin+) ----
   /** 409 `join_link_unavailable` when no link exists yet: call `ensureJoinLink`. */

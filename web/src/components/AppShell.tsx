@@ -108,6 +108,7 @@ export function AppShell({ children, sidebar, details, title, topbarExtra }: App
             <p className={styles.sidebarTitle}>{title ?? "Channeled"}</p>
             {params.team && (
               <nav className={styles.sideNav}>
+                <NavLink to={`/t/${params.team}/settings/general`}>General</NavLink>
                 <NavLink to={`/t/${params.team}/settings/members`}>Members</NavLink>
                 <NavLink to={`/t/${params.team}/settings/channels`}>Channels</NavLink>
                 <NavLink to={`/t/${params.team}/settings/storage`}>Storage</NavLink>

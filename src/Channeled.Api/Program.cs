@@ -52,7 +52,8 @@ builder.Services.AddRateLimiter(options =>
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     options.AddFixedWindowLimiter("auth", limiter =>
     {
-        limiter.PermitLimit = 20;
+        // Configurable so the API test suite (many logins per minute) is not throttled; prod default stays 20/min.
+        limiter.PermitLimit = Math.Max(1, builder.Configuration.GetValue("RateLimits:AuthPermitPerMinute", 20));
         limiter.Window = TimeSpan.FromMinutes(1);
         limiter.QueueLimit = 0;
     });
@@ -67,6 +68,20 @@ builder.Services.AddRateLimiter(options =>
         return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
         {
             PermitLimit = Math.Max(1, permit),
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+        });
+    });
+
+    // Team join link info/join: per-user when signed in, else per-IP. Limits token guessing.
+    options.AddPolicy(TeamEndpoints.JoinRateLimitPolicy, httpContext =>
+    {
+        var key = httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                  ?? httpContext.Connection.RemoteIpAddress?.ToString()
+                  ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 30,
             Window = TimeSpan.FromMinutes(1),
             QueueLimit = 0,
         });

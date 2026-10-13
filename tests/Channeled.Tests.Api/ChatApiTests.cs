@@ -68,7 +68,7 @@ public class ChatApiTests : IClassFixture<ChatWorldFixture>
     [Fact]
     public async Task Private_text_channel_http_matrix_including_can_write()
     {
-        var ch = await _w.CreateChannelAsync(ChannelKind.Text, ChannelVisibility.Private, "vip");
+        var ch = await _w.CreateChannelAsync(ChannelKind.Text, ChannelVisibility.Restricted, "vip");
 
         // Not listed: hidden entirely (404), even for a regular Member.
         (await _w.ListAsync(_w.Member, ch)).StatusCode.Should().Be(HttpStatusCode.NotFound);

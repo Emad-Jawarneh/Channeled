@@ -72,7 +72,7 @@ public class ShareLinkApiTests : IClassFixture<AuthApiFactory>, IAsyncLifetime
         _teamId = team.Id;
         (await _owner.PostAsJsonAsync(
             $"/api/v1/teams/{_slug}/channels",
-            new CreateChannelRequest("general", null, ChannelVisibility.Open, ChannelKind.File))).EnsureSuccessStatusCode();
+            new CreateChannelRequest("general", null, ChannelVisibility.Everyone, ChannelKind.File))).EnsureSuccessStatusCode();
 
         await using var scope = _factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -401,7 +401,7 @@ public class ShareLinkApiTests : IClassFixture<AuthApiFactory>, IAsyncLifetime
     {
         (await _owner.PostAsJsonAsync(
             $"/api/v1/teams/{_slug}/channels",
-            new CreateChannelRequest("other", null, ChannelVisibility.Open, ChannelKind.File))).EnsureSuccessStatusCode();
+            new CreateChannelRequest("other", null, ChannelVisibility.Everyone, ChannelKind.File))).EnsureSuccessStatusCode();
         var fileId = await UploadAsync(_owner, "general", "a.txt", Payload);
         var link = await CreateLinkAsync(_owner, fileId);
         var ticket = await (await ClaimAsync(link.Token)).Content.ReadFromJsonAsync<ShareClaimDto>();

@@ -1,7 +1,10 @@
 namespace Channeled.Domain.Teams;
 
+/// <summary>
+/// Numeric values are persisted; Everyone was formerly Open (0), Restricted was formerly Private (1).
+/// </summary>
 public enum ChannelVisibility
 {
-    Open = 0,
-    Private = 1,
+    Everyone = 0,
+    Restricted = 1,
 }

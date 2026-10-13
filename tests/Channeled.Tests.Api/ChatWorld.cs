@@ -98,7 +98,7 @@ public sealed class ChatWorld : IAsyncDisposable
 
     public async Task<ChannelDto> CreateChannelAsync(
         ChannelKind kind,
-        ChannelVisibility visibility = ChannelVisibility.Open,
+        ChannelVisibility visibility = ChannelVisibility.Everyone,
         string? prefix = null)
     {
         var name = $"{prefix ?? (kind == ChannelKind.Text ? "talk" : "files")}-{Interlocked.Increment(ref _channelSeq)}";
@@ -109,11 +109,11 @@ public sealed class ChatWorld : IAsyncDisposable
         return (await response.Content.ReadFromJsonAsync<ChannelDto>())!;
     }
 
-    public async Task SetChannelMemberAsync(ChannelDto channel, Actor user, bool canWrite, bool canManage = false)
+    public async Task SetChannelMemberAsync(ChannelDto channel, Actor user, bool canWrite)
     {
         var response = await Owner.Client.PutAsJsonAsync(
             $"/api/v1/teams/{Slug}/channels/{channel.Name}/members",
-            new UpsertChannelMemberRequest(user.Id, canWrite, canManage));
+            new UpsertChannelMemberRequest(user.Id, ReadOnly: !canWrite));
         response.EnsureSuccessStatusCode();
     }
 

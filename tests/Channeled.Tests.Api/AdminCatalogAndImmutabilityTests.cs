@@ -106,20 +106,45 @@ public class AdminCatalogAndImmutabilityTests : IClassFixture<AuthApiFactory>, I
             .Content.ReadFromJsonAsync<TeamDto>();
         var slug = team!.Slug;
 
-        var invite = await (await _admin.PostAsJsonAsync(
-            $"/api/v1/teams/{slug}/invitations",
-            new CreateTeamInvitationRequest("member@example.com", MemberRole.Member)))
-            .Content.ReadFromJsonAsync<TeamInvitationDto>();
+        // --- Team join link flow: Create + Approve (member), Reject, Withdraw, Rotate, ModeChange, Leave ---
+        var link = await _admin.GetFromJsonAsync<TeamJoinLinkDto>($"/api/v1/teams/{slug}/join-link");
+        var memberJoin = await (await _member.PostAsync($"/api/v1/teams/join/{link!.Token}", null))
+            .Content.ReadFromJsonAsync<TeamJoinResultDto>();
+        (await _admin.PostAsJsonAsync(
+            $"/api/v1/teams/{slug}/join-requests/{memberJoin!.PendingRequestId}/approve",
+            new ApproveTeamJoinRequestRequest(MemberRole.Member))).EnsureSuccessStatusCode();
 
-        (await _member.PostAsJsonAsync(
-            "/api/v1/teams/invitations/accept",
-            new AcceptTeamInvitationRequest(invite!.RawToken!))).EnsureSuccessStatusCode();
+        await CreateUserAsync("rejected@example.com");
+        await CreateUserAsync("withdrawn@example.com");
+        await CreateUserAsync("leaver@example.com");
+        using (var rejected = CreateClient())
+        using (var withdrawn = CreateClient())
+        using (var leaver = CreateClient())
+        {
+            await LoginAsync(rejected, "rejected@example.com", "UserPassword1!");
+            await LoginAsync(withdrawn, "withdrawn@example.com", "UserPassword1!");
+            await LoginAsync(leaver, "leaver@example.com", "UserPassword1!");
 
-        var invite2 = await (await _admin.PostAsJsonAsync(
-            $"/api/v1/teams/{slug}/invitations",
-            new CreateTeamInvitationRequest("ghost@example.com", MemberRole.Viewer)))
-            .Content.ReadFromJsonAsync<TeamInvitationDto>();
-        (await _admin.PostAsync($"/api/v1/teams/{slug}/invitations/{invite2!.Id}/revoke", null)).EnsureSuccessStatusCode();
+            var rejectedJoin = await (await rejected.PostAsync($"/api/v1/teams/join/{link.Token}", null))
+                .Content.ReadFromJsonAsync<TeamJoinResultDto>();
+            (await _admin.PostAsync($"/api/v1/teams/{slug}/join-requests/{rejectedJoin!.PendingRequestId}/reject", null))
+                .EnsureSuccessStatusCode();
+
+            var withdrawnJoin = await (await withdrawn.PostAsync($"/api/v1/teams/join/{link.Token}", null))
+                .Content.ReadFromJsonAsync<TeamJoinResultDto>();
+            (await withdrawn.PostAsync($"/api/v1/teams/join-requests/{withdrawnJoin!.PendingRequestId}/withdraw", null))
+                .EnsureSuccessStatusCode();
+
+            var rotated = await (await _admin.PostAsJsonAsync(
+                    $"/api/v1/teams/{slug}/join-link/rotate", new RotateTeamJoinLinkRequest(null)))
+                .Content.ReadFromJsonAsync<TeamJoinLinkDto>();
+            (await _admin.PutAsJsonAsync(
+                $"/api/v1/teams/{slug}/settings",
+                new UpdateTeamSettingsRequest(null, null, TeamJoinMode.OpenJoin, null, ConfirmOpenJoinApprovePending: true)))
+                .EnsureSuccessStatusCode();
+            (await leaver.PostAsync($"/api/v1/teams/join/{rotated!.Token}", null)).EnsureSuccessStatusCode();
+            (await leaver.PostAsync($"/api/v1/teams/{slug}/leave", null)).EnsureSuccessStatusCode();
+        }
 
         var memberUser = await FindUserIdAsync("member@example.com");
         (await _admin.PutAsJsonAsync(
@@ -128,27 +153,36 @@ public class AdminCatalogAndImmutabilityTests : IClassFixture<AuthApiFactory>, I
 
         (await _admin.PostAsJsonAsync(
             $"/api/v1/teams/{slug}/channels",
-            new CreateChannelRequest("general", "g", ChannelVisibility.Open, ChannelKind.File))).EnsureSuccessStatusCode();
+            new CreateChannelRequest("general", "g", ChannelVisibility.Everyone, ChannelKind.File))).EnsureSuccessStatusCode();
         (await _admin.PutAsJsonAsync(
             $"/api/v1/teams/{slug}/channels/general",
             new UpdateChannelRequest(null, "updated"))).EnsureSuccessStatusCode();
 
         (await _admin.PostAsJsonAsync(
             $"/api/v1/teams/{slug}/channels",
-            new CreateChannelRequest("secret", null, ChannelVisibility.Private, ChannelKind.File))).EnsureSuccessStatusCode();
+            new CreateChannelRequest("secret", null, ChannelVisibility.Restricted, ChannelKind.File))).EnsureSuccessStatusCode();
         (await _admin.PutAsJsonAsync(
             $"/api/v1/teams/{slug}/channels/secret/members",
-            new UpsertChannelMemberRequest(memberUser, true, false))).EnsureSuccessStatusCode();
+            new UpsertChannelMemberRequest(memberUser, false))).EnsureSuccessStatusCode();
         (await _admin.DeleteAsync($"/api/v1/teams/{slug}/channels/secret/members/{memberUser}")).EnsureSuccessStatusCode();
+        // ChannelVisibilityChange (both directions)
+        (await _admin.PutAsJsonAsync(
+            $"/api/v1/teams/{slug}/channels/secret/visibility",
+            new SetChannelVisibilityRequest(ChannelVisibility.Everyone))).EnsureSuccessStatusCode();
+        (await _admin.PutAsJsonAsync(
+            $"/api/v1/teams/{slug}/channels/secret/visibility",
+            new SetChannelVisibilityRequest(ChannelVisibility.Restricted))).EnsureSuccessStatusCode();
         (await _admin.PostAsync($"/api/v1/teams/{slug}/channels/secret/archive", null)).EnsureSuccessStatusCode();
-        (await _admin.DeleteAsync($"/api/v1/teams/{slug}/channels/secret")).EnsureSuccessStatusCode();
+        (await _admin.PostAsJsonAsync(
+            $"/api/v1/teams/{slug}/channels/secret/delete",
+            new DeleteChannelRequest(DiscardFiles: true))).EnsureSuccessStatusCode();
 
         (await _admin.DeleteAsync($"/api/v1/teams/{slug}/members/{memberUser}")).EnsureSuccessStatusCode();
 
         // --- Chat: only the delete is audited (ChannelMessageDelete); posts are not ---
         (await _admin.PostAsJsonAsync(
             $"/api/v1/teams/{slug}/channels",
-            new CreateChannelRequest("chat", null, ChannelVisibility.Open, ChannelKind.Text))).EnsureSuccessStatusCode();
+            new CreateChannelRequest("chat", null, ChannelVisibility.Everyone, ChannelKind.Text))).EnsureSuccessStatusCode();
         var chatPost = await _admin.PostAsJsonAsync(
             $"/api/v1/teams/{slug}/channels/chat/messages",
             new Channeled.Application.Chat.PostMessageRequest("audit me"));
@@ -267,6 +301,22 @@ public class AdminCatalogAndImmutabilityTests : IClassFixture<AuthApiFactory>, I
         var csv = await _admin.GetAsync("/api/v1/admin/audit/export?format=csv");
         csv.EnsureSuccessStatusCode();
         (await csv.Content.ReadAsStringAsync()).Should().Contain("eventType");
+    }
+
+    private async Task CreateUserAsync(string email)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+        var user = new AppUser
+        {
+            Id = Channeled.Domain.Identity.UuidV7.NewGuid(),
+            Email = email,
+            UserName = email,
+            DisplayName = email,
+            EmailConfirmed = true,
+            Status = "active",
+        };
+        (await users.CreateAsync(user, "UserPassword1!")).Succeeded.Should().BeTrue();
     }
 
     private async Task<Guid> FindUserIdAsync(string email)

@@ -1,4 +1,5 @@
 using Channeled.Application.Abstractions.Realtime;
+using Channeled.Domain.Teams;
 using Channeled.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -133,6 +134,18 @@ public sealed class AuthStateChangedService(
 
         var membership = await db.TeamMembers.AsNoTracking()
             .FirstOrDefaultAsync(m => m.TeamId == channel.TeamId && m.UserId == userId, ct);
-        return membership is not null;
+        if (membership is null)
+        {
+            return false;
+        }
+
+        // Restricted channels: Admin+/Owner always see; everyone else needs a (possibly read-only) grant.
+        if (channel.Visibility == ChannelVisibility.Restricted && membership.Role < MemberRole.Admin)
+        {
+            return await db.ChannelMembers.AsNoTracking()
+                .AnyAsync(m => m.ChannelId == channelId && m.UserId == userId, ct);
+        }
+
+        return true;
     }
 }

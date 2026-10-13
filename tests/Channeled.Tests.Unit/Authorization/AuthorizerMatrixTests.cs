@@ -12,7 +12,7 @@ public class AuthorizerMatrixTests
     {
         foreach (MemberRole role in Enum.GetValues<MemberRole>())
         {
-            foreach (var visibility in new[] { ChannelVisibility.Open, ChannelVisibility.Private })
+            foreach (var visibility in new[] { ChannelVisibility.Everyone, ChannelVisibility.Restricted })
             {
                 foreach (AuthAction action in Enum.GetValues<AuthAction>())
                 {
@@ -27,7 +27,7 @@ public class AuthorizerMatrixTests
     public void Role_and_visibility_matrix(MemberRole role, ChannelVisibility visibility, AuthAction action, bool expectedAllow)
     {
         var isChannelMember = role is MemberRole.Member or MemberRole.Viewer;
-        // Private channel: non-admin needs membership; we model member/viewer as listed with write for Member
+        // Restricted channel: non-admin needs a grant; we model member/viewer as granted (ReadOnly=false => ChannelCanWrite)
         var ctx = new AuthorizationContext
         {
             UserId = Guid.NewGuid(),
@@ -36,15 +36,15 @@ public class AuthorizerMatrixTests
             TeamRole = role,
             ChannelExists = NeedsChannel(action),
             ChannelVisibility = visibility,
-            IsChannelMember = visibility == ChannelVisibility.Open || role >= MemberRole.Admin || isChannelMember,
+            IsChannelMember = visibility == ChannelVisibility.Everyone || role >= MemberRole.Admin || isChannelMember,
             ChannelCanWrite = role >= MemberRole.Member,
-            ChannelCanManage = role >= MemberRole.Member && visibility == ChannelVisibility.Private,
+            ChannelCanManage = false,
             IsFileOwner = true,
             IsMessageAuthor = true,
         };
 
         // For private + viewer/member without membership, force hidden for view/browse cases
-        if (visibility == ChannelVisibility.Private && role < MemberRole.Admin)
+        if (visibility == ChannelVisibility.Restricted && role < MemberRole.Admin)
         {
             // Explicit hidden variant covered by separate theory; matrix uses "listed" membership for member/viewer
         }
@@ -63,7 +63,7 @@ public class AuthorizerMatrixTests
             IsTeamMember = true,
             TeamRole = MemberRole.Member,
             ChannelExists = true,
-            ChannelVisibility = ChannelVisibility.Private,
+            ChannelVisibility = ChannelVisibility.Restricted,
             IsChannelMember = false,
         };
 
@@ -81,7 +81,7 @@ public class AuthorizerMatrixTests
             IsTeamMember = true,
             TeamRole = MemberRole.Viewer,
             ChannelExists = true,
-            ChannelVisibility = ChannelVisibility.Open,
+            ChannelVisibility = ChannelVisibility.Everyone,
             IsChannelMember = true,
             ChannelCanWrite = true,
         };
@@ -122,7 +122,7 @@ public class AuthorizerMatrixTests
     private static bool Expected(MemberRole role, ChannelVisibility visibility, AuthAction action)
     {
         // Matrix assumes channel membership for Member/Viewer on private channels when NeedsChannel
-        var channelVisible = visibility == ChannelVisibility.Open
+        var channelVisible = visibility == ChannelVisibility.Everyone
                              || role >= MemberRole.Admin
                              || role is MemberRole.Member or MemberRole.Viewer;
 
@@ -134,17 +134,19 @@ public class AuthorizerMatrixTests
             AuthAction.DeleteTeam => role == MemberRole.Owner,
             AuthAction.TransferOwnership => role == MemberRole.Owner,
             AuthAction.InviteMember => role >= MemberRole.Admin,
-            AuthAction.ChangeMemberRole => role >= MemberRole.Admin,
+            AuthAction.ChangeMemberRole => role == MemberRole.Owner,
             AuthAction.RemoveMember => role >= MemberRole.Admin,
+            AuthAction.LeaveTeam => true,
+            AuthAction.ChangeTeamJoinMode => role == MemberRole.Owner,
+            AuthAction.ManageTeamJoinLink => role >= MemberRole.Admin,
+            AuthAction.ApproveTeamJoinRequest => role >= MemberRole.Admin,
             AuthAction.CreateChannel => role >= MemberRole.Admin,
             AuthAction.ArchiveChannel => role >= MemberRole.Admin,
             AuthAction.DeleteChannel => role >= MemberRole.Admin,
             AuthAction.ViewChannel => channelVisible,
             AuthAction.BrowseFiles => channelVisible,
             AuthAction.DownloadFile => channelVisible,
-            AuthAction.ManageChannelMembership =>
-                role >= MemberRole.Admin
-                || (visibility == ChannelVisibility.Private && role >= MemberRole.Member),
+            AuthAction.ManageChannelMembership => role >= MemberRole.Admin,
             AuthAction.UploadFile => role >= MemberRole.Member && channelVisible,
             AuthAction.RenameOwnFile => role >= MemberRole.Member && channelVisible,
             AuthAction.DeleteOwnFile => role >= MemberRole.Member && channelVisible,

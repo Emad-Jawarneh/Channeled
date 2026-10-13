@@ -1,12 +1,13 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
-import { authApi, teamsApi } from "../../api/channeled";
+import { authApi } from "../../api/channeled";
 import { clearCsrf, ensureCsrf } from "../../api/http";
 import { ThemeToggle } from "../../theme/ThemeToggle";
 import { Button } from "../../ui/Button";
 import styles from "../login/LoginPage.module.css";
 
+/** Platform (new account) invitations only. Team email invitations were replaced by the team join link. */
 export function InvitePage() {
   const { token = "" } = useParams();
   const navigate = useNavigate();
@@ -14,23 +15,16 @@ export function InvitePage() {
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<"platform" | "team">("platform");
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     try {
-      if (mode === "platform") {
-        clearCsrf();
-        await authApi.acceptInvite(token, displayName, password);
-        await ensureCsrf();
-        await refresh();
-        navigate("/");
-      } else {
-        await teamsApi.acceptTeamInvite(token);
-        await refresh();
-        navigate("/");
-      }
+      clearCsrf();
+      await authApi.acceptInvite(token, displayName, password);
+      await ensureCsrf();
+      await refresh();
+      navigate("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Invite failed");
     }
@@ -44,36 +38,25 @@ export function InvitePage() {
           <ThemeToggle compact />
         </div>
         <label className={styles.label}>
-          Invite type
-          <select value={mode} onChange={(e) => setMode(e.target.value as "platform" | "team")}>
-            <option value="platform">New account</option>
-            <option value="team">Existing account · team invite</option>
-          </select>
+          Display name
+          <input
+            className={styles.input}
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            required
+          />
         </label>
-        {mode === "platform" && (
-          <>
-            <label className={styles.label}>
-              Display name
-              <input
-                className={styles.input}
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                required
-              />
-            </label>
-            <label className={styles.label}>
-              Password
-              <input
-                className={styles.input}
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={12}
-              />
-            </label>
-          </>
-        )}
+        <label className={styles.label}>
+          Password
+          <input
+            className={styles.input}
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            minLength={12}
+          />
+        </label>
         {error && <p className={styles.error}>{error}</p>}
         <Button type="submit" variant="primary">
           Accept

@@ -49,7 +49,7 @@ public class SearchAndQuotaTests : IClassFixture<AuthApiFactory>, IAsyncLifetime
         _slug = team!.Slug;
         (await _client.PostAsJsonAsync(
             $"/api/v1/teams/{_slug}/channels",
-            new CreateChannelRequest("general", null, ChannelVisibility.Open, ChannelKind.File))).EnsureSuccessStatusCode();
+            new CreateChannelRequest("general", null, ChannelVisibility.Everyone, ChannelKind.File))).EnsureSuccessStatusCode();
 
         await UploadAsync("alpha-report.pdf", "hello");
         await UploadAsync("beta-notes.txt", "world");

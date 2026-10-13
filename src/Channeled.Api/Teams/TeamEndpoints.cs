@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Channeled.Application.Identity;
+using Channeled.Application.Notifications;
 using Channeled.Application.Teams;
 using Channeled.Domain.Errors;
 
@@ -111,36 +112,15 @@ public static class TeamEndpoints
             return ToHttp(await teamsSvc.RemoveMemberAsync(userId, slug, memberUserId, Ctx(http), ct));
         });
 
-        teams.MapPost("/{slug}/invitations", async Task<IResult> (string slug, CreateTeamInvitationRequest body, ITeamService teamsSvc, ClaimsPrincipal principal, HttpContext http, CancellationToken ct) =>
-        {
-            if (!TryUser(principal, out var userId))
-            {
-                return Unauthorized();
-            }
+        // ---- Email invitations are retired in favour of the team join link: 410 Gone. ----
+        teams.MapPost("/{slug}/invitations", (string slug) =>
+            Gone("Email invitations were replaced by the team join link."));
 
-            return ToHttp(await teamsSvc.InviteAsync(userId, slug, body, Ctx(http), ct));
-        });
+        teams.MapPost("/invitations/accept", () =>
+            Gone("Email invitations were replaced by the team join link."));
 
-        teams.MapPost("/invitations/accept", async Task<IResult> (AcceptTeamInvitationRequest body, ITeamService teamsSvc, ClaimsPrincipal principal, HttpContext http, CancellationToken ct) =>
-        {
-            if (!TryUser(principal, out var userId))
-            {
-                return Unauthorized();
-            }
-
-            return ToHttp(await teamsSvc.AcceptInvitationAsync(userId, body, Ctx(http), ct));
-        });
-
-        teams.MapPost("/{slug}/invitations/{invitationId:guid}/revoke", async Task<IResult> (
-            string slug, Guid invitationId, ITeamService teamsSvc, ClaimsPrincipal principal, HttpContext http, CancellationToken ct) =>
-        {
-            if (!TryUser(principal, out var userId))
-            {
-                return Unauthorized();
-            }
-
-            return ToHttp(await teamsSvc.RevokeInvitationAsync(userId, slug, invitationId, Ctx(http), ct));
-        });
+        teams.MapPost("/{slug}/invitations/{invitationId:guid}/revoke", (string slug, Guid invitationId) =>
+            Gone("Email invitations were replaced by the team join link."));
 
         teams.MapPost("/{slug}/channels", async Task<IResult> (string slug, CreateChannelRequest body, ITeamService teamsSvc, ClaimsPrincipal principal, HttpContext http, CancellationToken ct) =>
         {
@@ -247,80 +227,193 @@ public static class TeamEndpoints
             return ToHttp(await teamsSvc.RemoveChannelMemberAsync(userId, slug, channelName, memberUserId, Ctx(http), ct));
         });
 
-        teams.MapGet("/{slug}/channels/{channelName}/join", async Task<IResult> (string slug, string channelName, ITeamService teamsSvc, ClaimsPrincipal principal, CancellationToken ct) =>
+        // ---- Per-channel join requests are retired (team-level join link + Restricted grants replace them): 410 Gone. ----
+        const string channelJoinGone = "Channel join requests were replaced by team join links and channel grants.";
+        teams.MapGet("/{slug}/channels/{channelName}/join", (string slug, string channelName) => Gone(channelJoinGone));
+        teams.MapPost("/{slug}/channels/{channelName}/join-requests", (string slug, string channelName) => Gone(channelJoinGone));
+        teams.MapGet("/{slug}/channels/{channelName}/join-requests", (string slug, string channelName) => Gone(channelJoinGone));
+        teams.MapPost("/{slug}/channels/{channelName}/join-requests/{requestId:guid}/approve", (string slug, string channelName, Guid requestId) => Gone(channelJoinGone));
+        teams.MapPost("/{slug}/channels/{channelName}/join-requests/{requestId:guid}/reject", (string slug, string channelName, Guid requestId) => Gone(channelJoinGone));
+
+        // ---- Channel visibility + bulk grants ----
+        teams.MapPut("/{slug}/channels/{channelName}/visibility", async Task<IResult> (
+            string slug, string channelName, SetChannelVisibilityRequest body, ITeamService teamsSvc, ClaimsPrincipal principal, HttpContext http, CancellationToken ct) =>
         {
             if (!TryUser(principal, out var userId))
             {
                 return Unauthorized();
             }
 
-            return ToHttp(await teamsSvc.GetChannelJoinInfoAsync(userId, slug, channelName, ct));
+            return ToHttp(await teamsSvc.SetChannelVisibilityAsync(userId, slug, channelName, body, Ctx(http), ct));
         });
 
-        teams.MapPost("/{slug}/channels/{channelName}/join-requests", async Task<IResult> (string slug, string channelName, ITeamService teamsSvc, ClaimsPrincipal principal, HttpContext http, CancellationToken ct) =>
+        teams.MapPut("/{slug}/channels/{channelName}/members/bulk", async Task<IResult> (
+            string slug, string channelName, BulkUpsertChannelMembersRequest body, ITeamService teamsSvc, ClaimsPrincipal principal, HttpContext http, CancellationToken ct) =>
         {
             if (!TryUser(principal, out var userId))
             {
                 return Unauthorized();
             }
 
-            return ToHttp(await teamsSvc.RequestChannelJoinAsync(userId, slug, channelName, Ctx(http), ct));
+            return ToHttp(await teamsSvc.BulkUpsertChannelMembersAsync(userId, slug, channelName, body, Ctx(http), ct));
         });
 
-        teams.MapGet("/{slug}/channels/{channelName}/join-requests", async Task<IResult> (string slug, string channelName, ITeamService teamsSvc, ClaimsPrincipal principal, CancellationToken ct) =>
+        // ---- Team settings (name/description Admin+, join mode + default role Owner) ----
+        teams.MapPut("/{slug}/settings", async Task<IResult> (
+            string slug, UpdateTeamSettingsRequest body, ITeamService teamsSvc, ClaimsPrincipal principal, HttpContext http, CancellationToken ct) =>
         {
             if (!TryUser(principal, out var userId))
             {
                 return Unauthorized();
             }
 
-            return ToHttp(await teamsSvc.ListChannelJoinRequestsAsync(userId, slug, channelName, ct));
+            return ToHttp(await teamsSvc.UpdateTeamSettingsAsync(userId, slug, body, Ctx(http), ct));
         });
 
-        teams.MapPost("/{slug}/channels/{channelName}/join-requests/{requestId:guid}/approve", async Task<IResult> (
-            string slug,
-            string channelName,
-            Guid requestId,
-            ApproveChannelJoinRequestRequest? body,
-            ITeamService teamsSvc,
-            ClaimsPrincipal principal,
-            HttpContext http,
-            CancellationToken ct) =>
+        teams.MapPost("/{slug}/leave", async Task<IResult> (
+            string slug, ITeamService teamsSvc, ClaimsPrincipal principal, HttpContext http, CancellationToken ct) =>
         {
             if (!TryUser(principal, out var userId))
             {
                 return Unauthorized();
             }
 
-            return ToHttp(await teamsSvc.ApproveChannelJoinRequestAsync(
-                userId,
-                slug,
-                channelName,
-                requestId,
-                body ?? new ApproveChannelJoinRequestRequest(),
-                Ctx(http),
-                ct));
+            return ToHttp(await teamsSvc.LeaveTeamAsync(userId, slug, Ctx(http), ct));
         });
 
-        teams.MapPost("/{slug}/channels/{channelName}/join-requests/{requestId:guid}/reject", async Task<IResult> (
-            string slug,
-            string channelName,
-            Guid requestId,
-            ITeamService teamsSvc,
-            ClaimsPrincipal principal,
-            HttpContext http,
-            CancellationToken ct) =>
+        // ---- Join link (Admin+). The raw token is a secret: never cache these responses. ----
+        teams.MapGet("/{slug}/join-link", async Task<IResult> (
+            string slug, ITeamService teamsSvc, ClaimsPrincipal principal, HttpContext http, CancellationToken ct) =>
         {
             if (!TryUser(principal, out var userId))
             {
                 return Unauthorized();
             }
 
-            return ToHttp(await teamsSvc.RejectChannelJoinRequestAsync(userId, slug, channelName, requestId, Ctx(http), ct));
+            NoStoreNoReferrer(http);
+            return ToHttp(await teamsSvc.GetJoinLinkAsync(userId, slug, ct));
         });
+
+        teams.MapPost("/{slug}/join-link", async Task<IResult> (
+            string slug, ITeamService teamsSvc, ClaimsPrincipal principal, HttpContext http, CancellationToken ct) =>
+        {
+            if (!TryUser(principal, out var userId))
+            {
+                return Unauthorized();
+            }
+
+            NoStoreNoReferrer(http);
+            return ToHttp(await teamsSvc.EnsureJoinLinkAsync(userId, slug, Ctx(http), ct));
+        });
+
+        teams.MapPost("/{slug}/join-link/rotate", async Task<IResult> (
+            string slug, RotateTeamJoinLinkRequest? body, ITeamService teamsSvc, ClaimsPrincipal principal, HttpContext http, CancellationToken ct) =>
+        {
+            if (!TryUser(principal, out var userId))
+            {
+                return Unauthorized();
+            }
+
+            NoStoreNoReferrer(http);
+            return ToHttp(await teamsSvc.RotateJoinLinkAsync(userId, slug, body ?? new RotateTeamJoinLinkRequest(null), Ctx(http), ct));
+        });
+
+        // ---- Join requests ----
+        teams.MapGet("/{slug}/join-requests", async Task<IResult> (
+            string slug, ITeamService teamsSvc, ClaimsPrincipal principal, CancellationToken ct) =>
+        {
+            if (!TryUser(principal, out var userId))
+            {
+                return Unauthorized();
+            }
+
+            return ToHttp(await teamsSvc.ListJoinRequestsAsync(userId, slug, ct));
+        });
+
+        teams.MapPost("/{slug}/join-requests/{requestId:guid}/approve", async Task<IResult> (
+            string slug, Guid requestId, ApproveTeamJoinRequestRequest? body, ITeamService teamsSvc, ClaimsPrincipal principal, HttpContext http, CancellationToken ct) =>
+        {
+            if (!TryUser(principal, out var userId))
+            {
+                return Unauthorized();
+            }
+
+            return ToHttp(await teamsSvc.ApproveJoinRequestAsync(userId, slug, requestId, body, Ctx(http), ct));
+        });
+
+        teams.MapPost("/{slug}/join-requests/{requestId:guid}/reject", async Task<IResult> (
+            string slug, Guid requestId, ITeamService teamsSvc, ClaimsPrincipal principal, HttpContext http, CancellationToken ct) =>
+        {
+            if (!TryUser(principal, out var userId))
+            {
+                return Unauthorized();
+            }
+
+            return ToHttp(await teamsSvc.RejectJoinRequestAsync(userId, slug, requestId, Ctx(http), ct));
+        });
+
+        // Requester withdraws their own request (no slug needed).
+        teams.MapPost("/join-requests/{requestId:guid}/withdraw", async Task<IResult> (
+            Guid requestId, ITeamService teamsSvc, ClaimsPrincipal principal, HttpContext http, CancellationToken ct) =>
+        {
+            if (!TryUser(principal, out var userId))
+            {
+                return Unauthorized();
+            }
+
+            return ToHttp(await teamsSvc.WithdrawJoinRequestAsync(userId, requestId, Ctx(http), ct));
+        });
+
+        teams.MapGet("/pending-join-count", async Task<IResult> (
+            INotificationService notifications, ClaimsPrincipal principal, CancellationToken ct) =>
+        {
+            if (!TryUser(principal, out var userId))
+            {
+                return Unauthorized();
+            }
+
+            return ToHttp(await notifications.GetPendingTeamJoinCountAsync(userId, ct));
+        });
+
+        // ---- Join by link token. GET is anonymous-friendly (name + mode only); POST requires a session. ----
+        // Both set Referrer-Policy: no-referrer so the token never leaks via Referer headers.
+        var join = app.MapGroup("/api/v1/teams/join")
+            .WithTags("TeamJoin")
+            .RequireRateLimiting(JoinRateLimitPolicy);
+
+        join.MapGet("/{token}", async Task<IResult> (
+            string token, ITeamService teamsSvc, ClaimsPrincipal principal, HttpContext http, CancellationToken ct) =>
+        {
+            NoStoreNoReferrer(http);
+            Guid? userId = TryUser(principal, out var id) ? id : null;
+            return ToHttp(await teamsSvc.GetJoinInfoAsync(userId, token, ct));
+        }).AllowAnonymous();
+
+        join.MapPost("/{token}", async Task<IResult> (
+            string token, ITeamService teamsSvc, ClaimsPrincipal principal, HttpContext http, CancellationToken ct) =>
+        {
+            NoStoreNoReferrer(http);
+            if (!TryUser(principal, out var userId))
+            {
+                return Unauthorized();
+            }
+
+            return ToHttp(await teamsSvc.JoinAsync(userId, token, Ctx(http), ct));
+        }).RequireAuthorization();
 
         return teams;
     }
+
+    public const string JoinRateLimitPolicy = "team-join";
+
+    private static void NoStoreNoReferrer(HttpContext http)
+    {
+        http.Response.Headers["Referrer-Policy"] = "no-referrer";
+        http.Response.Headers.CacheControl = "no-store";
+    }
+
+    private static IResult Gone(string detail) =>
+        Problem(ErrorCodes.Gone, detail, StatusCodes.Status410Gone);
 
     private static bool TryUser(ClaimsPrincipal principal, out Guid userId)
     {
@@ -351,6 +444,13 @@ public static class TeamEndpoints
         ErrorCodes.NotFound => StatusCodes.Status404NotFound,
         ErrorCodes.Conflict => StatusCodes.Status409Conflict,
         ErrorCodes.LockTimeout => StatusCodes.Status409Conflict,
+        ErrorCodes.OwnerMustTransfer => StatusCodes.Status409Conflict,
+        ErrorCodes.JoinLinkUnavailable => StatusCodes.Status409Conflict,
+        ErrorCodes.OpenJoinTooManyPending => StatusCodes.Status409Conflict,
+        ErrorCodes.JoinLinkInvalid => StatusCodes.Status404NotFound,
+        ErrorCodes.JoinCooldown => StatusCodes.Status429TooManyRequests,
+        ErrorCodes.JoinRateLimited => StatusCodes.Status429TooManyRequests,
+        ErrorCodes.Gone => StatusCodes.Status410Gone,
         ErrorCodes.InvalidToken => StatusCodes.Status400BadRequest,
         _ => StatusCodes.Status400BadRequest,
     };

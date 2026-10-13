@@ -48,4 +48,12 @@ public enum AuditEventType
     BackupRun = 60,
     BackupRestore = 61,
     ConfigChange = 70,
+    TeamJoinLinkRotated = 71,
+    TeamJoinModeChange = 72,
+    TeamJoinRequestCreate = 73,
+    TeamJoinRequestApprove = 74,
+    TeamJoinRequestReject = 75,
+    TeamJoinRequestWithdraw = 76,
+    ChannelVisibilityChange = 77,
+    MemberLeave = 78,
 }

@@ -7,7 +7,7 @@ import {
   MemberRole,
   teamsApi,
   type Channel,
-  type ChannelJoinRequest,
+  type TeamMember,
 } from "../../api/channeled";
 import { ApiError } from "../../api/http";
 import { AppShell } from "../../components/AppShell";
@@ -16,61 +16,150 @@ import styles from "../files/FileBrowser.module.css";
 import { validateChannelName } from "./channelName";
 import local from "./ChannelsSettingsPage.module.css";
 import { useUploads } from "../../uploads/UploadContext";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { DeleteChannelDialog, type DeleteChannelDisposition } from "./DeleteChannelDialog";
 
-function JoinRequests({ teamSlug, channel }: { teamSlug: string; channel: Channel }) {
+/** Grants for a Restricted channel: per-member ReadOnly toggle, remove, and bulk add. */
+function RestrictedGrants({
+  teamSlug,
+  channel,
+  teamMembers,
+  onError,
+}: {
+  teamSlug: string;
+  channel: Channel;
+  teamMembers: TeamMember[];
+  onError: (message: string | null) => void;
+}) {
   const qc = useQueryClient();
-  const requests = useQuery({
-    queryKey: ["join-requests", teamSlug, channel.name],
-    queryFn: () => teamsApi.listChannelJoinRequests(teamSlug, channel.name),
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [bulkReadOnly, setBulkReadOnly] = useState(false);
+  const key = ["channel-members", teamSlug, channel.name] as const;
+
+  const grants = useQuery({
+    queryKey: key,
+    queryFn: () => teamsApi.channelMembers(teamSlug, channel.name),
   });
 
-  const decide = useMutation({
-    mutationFn: async ({ id, action }: { id: string; action: "approve" | "reject" }) => {
-      if (action === "approve") {
-        await teamsApi.approveChannelJoin(teamSlug, channel.name, id);
-      } else {
-        await teamsApi.rejectChannelJoin(teamSlug, channel.name, id);
-      }
+  const fail = (e: unknown) => onError(e instanceof Error ? e.message : "Could not update access.");
+  const refresh = () => void qc.invalidateQueries({ queryKey: key });
+
+  const setReadOnly = useMutation({
+    mutationFn: ({ userId, readOnly }: { userId: string; readOnly: boolean }) =>
+      teamsApi.upsertChannelMember(teamSlug, channel.name, userId, readOnly),
+    onSuccess: () => onError(null),
+    onError: fail,
+    onSettled: refresh,
+  });
+  const revoke = useMutation({
+    mutationFn: (userId: string) => teamsApi.removeChannelMember(teamSlug, channel.name, userId),
+    onSuccess: () => onError(null),
+    onError: fail,
+    onSettled: refresh,
+  });
+  const bulkAdd = useMutation({
+    mutationFn: () =>
+      teamsApi.bulkUpsertChannelMembers(
+        teamSlug,
+        channel.name,
+        [...picked].map((userId) => ({ userId, readOnly: bulkReadOnly })),
+      ),
+    onSuccess: () => {
+      setPicked(new Set());
+      onError(null);
     },
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["join-requests", teamSlug, channel.name] }),
+    onError: fail,
+    onSettled: refresh,
   });
 
-  const items = (requests.data ?? []) as ChannelJoinRequest[];
+  const granted = grants.data ?? [];
+  const grantedIds = new Set(granted.map((g) => g.userId));
+  // Admins and owners always see every channel, so they never need a grant.
+  const candidates = teamMembers.filter((m) => !grantedIds.has(m.userId) && m.role < MemberRole.Admin);
+  const busy = setReadOnly.isPending || revoke.isPending || bulkAdd.isPending;
 
   return (
-    <div className={local.joinBlock} data-testid={`join-requests-${channel.name}`}>
-      <p className={local.label}>Pending join requests</p>
-      {requests.isLoading && <p>Loading…</p>}
-      {!requests.isLoading && items.length === 0 && <p className={local.muted}>No pending requests.</p>}
+    <div className={local.joinBlock} data-testid={`grants-${channel.name}`}>
+      <p className={local.label}>Who can access this channel</p>
+      {grants.isLoading && <p className={local.muted}>Loading…</p>}
+      {grants.isSuccess && granted.length === 0 && (
+        <p className={local.muted}>No members granted yet. Team admins always have access.</p>
+      )}
       <ul className={local.requestList}>
-        {items.map((r) => (
-          <li key={r.id} data-testid={`join-request-${r.email}`}>
+        {granted.map((g) => (
+          <li key={g.userId} data-testid={`grant-row-${channel.name}-${g.email}`}>
             <span>
-              {r.displayName} ({r.email})
+              {g.displayName} ({g.email})
             </span>
             <span className={local.requestActions}>
+              <label>
+                <input
+                  type="checkbox"
+                  data-testid={`grant-readonly-${channel.name}-${g.email}`}
+                  checked={g.readOnly}
+                  disabled={busy}
+                  onChange={(e) =>
+                    void setReadOnly.mutateAsync({ userId: g.userId, readOnly: e.target.checked })
+                  }
+                />{" "}
+                Read-only
+              </label>
               <Button
                 type="button"
-                variant="primary"
-                data-testid={`approve-join-${r.email}`}
-                disabled={decide.isPending}
-                onClick={() => void decide.mutateAsync({ id: r.id, action: "approve" })}
+                data-testid={`grant-remove-${channel.name}-${g.email}`}
+                disabled={busy}
+                onClick={() => void revoke.mutateAsync(g.userId)}
               >
-                Approve
-              </Button>
-              <Button
-                type="button"
-                data-testid={`reject-join-${r.email}`}
-                disabled={decide.isPending}
-                onClick={() => void decide.mutateAsync({ id: r.id, action: "reject" })}
-              >
-                Reject
+                Remove
               </Button>
             </span>
           </li>
         ))}
       </ul>
+
+      {candidates.length > 0 && (
+        <fieldset className={local.editForm} data-testid={`grant-add-${channel.name}`}>
+          <legend className={local.label}>Add members</legend>
+          {candidates.map((m) => (
+            <label key={m.userId}>
+              <input
+                type="checkbox"
+                data-testid={`grant-pick-${channel.name}-${m.email}`}
+                checked={picked.has(m.userId)}
+                onChange={(e) =>
+                  setPicked((prev) => {
+                    const next = new Set(prev);
+                    if (e.target.checked) next.add(m.userId);
+                    else next.delete(m.userId);
+                    return next;
+                  })
+                }
+              />{" "}
+              {m.displayName} ({m.email})
+            </label>
+          ))}
+          <label>
+            <input
+              type="checkbox"
+              data-testid={`grant-bulk-readonly-${channel.name}`}
+              checked={bulkReadOnly}
+              onChange={(e) => setBulkReadOnly(e.target.checked)}
+            />{" "}
+            Read-only
+          </label>
+          <span className={local.itemActions}>
+            <Button
+              type="button"
+              variant="primary"
+              data-testid={`grant-add-submit-${channel.name}`}
+              disabled={busy || picked.size === 0}
+              onClick={() => void bulkAdd.mutateAsync()}
+            >
+              Add selected{picked.size > 0 ? ` (${picked.size})` : ""}
+            </Button>
+          </span>
+        </fieldset>
+      )}
     </div>
   );
 }
@@ -81,9 +170,12 @@ export function ChannelsSettingsPage({ teamSlug }: { teamSlug: string }) {
   const params = useParams();
   const uploads = useUploads();
   const [name, setName] = useState("");
-  const [visibility, setVisibility] = useState<number>(ChannelVisibility.Open);
+  const [visibility, setVisibility] = useState<number>(ChannelVisibility.Everyone);
   const [kind, setKind] = useState<number>(ChannelKind.File);
-  const [copied, setCopied] = useState<string | null>(null);
+  const [visTarget, setVisTarget] = useState<{ channel: Channel; to: number } | null>(null);
+  const [visBusy, setVisBusy] = useState(false);
+  const [visError, setVisError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
@@ -125,15 +217,32 @@ export function ChannelsSettingsPage({ teamSlug }: { teamSlug: string }) {
     },
   });
 
-  function joinUrl(channelName: string) {
-    return `${window.location.origin}/join/${teamSlug}/${channelName}`;
-  }
-
-  async function copyJoinLink(channelName: string) {
-    const url = joinUrl(channelName);
-    await navigator.clipboard.writeText(url);
-    setCopied(channelName);
-    window.setTimeout(() => setCopied((c) => (c === channelName ? null : c)), 2000);
+  async function applyVisibility() {
+    if (!visTarget || visBusy) return;
+    const { channel: ch, to } = visTarget;
+    setVisBusy(true);
+    setVisError(null);
+    try {
+      const result = await teamsApi.setChannelVisibility(teamSlug, ch.name, { visibility: to });
+      setVisTarget(null);
+      setActionError(null);
+      setNotice(
+        to === ChannelVisibility.Restricted
+          ? `#${ch.name} is now Restricted. ${result.membersLosingAccess} member${
+              result.membersLosingAccess === 1 ? "" : "s"
+            } lost access; ${result.shareLinksRevoked} public share link${
+              result.shareLinksRevoked === 1 ? "" : "s"
+            } revoked.`
+          : `#${ch.name} is now visible to everyone on the team.`,
+      );
+      await qc.invalidateQueries({ queryKey: ["channels", teamSlug] });
+      void qc.invalidateQueries({ queryKey: ["channel-members", teamSlug, ch.name] });
+      void qc.invalidateQueries({ queryKey: ["items", teamSlug, ch.name] });
+    } catch (e) {
+      setVisError(e instanceof Error ? e.message : "Could not change visibility.");
+    } finally {
+      setVisBusy(false);
+    }
   }
 
   function startEdit(ch: Channel) {
@@ -169,7 +278,7 @@ export function ChannelsSettingsPage({ teamSlug }: { teamSlug: string }) {
       await qc.invalidateQueries({ queryKey: ["channels", teamSlug] });
       if (nameChanged) {
         void qc.removeQueries({ queryKey: ["items", teamSlug, ch.name] });
-        void qc.removeQueries({ queryKey: ["join-requests", teamSlug, ch.name] });
+        void qc.removeQueries({ queryKey: ["channel-members", teamSlug, ch.name] });
         void qc.removeQueries({ queryKey: ["messages", teamSlug, ch.name] });
         if (params.channel === ch.name) {
           void navigate(`/t/${teamSlug}/c/${updated.name}`, { replace: true });
@@ -204,7 +313,7 @@ export function ChannelsSettingsPage({ teamSlug }: { teamSlug: string }) {
       await teamsApi.deleteChannel(teamSlug, ch.name, body);
       uploads.clearChannel(teamSlug, ch.name);
       void qc.removeQueries({ queryKey: ["items", teamSlug, ch.name] });
-      void qc.removeQueries({ queryKey: ["join-requests", teamSlug, ch.name] });
+      void qc.removeQueries({ queryKey: ["channel-members", teamSlug, ch.name] });
       void qc.removeQueries({ queryKey: ["messages", teamSlug, ch.name] });
       await qc.invalidateQueries({ queryKey: ["channels", teamSlug] });
       setDeleting(null);
@@ -265,6 +374,12 @@ export function ChannelsSettingsPage({ teamSlug }: { teamSlug: string }) {
         </p>
       )}
 
+      {notice && (
+        <p className={local.muted} role="status" data-testid="channels-notice">
+          {notice}
+        </p>
+      )}
+
       {canManage && (
         <form
           className={styles.toolbar}
@@ -291,8 +406,8 @@ export function ChannelsSettingsPage({ teamSlug }: { teamSlug: string }) {
               value={visibility}
               onChange={(e) => setVisibility(Number(e.target.value))}
             >
-              <option value={ChannelVisibility.Open}>Open</option>
-              <option value={ChannelVisibility.Private}>Private</option>
+              <option value={ChannelVisibility.Everyone}>Everyone</option>
+              <option value={ChannelVisibility.Restricted}>Restricted</option>
             </select>
           </label>
           <Button type="submit" variant="primary" data-testid="create-channel">
@@ -309,14 +424,30 @@ export function ChannelsSettingsPage({ teamSlug }: { teamSlug: string }) {
               <span className={local.kindPill}>
                 {(ch.kind ?? ChannelKind.File) === ChannelKind.Text ? "text" : "file"}
               </span>
-              <span className={local.muted}>
-                {ch.visibility === ChannelVisibility.Private ? "private" : "open"}
+              <span className={local.muted} data-testid={`visibility-label-${ch.name}`}>
+                {ch.visibility === ChannelVisibility.Restricted ? "Restricted" : "Everyone"}
               </span>
               {ch.archivedAt && <span className={local.muted}>archived</span>}
               {canManage && editingId !== ch.id && (
                 <span className={local.itemActions}>
                   <Button type="button" data-testid={`edit-channel-${ch.name}`} onClick={() => startEdit(ch)}>
                     Edit
+                  </Button>
+                  <Button
+                    type="button"
+                    data-testid={`change-visibility-${ch.name}`}
+                    onClick={() => {
+                      setVisError(null);
+                      setVisTarget({
+                        channel: ch,
+                        to:
+                          ch.visibility === ChannelVisibility.Restricted
+                            ? ChannelVisibility.Everyone
+                            : ChannelVisibility.Restricted,
+                      });
+                    }}
+                  >
+                    {ch.visibility === ChannelVisibility.Restricted ? "Make Everyone" : "Make Restricted"}
                   </Button>
                   <Button
                     type="button"
@@ -356,7 +487,8 @@ export function ChannelsSettingsPage({ teamSlug }: { teamSlug: string }) {
                 </label>
                 <p className={local.muted}>
                   Type: {(ch.kind ?? ChannelKind.File) === ChannelKind.Text ? "text" : "file"} (read-only) · Visibility:{" "}
-                  {ch.visibility === ChannelVisibility.Private ? "private" : "open"} (read-only)
+                  {ch.visibility === ChannelVisibility.Restricted ? "Restricted" : "Everyone"} (use Make
+                  Restricted / Make Everyone to change)
                 </p>
                 {editError && (
                   <p className={local.error} role="alert" aria-live="assertive" data-testid={`edit-channel-error-${ch.name}`}>
@@ -379,48 +511,48 @@ export function ChannelsSettingsPage({ teamSlug }: { teamSlug: string }) {
               </div>
             )}
 
-            <div className={local.joinLink} data-testid={`join-link-${ch.name}`}>
-              <p className={local.label}>Public join link</p>
-              <code data-testid={`join-url-${ch.name}`}>{joinUrl(ch.name)}</code>
-              <Button type="button" data-testid={`copy-join-${ch.name}`} onClick={() => void copyJoinLink(ch.name)}>
-                {copied === ch.name ? "Copied" : "Copy link"}
-              </Button>
-              <p className={local.muted}>
-                Anyone with this link who is on the team can request access
-                {ch.visibility === ChannelVisibility.Private
-                  ? "; channel admins approve or reject."
-                  : " (open channels already include all team members)."}
-              </p>
-            </div>
-
-            {ch.visibility === ChannelVisibility.Private && (
-              <>
-                <div>
-                  Grant access:
-                  <select
-                    data-testid={`grant-${ch.name}`}
-                    defaultValue=""
-                    onChange={(e) => {
-                      const userId = e.target.value;
-                      if (!userId) return;
-                      void teamsApi.upsertChannelMember(teamSlug, ch.name, userId, true, false);
-                      e.target.value = "";
-                    }}
-                  >
-                    <option value="">Select member</option>
-                    {(members.data ?? []).map((m) => (
-                      <option key={m.userId} value={m.userId}>
-                        {m.email}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <JoinRequests teamSlug={teamSlug} channel={ch} />
-              </>
+            {ch.visibility === ChannelVisibility.Restricted && canManage && (
+              <RestrictedGrants
+                teamSlug={teamSlug}
+                channel={ch}
+                teamMembers={members.data ?? []}
+                onError={setActionError}
+              />
             )}
           </li>
         ))}
       </ul>
+
+      <ConfirmDialog
+        open={visTarget !== null}
+        title={
+          visTarget?.to === ChannelVisibility.Restricted
+            ? `Restrict #${visTarget.channel.name}?`
+            : `Make #${visTarget?.channel.name ?? ""} visible to everyone?`
+        }
+        confirmLabel={visTarget?.to === ChannelVisibility.Restricted ? "Make Restricted" : "Make Everyone"}
+        busy={visBusy}
+        error={visError}
+        testId="visibility-dialog"
+        onClose={() => {
+          if (visBusy) return;
+          setVisTarget(null);
+          setVisError(null);
+        }}
+        onConfirm={() => void applyVisibility()}
+      >
+        {visTarget?.to === ChannelVisibility.Restricted ? (
+          <p>
+            Members without a grant will lose access. Public share links from those members will be revoked.
+            Team admins keep access.
+          </p>
+        ) : (
+          <p>
+            Every team member will be able to see this channel. Existing grants are kept but have no effect while
+            the channel is visible to everyone.
+          </p>
+        )}
+      </ConfirmDialog>
 
       <DeleteChannelDialog
         open={deleting != null}

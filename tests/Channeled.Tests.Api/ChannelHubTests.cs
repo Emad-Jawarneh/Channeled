@@ -69,7 +69,7 @@ public class ChannelHubTests : IClassFixture<AuthApiFactory>, IAsyncLifetime
             .Content.ReadFromJsonAsync<TeamDto>();
         (await ownerClient.PostAsJsonAsync(
             $"/api/v1/teams/{team!.Slug}/channels",
-            new CreateChannelRequest("general", null, ChannelVisibility.Open, ChannelKind.File))).EnsureSuccessStatusCode();
+            new CreateChannelRequest("general", null, ChannelVisibility.Everyone, ChannelKind.File))).EnsureSuccessStatusCode();
 
         var channels = await (await ownerClient.GetAsync($"/api/v1/teams/{team.Slug}/channels"))
             .Content.ReadFromJsonAsync<ChannelDto[]>();

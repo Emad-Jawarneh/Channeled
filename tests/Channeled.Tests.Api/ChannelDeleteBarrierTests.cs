@@ -46,7 +46,7 @@ public class ChannelDeleteBarrierTests : IClassFixture<AuthApiFactory>, IAsyncLi
 
         (await _owner.PostAsJsonAsync(
             $"/api/v1/teams/{_slug}/channels",
-            new CreateChannelRequest("general", null, ChannelVisibility.Open, ChannelKind.File))).EnsureSuccessStatusCode();
+            new CreateChannelRequest("general", null, ChannelVisibility.Everyone, ChannelKind.File))).EnsureSuccessStatusCode();
     }
 
     public Task DisposeAsync()
@@ -61,7 +61,7 @@ public class ChannelDeleteBarrierTests : IClassFixture<AuthApiFactory>, IAsyncLi
     {
         (await _owner.PostAsJsonAsync(
             $"/api/v1/teams/{_slug}/channels",
-            new CreateChannelRequest("race", null, ChannelVisibility.Open, ChannelKind.File))).EnsureSuccessStatusCode();
+            new CreateChannelRequest("race", null, ChannelVisibility.Everyone, ChannelKind.File))).EnsureSuccessStatusCode();
 
         var deleteHolding = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var writerReady = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -114,7 +114,7 @@ public class ChannelDeleteBarrierTests : IClassFixture<AuthApiFactory>, IAsyncLi
     {
         (await _owner.PostAsJsonAsync(
             $"/api/v1/teams/{_slug}/channels",
-            new CreateChannelRequest("rename-me", null, ChannelVisibility.Open, ChannelKind.File))).EnsureSuccessStatusCode();
+            new CreateChannelRequest("rename-me", null, ChannelVisibility.Everyone, ChannelKind.File))).EnsureSuccessStatusCode();
 
         (await _owner.PostAsJsonAsync(
             $"/api/v1/teams/{_slug}/channels/rename-me/delete",
@@ -131,7 +131,7 @@ public class ChannelDeleteBarrierTests : IClassFixture<AuthApiFactory>, IAsyncLi
     {
         (await _owner.PostAsJsonAsync(
             $"/api/v1/teams/{_slug}/channels",
-            new CreateChannelRequest("chatty", null, ChannelVisibility.Open, ChannelKind.Text))).EnsureSuccessStatusCode();
+            new CreateChannelRequest("chatty", null, ChannelVisibility.Everyone, ChannelKind.Text))).EnsureSuccessStatusCode();
 
         await using (var scope = _factory.Services.CreateAsyncScope())
         {
@@ -168,10 +168,10 @@ public class ChannelDeleteBarrierTests : IClassFixture<AuthApiFactory>, IAsyncLi
     {
         (await _owner.PostAsJsonAsync(
             $"/api/v1/teams/{_slug}/channels",
-            new CreateChannelRequest("left", null, ChannelVisibility.Open, ChannelKind.File))).EnsureSuccessStatusCode();
+            new CreateChannelRequest("left", null, ChannelVisibility.Everyone, ChannelKind.File))).EnsureSuccessStatusCode();
         (await _owner.PostAsJsonAsync(
             $"/api/v1/teams/{_slug}/channels",
-            new CreateChannelRequest("right", null, ChannelVisibility.Open, ChannelKind.File))).EnsureSuccessStatusCode();
+            new CreateChannelRequest("right", null, ChannelVisibility.Everyone, ChannelKind.File))).EnsureSuccessStatusCode();
 
         var a = _owner.PostAsJsonAsync(
             $"/api/v1/teams/{_slug}/channels/left/delete",

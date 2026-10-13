@@ -4,7 +4,7 @@ import { E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD, apiLogin, uiLogin } from "./helper
 
 test.describe.configure({ mode: "serial" });
 
-test("sign in, upload, rename, move, trash, restore, invite, role, private, copy, audit + axe", async ({
+test("sign in, upload, rename, move, trash, restore, join link, role, restricted, copy, audit + axe", async ({
   page,
   request,
 }) => {
@@ -81,7 +81,7 @@ test("sign in, upload, rename, move, trash, restore, invite, role, private, copy
   await page.getByTestId("open-folder-Docs").click();
   await expect(page.getByTestId(`row-${renamed}`)).toBeVisible({ timeout: 30_000 });
 
-  // --- Invite + accept (platform invite for new user, then team invite) ---
+  // --- Platform invite for a new user, then team join link ---
   const inviteEmail = `e2e-member-${Date.now()}@example.com`;
   const inviteResp = await request.post("/api/v1/auth/invitations", {
     headers: { "X-CSRF-TOKEN": csrf, "Content-Type": "application/json" },
@@ -91,42 +91,46 @@ test("sign in, upload, rename, move, trash, restore, invite, role, private, copy
   const platformInvite = (await inviteResp.json()) as { rawToken: string };
 
   await page.goto(`/invite/${platformInvite.rawToken}`);
-  await page.locator("select").selectOption("platform");
   await page.getByLabel("Display name").fill("E2E Member");
   await page.getByLabel("Password").fill("E2eMemberPassword1!");
   await page.getByRole("button", { name: "Accept" }).click();
   await expect(page.getByTestId("current-user")).toBeVisible();
 
-  // Admin invites member to team
-  await uiLogin(page, E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD);
-  await page.goto(`/t/${teamSlug}/settings/members`);
-  await page.getByTestId("invite-email").fill(inviteEmail);
-  await page.getByTestId("invite-submit").click();
-  await expect(page.getByTestId("invite-token")).toBeVisible();
-  const tokenText = await page.getByTestId("invite-token").innerText();
-  const teamToken = tokenText.match(/Invite token:\s*(\S+)/)?.[1];
-  expect(teamToken).toBeTruthy();
+  // Owner switches the team to Open join (default role Member) and fetches the team join link
+  const settingsResp = await request.put(`/api/v1/teams/${teamSlug}/settings`, {
+    headers: { "X-CSRF-TOKEN": csrf, "Content-Type": "application/json" },
+    data: { joinMode: 0, defaultJoinRole: 1, confirmOpenJoinApprovePending: true },
+  });
+  expect(settingsResp.ok()).toBeTruthy();
+  const linkResp = await request.post(`/api/v1/teams/${teamSlug}/join-link`, {
+    headers: { "X-CSRF-TOKEN": csrf },
+  });
+  expect(linkResp.ok()).toBeTruthy();
+  const joinLink = (await linkResp.json()) as { joinPath: string };
 
+  // New user joins through the link
   await uiLogin(page, inviteEmail, "E2eMemberPassword1!");
-  await page.goto(`/invite/${teamToken}`);
-  await page.locator("select").selectOption("team");
-  await page.getByRole("button", { name: "Accept" }).click();
-  await expect(page.getByTestId("current-user")).toBeVisible();
+  await page.goto(joinLink.joinPath);
+  await page.getByTestId("join-team").click();
+  await expect(page).toHaveURL(/\/t\/.+\/c\/general/);
 
-  // --- Role change ---
+  // --- Role change (Owner only) ---
   await uiLogin(page, E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD);
   await page.goto(`/t/${teamSlug}/settings/members`);
   await page.getByTestId(`role-${inviteEmail}`).selectOption({ label: "Admin" });
   await expect(page.getByTestId(`role-${inviteEmail}`)).toHaveValue("2");
+  // Admins see every channel, so go back to Member before testing Restricted access.
+  await page.getByTestId(`role-${inviteEmail}`).selectOption({ label: "Member" });
+  await expect(page.getByTestId(`role-${inviteEmail}`)).toHaveValue("1");
 
-  // --- Private channel access ---
+  // --- Restricted channel access ---
   await page.goto(`/t/${teamSlug}/settings/channels`);
   await page.getByTestId("channel-name").fill("secret");
-  await page.getByTestId("channel-visibility").selectOption({ label: "Private" });
+  await page.getByTestId("channel-visibility").selectOption({ label: "Restricted" });
   await page.getByTestId("create-channel").click();
   await expect(page.getByTestId("settings-channel-secret")).toBeVisible();
 
-  // Member without grant: channel list should hide private (or items 404)
+  // Member without grant: channel list should hide the restricted channel
   await uiLogin(page, inviteEmail, "E2eMemberPassword1!");
   await page.goto(`/t/${teamSlug}/c/general`);
   await expect(page.getByTestId("channel-secret")).toHaveCount(0);
@@ -134,7 +138,9 @@ test("sign in, upload, rename, move, trash, restore, invite, role, private, copy
   // Grant access then visible
   await uiLogin(page, E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD);
   await page.goto(`/t/${teamSlug}/settings/channels`);
-  await page.getByTestId("grant-secret").selectOption({ label: inviteEmail });
+  await page.getByTestId(`grant-pick-secret-${inviteEmail}`).check();
+  await page.getByTestId("grant-add-submit-secret").click();
+  await expect(page.getByTestId(`grant-row-secret-${inviteEmail}`)).toBeVisible();
   await uiLogin(page, inviteEmail, "E2eMemberPassword1!");
   await page.goto(`/t/${teamSlug}/c/secret`);
   await expect(page.getByTestId("file-table")).toBeVisible();

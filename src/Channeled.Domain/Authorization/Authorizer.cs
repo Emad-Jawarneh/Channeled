@@ -38,8 +38,12 @@ public sealed class Authorizer : IAuthorizer
             AuthAction.DeleteTeam => AllowIf(role == MemberRole.Owner, "owner_required"),
             AuthAction.TransferOwnership => AllowIf(role == MemberRole.Owner, "owner_required"),
             AuthAction.InviteMember => AllowIf(role >= MemberRole.Admin, "role_insufficient"),
-            AuthAction.ChangeMemberRole => AllowIf(role >= MemberRole.Admin, "role_insufficient"),
+            AuthAction.ChangeMemberRole => AllowIf(role == MemberRole.Owner, "owner_required"),
             AuthAction.RemoveMember => AllowIf(role >= MemberRole.Admin, "role_insufficient"),
+            AuthAction.LeaveTeam => AuthorizationDecision.Allow(),
+            AuthAction.ChangeTeamJoinMode => AllowIf(role == MemberRole.Owner, "owner_required"),
+            AuthAction.ManageTeamJoinLink => AllowIf(role >= MemberRole.Admin, "role_insufficient"),
+            AuthAction.ApproveTeamJoinRequest => AllowIf(role >= MemberRole.Admin, "role_insufficient"),
             AuthAction.CreateChannel => AllowIf(role >= MemberRole.Admin, "role_insufficient"),
             AuthAction.ArchiveChannel => AllowIf(role >= MemberRole.Admin, "role_insufficient"),
             AuthAction.DeleteChannel => AllowIf(role >= MemberRole.Admin, "role_insufficient"),
@@ -68,7 +72,7 @@ public sealed class Authorizer : IAuthorizer
 
         var role = context.TeamRole!.Value;
 
-        if (context.ChannelVisibility == ChannelVisibility.Open)
+        if (context.ChannelVisibility == ChannelVisibility.Everyone)
         {
             if (writeRequired && role == MemberRole.Viewer)
             {
@@ -78,7 +82,7 @@ public sealed class Authorizer : IAuthorizer
             return AuthorizationDecision.Allow();
         }
 
-        // Private: Owners/Admins always see; others need channel membership
+        // Restricted: Owners/Admins always see; others need a channel grant (ChannelCanWrite means !ReadOnly)
         if (role >= MemberRole.Admin)
         {
             return AuthorizationDecision.Allow();
@@ -112,16 +116,9 @@ public sealed class Authorizer : IAuthorizer
             return AuthorizationDecision.Deny("channel_not_found");
         }
 
+        // Admin+ only; per-grant CanManage no longer exists.
         var role = context.TeamRole!.Value;
         if (role >= MemberRole.Admin)
-        {
-            return AuthorizationDecision.Allow();
-        }
-
-        if (context.ChannelVisibility == ChannelVisibility.Private
-            && context.IsChannelMember
-            && context.ChannelCanManage
-            && role >= MemberRole.Member)
         {
             return AuthorizationDecision.Allow();
         }

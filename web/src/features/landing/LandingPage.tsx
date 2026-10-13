@@ -23,7 +23,7 @@ const features = [
   {
     id: "channels",
     title: "Teams and channels",
-    body: "Organize work by team, then by channel. Open channels for everyone on the team; private channels for the people who need them.",
+    body: "Organize work by team, then by channel. Everyone channels for the whole team; Restricted channels for the people who need them.",
     Icon: ChannelsIcon,
   },
   {

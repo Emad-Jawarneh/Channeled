@@ -41,6 +41,20 @@ public static class NotificationEndpoints
             return ToHttp(await notifications.UnreadCountAsync(userId, ct));
         });
 
+        // Admin+ only get a non-zero value; everyone else sees 0.
+        group.MapGet("/pending-join-count", async Task<IResult> (
+            INotificationService notifications,
+            ClaimsPrincipal principal,
+            CancellationToken ct) =>
+        {
+            if (!TryUser(principal, out var userId))
+            {
+                return Unauthorized();
+            }
+
+            return ToHttp(await notifications.GetPendingTeamJoinCountAsync(userId, ct));
+        });
+
         group.MapPost("/{id:guid}/read", async Task<IResult> (
             Guid id,
             INotificationService notifications,

@@ -392,7 +392,7 @@ export function TextChannelPage({ teamSlug, channelName }: Props) {
           <div>
             <h2 className={local.chatTitle}>#{channelName}</h2>
             <p className={local.chatMeta}>
-              {channel?.visibility === ChannelVisibility.Private ? "Private" : "Open"} text channel
+              {channel?.visibility === ChannelVisibility.Restricted ? "Restricted" : "Everyone"} text channel
               {channel?.description?.trim() ? ` · ${channel.description}` : ""}
             </p>
           </div>

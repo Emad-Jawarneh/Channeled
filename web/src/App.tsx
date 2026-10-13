@@ -8,7 +8,8 @@ import { PersonalFilesPage } from "./features/personal/PersonalFilesPage";
 import { SearchPage } from "./features/search/SearchPage";
 import { MembersPage } from "./features/teams/MembersPage";
 import { ChannelsSettingsPage } from "./features/teams/ChannelsSettingsPage";
-import { JoinChannelPage } from "./features/teams/JoinChannelPage";
+import { JoinTeamPage } from "./features/teams/JoinTeamPage";
+import { TeamGeneralSettingsPage } from "./features/teams/TeamGeneralSettingsPage";
 import { TextChannelPage } from "./features/teams/TextChannelPage";
 import { ChannelKind, teamsApi } from "./api/channeled";
 import {
@@ -51,6 +52,11 @@ function ChannelRoute({ trash = false }: { trash?: boolean }) {
 function MembersRoute() {
   const { team = "" } = useParams();
   return <MembersPage teamSlug={team} />;
+}
+
+function GeneralRoute() {
+  const { team = "" } = useParams();
+  return <TeamGeneralSettingsPage teamSlug={team} />;
 }
 
 function ChannelsRoute() {
@@ -127,14 +133,8 @@ export function App() {
       <Route path="/invite/:token" element={<InvitePage />} />
       <Route path="/reset/:token" element={<ResetPage />} />
       <Route path="/s/:token" element={<SharePage />} />
-      <Route
-        path="/join/:team/:channel"
-        element={
-          <RequireAuth>
-            <JoinChannelPage />
-          </RequireAuth>
-        }
-      />
+      {/* Public: join info is anonymous-friendly; the page itself sends signed-out users to sign in. */}
+      <Route path="/join/:token" element={<JoinTeamPage />} />
       <Route
         path="/me/files"
         element={
@@ -231,9 +231,7 @@ export function App() {
         path="/t/:team/settings/general"
         element={
           <RequireAuth>
-            <AppShell title="General">
-              <p>Team general settings.</p>
-            </AppShell>
+            <GeneralRoute />
           </RequireAuth>
         }
       />

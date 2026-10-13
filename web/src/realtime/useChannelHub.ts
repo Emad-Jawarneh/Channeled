@@ -142,7 +142,22 @@ export function useChannelFilesChanged(channelId: string | undefined, teamSlug: 
       });
     };
 
+    // The server evicts every connection from the group when visibility/grants change. Members who still
+    // have access re-join (which re-authorizes); everyone else is refused and just refetches.
+    const onVisibilityChanged = (payload: FilesChangedPayload) => {
+      if (payload.channelId !== channelRef.current) {
+        return;
+      }
+      void qc.invalidateQueries({ queryKey: ["channels", teamSlug] });
+      void qc.invalidateQueries({ queryKey: ["channel-members", teamSlug, channelName] });
+      void conn
+        .invoke("JoinChannel", id)
+        .then(() => qc.invalidateQueries({ queryKey: ["items", teamSlug, channelName] }))
+        .catch(() => qc.invalidateQueries({ queryKey: ["channels", teamSlug] }));
+    };
+
     conn.on("filesChanged", onFilesChanged);
+    conn.on("channelVisibilityChanged", onVisibilityChanged);
     const offReconnect = onReconnected(rejoin);
 
     void (async () => {
@@ -158,6 +173,7 @@ export function useChannelFilesChanged(channelId: string | undefined, teamSlug: 
     return () => {
       cancelled = true;
       conn.off("filesChanged", onFilesChanged);
+      conn.off("channelVisibilityChanged", onVisibilityChanged);
       offReconnect();
       void conn.invoke("LeaveChannel", id).catch(() => undefined);
     };
@@ -176,6 +192,7 @@ export type ChannelChatHandlers = {
 };
 
 export function useChannelChat(channelId: string | undefined, handlers: ChannelChatHandlers) {
+  const qc = useQueryClient();
   const handlersRef = useRef(handlers);
   handlersRef.current = handlers;
 
@@ -214,6 +231,19 @@ export function useChannelChat(channelId: string | undefined, handlers: ChannelC
       }
     };
 
+    // Visibility/grants changed: the server evicted the group. Re-join (re-authorizes) and resync;
+    // if access was lost the join is refused, so refetch the channel list instead.
+    const visibilityChanged = (event: FilesChangedPayload) => {
+      if (event.channelId !== id) {
+        return;
+      }
+      void qc.invalidateQueries({ queryKey: ["channels"] });
+      void join().catch(() => {
+        void qc.invalidateQueries({ queryKey: ["channels"] });
+      });
+    };
+    conn.on("channelVisibilityChanged", visibilityChanged);
+
     const offReconnect = onReconnected(() => {
       void join().catch(() => undefined);
     });
@@ -238,8 +268,9 @@ export function useChannelChat(channelId: string | undefined, handlers: ChannelC
       conn.off("messageCreated", created);
       conn.off("messageDeleted", deleted);
       conn.off("presenceChanged", presence);
+      conn.off("channelVisibilityChanged", visibilityChanged);
       offReconnect();
       void conn.invoke("LeaveChannel", id).catch(() => undefined);
     };
-  }, [channelId]);
+  }, [channelId, qc]);
 }

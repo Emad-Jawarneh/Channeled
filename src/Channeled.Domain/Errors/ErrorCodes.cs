@@ -26,4 +26,14 @@ public static class ErrorCodes
     public const string WrongChannelKind = "wrong_channel_kind";
     public const string ChannelArchived = "channel_archived";
     public const string LockTimeout = "lock_timeout";
+    public const string Gone = "gone";
+    /// <summary>Unknown, rotated, or expired team join link (always the same generic message).</summary>
+    public const string JoinLinkInvalid = "join_link_invalid";
+    /// <summary>Stored join token can no longer be decrypted; rotate the link.</summary>
+    public const string JoinLinkUnavailable = "join_link_unavailable";
+    public const string JoinCooldown = "join_cooldown";
+    public const string JoinRateLimited = "join_rate_limited";
+    public const string OpenJoinConfirmationRequired = "open_join_confirmation_required";
+    public const string OpenJoinTooManyPending = "open_join_too_many_pending";
+    public const string OwnerMustTransfer = "owner_must_transfer";
 }

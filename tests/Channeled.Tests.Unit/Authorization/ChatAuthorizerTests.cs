@@ -80,7 +80,7 @@ public class ChatAuthorizerTests
             IsTeamMember = true,
             TeamRole = role,
             ChannelExists = true,
-            ChannelVisibility = ChannelVisibility.Private,
+            ChannelVisibility = ChannelVisibility.Restricted,
             IsChannelMember = isChannelMember,
             ChannelCanWrite = canWrite,
         };
@@ -100,7 +100,7 @@ public class ChatAuthorizerTests
             IsTeamMember = true,
             TeamRole = MemberRole.Owner,
             ChannelExists = true,
-            ChannelVisibility = ChannelVisibility.Open,
+            ChannelVisibility = ChannelVisibility.Everyone,
             ChannelArchived = true,
         };
 
@@ -118,7 +118,7 @@ public class ChatAuthorizerTests
             TeamRole = MemberRole.Owner,
             TeamArchived = true,
             ChannelExists = true,
-            ChannelVisibility = ChannelVisibility.Open,
+            ChannelVisibility = ChannelVisibility.Everyone,
         };
 
         _auth.Authorize(ctx).Allowed.Should().BeFalse();
@@ -135,7 +135,7 @@ public class ChatAuthorizerTests
                 Action = action,
                 IsTeamMember = false,
                 ChannelExists = true,
-                ChannelVisibility = ChannelVisibility.Open,
+                ChannelVisibility = ChannelVisibility.Everyone,
                 IsMessageAuthor = true,
             };
 
@@ -156,7 +156,7 @@ public class ChatAuthorizerTests
         var canWriteHere = role switch
         {
             MemberRole.Viewer => false,                       // viewers never write, even in private channels
-            MemberRole.Member => visibility == ChannelVisibility.Open
+            MemberRole.Member => visibility == ChannelVisibility.Everyone
                                  || (isChannelMember && canWrite),   // private: listed AND can_write
             MemberRole.Admin => true,                         // owners/admins always reach private channels
             MemberRole.Owner => true,

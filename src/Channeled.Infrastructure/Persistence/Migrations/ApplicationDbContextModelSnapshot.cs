@@ -893,10 +893,7 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
-                    b.Property<bool>("CanManage")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("CanWrite")
+                    b.Property<bool>("ReadOnly")
                         .HasColumnType("boolean");
 
                     b.HasKey("ChannelId", "UserId");
@@ -916,9 +913,34 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("DefaultJoinRole")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
                     b.Property<string>("Description")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
+
+                    b.Property<int>("JoinMode")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
+
+                    b.Property<string>("JoinTokenCiphertext")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<DateTimeOffset?>("JoinTokenExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("JoinTokenHash")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("JoinTokenPrefix")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -938,10 +960,18 @@ namespace Channeled.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("JoinTokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("ux_teams_join_token_hash")
+                        .HasFilter("\"JoinTokenHash\" IS NOT NULL");
+
                     b.HasIndex("Slug")
                         .IsUnique();
 
-                    b.ToTable("teams", (string)null);
+                    b.ToTable("teams", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_teams_default_join_role", "\"DefaultJoinRole\" IN (0, 1)");
+                        });
                 });
 
             modelBuilder.Entity("Channeled.Infrastructure.Teams.TeamInvitationEntity", b =>
@@ -989,6 +1019,44 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("team_invitations", (string)null);
+                });
+
+            modelBuilder.Entity("Channeled.Infrastructure.Teams.TeamJoinRequestEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("CooldownUntil")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("DecidedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DecidedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TeamId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("TeamId", "Status");
+
+                    b.HasIndex("TeamId", "UserId", "Status");
+
+                    b.ToTable("team_join_requests", (string)null);
                 });
 
             modelBuilder.Entity("Channeled.Infrastructure.Teams.TeamMemberEntity", b =>
@@ -1239,6 +1307,17 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                     b.Navigation("Team");
                 });
 
+            modelBuilder.Entity("Channeled.Infrastructure.Teams.TeamJoinRequestEntity", b =>
+                {
+                    b.HasOne("Channeled.Infrastructure.Teams.TeamEntity", "Team")
+                        .WithMany("JoinRequests")
+                        .HasForeignKey("TeamId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Team");
+                });
+
             modelBuilder.Entity("Channeled.Infrastructure.Teams.TeamMemberEntity", b =>
                 {
                     b.HasOne("Channeled.Infrastructure.Teams.TeamEntity", "Team")
@@ -1321,6 +1400,8 @@ namespace Channeled.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Channeled.Infrastructure.Teams.TeamEntity", b =>
                 {
                     b.Navigation("Channels");
+
+                    b.Navigation("JoinRequests");
 
                     b.Navigation("Members");
                 });

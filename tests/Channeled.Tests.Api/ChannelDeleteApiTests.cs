@@ -98,10 +98,10 @@ public class ChannelDeleteApiTests : IClassFixture<AuthApiFactory>, IAsyncLifeti
 
         (await _owner.PostAsJsonAsync(
             $"/api/v1/teams/{_slug}/channels",
-            new CreateChannelRequest("general", null, ChannelVisibility.Open, ChannelKind.File))).EnsureSuccessStatusCode();
+            new CreateChannelRequest("general", null, ChannelVisibility.Everyone, ChannelKind.File))).EnsureSuccessStatusCode();
         (await _owner.PostAsJsonAsync(
             $"/api/v1/teams/{_slug}/channels",
-            new CreateChannelRequest("archive-me", null, ChannelVisibility.Open, ChannelKind.File))).EnsureSuccessStatusCode();
+            new CreateChannelRequest("archive-me", null, ChannelVisibility.Everyone, ChannelKind.File))).EnsureSuccessStatusCode();
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
@@ -111,7 +111,7 @@ public class ChannelDeleteApiTests : IClassFixture<AuthApiFactory>, IAsyncLifeti
     {
         (await _owner.PostAsJsonAsync(
             $"/api/v1/teams/{_slug}/channels",
-            new CreateChannelRequest("scratch", null, ChannelVisibility.Open, ChannelKind.File))).EnsureSuccessStatusCode();
+            new CreateChannelRequest("scratch", null, ChannelVisibility.Everyone, ChannelKind.File))).EnsureSuccessStatusCode();
 
         var (file, payload) = await UploadAsync("scratch", "bye.txt");
         var storageKey = await GetStorageKeyAsync(file.Id);
@@ -150,7 +150,7 @@ public class ChannelDeleteApiTests : IClassFixture<AuthApiFactory>, IAsyncLifeti
     {
         (await _owner.PostAsJsonAsync(
             $"/api/v1/teams/{_slug}/channels",
-            new CreateChannelRequest("source", null, ChannelVisibility.Open, ChannelKind.File))).EnsureSuccessStatusCode();
+            new CreateChannelRequest("source", null, ChannelVisibility.Everyone, ChannelKind.File))).EnsureSuccessStatusCode();
 
         var (file, _) = await UploadAsync("source", "keep.txt");
         var storageKey = await GetStorageKeyAsync(file.Id);
@@ -175,7 +175,7 @@ public class ChannelDeleteApiTests : IClassFixture<AuthApiFactory>, IAsyncLifeti
     {
         (await _owner.PostAsJsonAsync(
             $"/api/v1/teams/{_slug}/channels",
-            new CreateChannelRequest("needs-choice", null, ChannelVisibility.Open, ChannelKind.File))).EnsureSuccessStatusCode();
+            new CreateChannelRequest("needs-choice", null, ChannelVisibility.Everyone, ChannelKind.File))).EnsureSuccessStatusCode();
         await UploadAsync("needs-choice", "x.txt");
 
         var resp = await _owner.PostAsJsonAsync(

@@ -22,7 +22,7 @@ export function CreateChannelDialog({ open, busy = false, error = null, onClose,
   const inputRef = useRef<HTMLInputElement>(null);
   const titleId = useId();
   const [name, setName] = useState("");
-  const [visibility, setVisibility] = useState<number>(ChannelVisibility.Open);
+  const [visibility, setVisibility] = useState<number>(ChannelVisibility.Everyone);
   const [kind, setKind] = useState<number>(ChannelKind.File);
 
   useEffect(() => {
@@ -31,7 +31,7 @@ export function CreateChannelDialog({ open, busy = false, error = null, onClose,
 
     if (open && !dialog.open) {
       setName("");
-      setVisibility(ChannelVisibility.Open);
+      setVisibility(ChannelVisibility.Everyone);
       setKind(ChannelKind.File);
       dialog.showModal();
       requestAnimationFrame(() => inputRef.current?.focus());
@@ -110,10 +110,15 @@ export function CreateChannelDialog({ open, busy = false, error = null, onClose,
             onChange={(e) => setVisibility(Number(e.target.value))}
             disabled={busy}
           >
-            <option value={ChannelVisibility.Open}>Open</option>
-            <option value={ChannelVisibility.Private}>Private</option>
+            <option value={ChannelVisibility.Everyone}>Everyone</option>
+            <option value={ChannelVisibility.Restricted}>Restricted</option>
           </select>
         </label>
+        <p className={styles.hint}>
+          {visibility === ChannelVisibility.Restricted
+            ? "Restricted: team admins and members you grant access to can see this channel."
+            : "Everyone: all team members can see this channel."}
+        </p>
         {error && (
           <p className={styles.error} role="alert" data-testid="create-channel-error">
             {error}

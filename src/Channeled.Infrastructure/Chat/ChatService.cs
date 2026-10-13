@@ -395,7 +395,7 @@ public sealed class ChatService(
         var cm = await db.ChannelMembers.AsNoTracking()
             .FirstOrDefaultAsync(m => m.ChannelId == channel.Id && m.UserId == userId, ct);
 
-        return new ChannelAccess(team, member.Role, channel, cm is not null, cm?.CanWrite ?? false, cm?.CanManage ?? false);
+        return new ChannelAccess(team, member.Role, channel, cm is not null, cm is not null && !cm.ReadOnly, false);
     }
 
     private static AuthorizationContext ToContext(Guid userId, AuthAction action, ChannelAccess channel, bool isAuthor) =>

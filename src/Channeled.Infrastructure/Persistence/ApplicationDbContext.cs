@@ -1,4 +1,5 @@
 using Channeled.Domain.Audit;
+using Channeled.Domain.Teams;
 using Channeled.Infrastructure.Chat;
 using Channeled.Infrastructure.Files;
 using Channeled.Infrastructure.Identity;
@@ -28,6 +29,7 @@ public sealed class ApplicationDbContext : IdentityDbContext<AppUser, AppRole, G
     public DbSet<ChannelEntity> Channels => Set<ChannelEntity>();
     public DbSet<ChannelMemberEntity> ChannelMembers => Set<ChannelMemberEntity>();
     public DbSet<ChannelJoinRequestEntity> ChannelJoinRequests => Set<ChannelJoinRequestEntity>();
+    public DbSet<TeamJoinRequestEntity> TeamJoinRequests => Set<TeamJoinRequestEntity>();
     public DbSet<TeamInvitationEntity> TeamInvitations => Set<TeamInvitationEntity>();
     public DbSet<FolderEntity> Folders => Set<FolderEntity>();
     public DbSet<FileEntity> Files => Set<FileEntity>();
@@ -101,6 +103,27 @@ public sealed class ApplicationDbContext : IdentityDbContext<AppUser, AppRole, G
             entity.Property(x => x.Slug).HasMaxLength(120).IsRequired();
             entity.HasIndex(x => x.Slug).IsUnique();
             entity.Property(x => x.Description).HasMaxLength(2000);
+            entity.Property(x => x.JoinMode).HasDefaultValue(TeamJoinMode.RequestToJoin);
+            entity.Property(x => x.DefaultJoinRole).HasDefaultValue(MemberRole.Viewer);
+            entity.Property(x => x.JoinTokenCiphertext).HasMaxLength(1024);
+            entity.Property(x => x.JoinTokenHash).HasMaxLength(128);
+            entity.Property(x => x.JoinTokenPrefix).HasMaxLength(8);
+            entity.HasIndex(x => x.JoinTokenHash)
+                .IsUnique()
+                .HasFilter("\"JoinTokenHash\" IS NOT NULL")
+                .HasDatabaseName("ux_teams_join_token_hash");
+            // DefaultJoinRole: Viewer (0) or Member (1) only.
+            entity.ToTable(t => t.HasCheckConstraint("ck_teams_default_join_role", "\"DefaultJoinRole\" IN (0, 1)"));
+        });
+
+        builder.Entity<TeamJoinRequestEntity>(entity =>
+        {
+            entity.ToTable("team_join_requests");
+            entity.HasKey(x => x.Id);
+            entity.HasOne(x => x.Team).WithMany(t => t.JoinRequests).HasForeignKey(x => x.TeamId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.TeamId, x.Status });
+            entity.HasIndex(x => new { x.TeamId, x.UserId, x.Status });
+            entity.HasIndex(x => x.UserId);
         });
 
         builder.Entity<TeamMemberEntity>(entity =>
@@ -124,6 +147,7 @@ public sealed class ApplicationDbContext : IdentityDbContext<AppUser, AppRole, G
         builder.Entity<ChannelMemberEntity>(entity =>
         {
             entity.ToTable("channel_members");
+            // PK (ChannelId, UserId) enforces uniqueness. ReadOnly=true means a view-only grant (default false = may write).
             entity.HasKey(x => new { x.ChannelId, x.UserId });
             entity.HasOne(x => x.Channel).WithMany(c => c.Members).HasForeignKey(x => x.ChannelId).OnDelete(DeleteBehavior.Cascade);
         });

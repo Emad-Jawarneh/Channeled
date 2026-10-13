@@ -65,7 +65,7 @@ public class TeamsApi404Tests : IClassFixture<AuthApiFactory>, IAsyncLifetime
 
         var channel = await _ownerClient.PostAsJsonAsync(
             $"/api/v1/teams/{_teamSlug}/channels",
-            new CreateChannelRequest("secret", null, ChannelVisibility.Private, ChannelKind.File));
+            new CreateChannelRequest("secret", null, ChannelVisibility.Restricted, ChannelKind.File));
         channel.EnsureSuccessStatusCode();
     }
 
@@ -97,17 +97,13 @@ public class TeamsApi404Tests : IClassFixture<AuthApiFactory>, IAsyncLifetime
     [Fact]
     public async Task Private_channel_hidden_from_team_member_without_membership()
     {
-        // Invite outsider into team as member, but not into private channel
-        var invite = await _ownerClient.PostAsJsonAsync(
-            $"/api/v1/teams/{_teamSlug}/invitations",
-            new CreateTeamInvitationRequest("outsider@example.com", MemberRole.Member));
-        invite.EnsureSuccessStatusCode();
-        var invitation = await invite.Content.ReadFromJsonAsync<TeamInvitationDto>();
-
-        var accept = await _outsiderClient.PostAsJsonAsync(
-            "/api/v1/teams/invitations/accept",
-            new AcceptTeamInvitationRequest(invitation!.RawToken!));
-        accept.EnsureSuccessStatusCode();
+        // Outsider joins the team via the join link and is approved as member, but has no private-channel grant
+        var link = await _ownerClient.GetFromJsonAsync<TeamJoinLinkDto>($"/api/v1/teams/{_teamSlug}/join-link");
+        var joined = await (await _outsiderClient.PostAsync($"/api/v1/teams/join/{link!.Token}", null))
+            .Content.ReadFromJsonAsync<TeamJoinResultDto>();
+        (await _ownerClient.PostAsJsonAsync(
+            $"/api/v1/teams/{_teamSlug}/join-requests/{joined!.PendingRequestId}/approve",
+            new ApproveTeamJoinRequestRequest(MemberRole.Member))).EnsureSuccessStatusCode();
 
         var hidden = await _outsiderClient.GetAsync($"/api/v1/teams/{_teamSlug}/channels/secret");
         hidden.StatusCode.Should().Be(HttpStatusCode.NotFound);

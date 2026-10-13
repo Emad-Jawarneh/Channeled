@@ -141,8 +141,8 @@ public sealed class ChannelHub(
             ChannelVisibility = channel.Visibility,
             ChannelArchived = channel.ArchivedAt != null,
             IsChannelMember = channelMember is not null,
-            ChannelCanWrite = channelMember?.CanWrite ?? false,
-            ChannelCanManage = channelMember?.CanManage ?? false,
+            ChannelCanWrite = channelMember is not null && !channelMember.ReadOnly,
+            ChannelCanManage = false,
         };
 
         return authorizer.Authorize(ctx).Allowed ? channel : null;

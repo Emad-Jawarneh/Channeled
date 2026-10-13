@@ -19,7 +19,9 @@ public sealed class AuthorizationContext
     public ChannelVisibility? ChannelVisibility { get; init; }
     public bool ChannelArchived { get; init; }
     public bool IsChannelMember { get; init; }
+    /// <summary>True when the channel grant is not read-only (i.e. <c>!ReadOnly</c>).</summary>
     public bool ChannelCanWrite { get; init; }
+    /// <summary>Deprecated: ignored by the Authorizer (ManageChannelMembership is Admin+ only).</summary>
     public bool ChannelCanManage { get; init; }
 
     public bool IsFileOwner { get; init; }

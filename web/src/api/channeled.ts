@@ -15,6 +15,10 @@ export type Team = {
   quotaBytes: number;
   archivedAt?: string | null;
   myRole?: number | null;
+  /** TeamJoinMode: 0 OpenJoin, 1 RequestToJoin. */
+  joinMode: number;
+  /** MemberRole applied to joins/approvals by default (Viewer or Member). */
+  defaultJoinRole: number;
 };
 
 export type Channel = {
@@ -60,22 +64,58 @@ export type TeamMember = {
   joinedAt: string;
 };
 
-export type ChannelJoinInfo = {
-  teamSlug: string;
-  channelName: string;
-  visibility: number;
-  hasAccess: boolean;
-  pendingRequestId?: string | null;
-  joinPath: string;
-};
-
-export type ChannelJoinRequest = {
+export type TeamJoinRequest = {
   id: string;
   userId: string;
   email: string;
   displayName: string;
   status: number;
   createdAt: string;
+};
+
+export type TeamJoinLink = {
+  token: string;
+  prefix: string;
+  expiresAt?: string | null;
+  /** Server-relative path, e.g. `/join/<token>`. */
+  joinPath: string;
+};
+
+export type TeamJoinInfo = {
+  teamName: string;
+  joinMode: number;
+  isMember: boolean;
+  pendingRequestId?: string | null;
+};
+
+export type TeamJoinResult = {
+  teamSlug: string;
+  role?: number | null;
+  pendingRequestId?: string | null;
+  joined: boolean;
+};
+
+export type UpdateTeamSettingsInput = {
+  name?: string;
+  description?: string | null;
+  joinMode?: number;
+  defaultJoinRole?: number;
+  confirmOpenJoinApprovePending?: boolean;
+};
+
+export type UpdateTeamSettingsResult = { team: Team; approvedCount?: number | null };
+
+export type SetChannelVisibilityResult = {
+  channel: Channel;
+  membersLosingAccess: number;
+  shareLinksRevoked: number;
+};
+
+export type ChannelMember = {
+  userId: string;
+  email: string;
+  displayName: string;
+  readOnly: boolean;
 };
 
 export type AuditEvent = {
@@ -93,7 +133,8 @@ export type AuditEvent = {
 
 export const ItemKind = { File: 0, Folder: 1 } as const;
 export const MemberRole = { Viewer: 0, Member: 1, Admin: 2, Owner: 3 } as const;
-export const ChannelVisibility = { Open: 0, Private: 1 } as const;
+export const ChannelVisibility = { Everyone: 0, Restricted: 1 } as const;
+export const TeamJoinMode = { OpenJoin: 0, RequestToJoin: 1 } as const;
 export const ChannelKind = { File: 0, Text: 1 } as const;
 
 export const authApi = {
@@ -179,33 +220,89 @@ export const teamsApi = {
       method: "PUT",
       json: { role },
     }),
-  invite: (slug: string, email: string, role: number) =>
-    api<{ id: string; email: string; role: number; expiresAt: string; rawToken?: string | null }>(
-      `/api/v1/teams/${slug}/invitations`,
-      { method: "POST", json: { email, role } },
-    ),
-  acceptTeamInvite: (token: string) =>
-    api<Team>("/api/v1/teams/invitations/accept", { method: "POST", json: { token } }),
-  upsertChannelMember: (slug: string, channel: string, userId: string, canWrite: boolean, canManage: boolean) =>
-    api<void>(`/api/v1/teams/${slug}/channels/${channel}/members`, {
+  removeMember: (slug: string, userId: string) =>
+    api<void>(`/api/v1/teams/${encodeURIComponent(slug)}/members/${userId}`, { method: "DELETE" }),
+  leave: (slug: string) =>
+    api<void>(`/api/v1/teams/${encodeURIComponent(slug)}/leave`, { method: "POST" }),
+
+  updateSettings: (slug: string, input: UpdateTeamSettingsInput) =>
+    api<UpdateTeamSettingsResult>(`/api/v1/teams/${encodeURIComponent(slug)}/settings`, {
       method: "PUT",
-      json: { userId, canWrite, canManage },
+      json: {
+        name: input.name ?? null,
+        description: input.description ?? null,
+        joinMode: input.joinMode ?? null,
+        defaultJoinRole: input.defaultJoinRole ?? null,
+        confirmOpenJoinApprovePending: input.confirmOpenJoinApprovePending ?? false,
+      },
     }),
-  channelJoinInfo: (slug: string, channel: string) =>
-    api<ChannelJoinInfo>(`/api/v1/teams/${slug}/channels/${channel}/join`),
-  requestChannelJoin: (slug: string, channel: string) =>
-    api<ChannelJoinRequest>(`/api/v1/teams/${slug}/channels/${channel}/join-requests`, { method: "POST" }),
-  listChannelJoinRequests: (slug: string, channel: string) =>
-    api<ChannelJoinRequest[]>(`/api/v1/teams/${slug}/channels/${channel}/join-requests`),
-  approveChannelJoin: (slug: string, channel: string, requestId: string) =>
-    api<void>(`/api/v1/teams/${slug}/channels/${channel}/join-requests/${requestId}/approve`, {
+
+  // ---- Join link (Admin+) ----
+  /** 409 `join_link_unavailable` when no link exists yet: call `ensureJoinLink`. */
+  getJoinLink: (slug: string) =>
+    api<TeamJoinLink>(`/api/v1/teams/${encodeURIComponent(slug)}/join-link`),
+  ensureJoinLink: (slug: string) =>
+    api<TeamJoinLink>(`/api/v1/teams/${encodeURIComponent(slug)}/join-link`, { method: "POST" }),
+  rotateJoinLink: (slug: string, expiresAt?: string | null) =>
+    api<TeamJoinLink>(`/api/v1/teams/${encodeURIComponent(slug)}/join-link/rotate`, {
       method: "POST",
-      json: {},
+      json: { expiresAt: expiresAt ?? null },
     }),
-  rejectChannelJoin: (slug: string, channel: string, requestId: string) =>
-    api<void>(`/api/v1/teams/${slug}/channels/${channel}/join-requests/${requestId}/reject`, {
+
+  // ---- Join by token ----
+  getTeamJoinInfo: (token: string) =>
+    api<TeamJoinInfo>(`/api/v1/teams/join/${encodeURIComponent(token)}`),
+  joinTeam: (token: string) =>
+    api<TeamJoinResult>(`/api/v1/teams/join/${encodeURIComponent(token)}`, { method: "POST" }),
+
+  // ---- Join requests ----
+  listJoinRequests: (slug: string) =>
+    api<TeamJoinRequest[]>(`/api/v1/teams/${encodeURIComponent(slug)}/join-requests`),
+  approveJoinRequest: (slug: string, requestId: string, role: number) =>
+    api<void>(`/api/v1/teams/${encodeURIComponent(slug)}/join-requests/${requestId}/approve`, {
+      method: "POST",
+      json: { role },
+    }),
+  rejectJoinRequest: (slug: string, requestId: string) =>
+    api<void>(`/api/v1/teams/${encodeURIComponent(slug)}/join-requests/${requestId}/reject`, {
       method: "POST",
     }),
+  withdrawJoinRequest: (requestId: string) =>
+    api<void>(`/api/v1/teams/join-requests/${requestId}/withdraw`, { method: "POST" }),
+  pendingJoinCount: () => api<{ count: number }>("/api/v1/notifications/pending-join-count"),
+
+  // ---- Channel visibility + grants ----
+  setChannelVisibility: (slug: string, channel: string, input: { visibility: number }) =>
+    api<SetChannelVisibilityResult>(
+      `/api/v1/teams/${encodeURIComponent(slug)}/channels/${encodeURIComponent(channel)}/visibility`,
+      {
+        method: "PUT",
+        json: { visibility: input.visibility },
+      },
+    ),
+  channelMembers: (slug: string, channel: string) =>
+    api<ChannelMember[]>(
+      `/api/v1/teams/${encodeURIComponent(slug)}/channels/${encodeURIComponent(channel)}/members`,
+    ),
+  upsertChannelMember: (slug: string, channel: string, userId: string, readOnly: boolean) =>
+    api<void>(
+      `/api/v1/teams/${encodeURIComponent(slug)}/channels/${encodeURIComponent(channel)}/members`,
+      { method: "PUT", json: { userId, readOnly } },
+    ),
+  bulkUpsertChannelMembers: (
+    slug: string,
+    channel: string,
+    members: { userId: string; readOnly: boolean }[],
+  ) =>
+    api<void>(
+      `/api/v1/teams/${encodeURIComponent(slug)}/channels/${encodeURIComponent(channel)}/members/bulk`,
+      { method: "PUT", json: { members } },
+    ),
+  removeChannelMember: (slug: string, channel: string, userId: string) =>
+    api<void>(
+      `/api/v1/teams/${encodeURIComponent(slug)}/channels/${encodeURIComponent(channel)}/members/${userId}`,
+      { method: "DELETE" },
+    ),
 };
 
 export type ChannelMessage = {
@@ -289,7 +386,7 @@ export const messagesApi = {
     ),
 };
 
-export const NotificationType = { Mention: 1, Reply: 2 } as const;
+export const NotificationType = { Mention: 1, Reply: 2, TeamJoinRequest: 3 } as const;
 
 export type NotificationDto = {
   id: string;
@@ -307,12 +404,17 @@ export type NotificationDto = {
 };
 
 export const notificationsApi = {
-  list: (opts: { limit?: number; unreadOnly?: boolean } = {}) => {
+  /** Server returns `{ items, unreadCount }`; normalised to the item array here. */
+  list: async (opts: { limit?: number; unreadOnly?: boolean } = {}): Promise<NotificationDto[]> => {
     const q = new URLSearchParams();
     q.set("limit", String(opts.limit ?? 20));
     if (opts.unreadOnly) q.set("unreadOnly", "true");
-    return api<NotificationDto[]>(`/api/v1/notifications?${q}`);
+    const res = await api<NotificationDto[] | { items: NotificationDto[]; unreadCount?: number }>(
+      `/api/v1/notifications?${q}`,
+    );
+    return Array.isArray(res) ? res : (res?.items ?? []);
   },
+  pendingJoinCount: () => api<{ count: number }>("/api/v1/notifications/pending-join-count"),
   unreadCount: () => api<{ unreadCount: number }>("/api/v1/notifications/unread-count"),
   markRead: (id: string) =>
     api<void>(`/api/v1/notifications/${encodeURIComponent(id)}/read`, { method: "POST" }),
@@ -536,12 +638,39 @@ export const personalApi = {
     }),
 };
 
+/** Domain enum values. The query string accepts the lowercase name (`accessible`) or the number. */
+export const SearchScope = { Channel: 0, Team: 1, Personal: 2, Accessible: 3 } as const;
+const SEARCH_SCOPE_NAMES = ["channel", "team", "personal", "accessible"] as const;
+
+export type SearchHit = {
+  id: string;
+  kind: number;
+  name: string;
+  channelId?: string | null;
+  ownerUserId?: string | null;
+  contentType?: string | null;
+  sizeBytes?: number | null;
+  uploadedBy?: string | null;
+  updatedAt: string;
+  channelName?: string | null;
+  teamSlug?: string | null;
+};
+
+export type SearchResponse = { hits: SearchHit[]; nextCursor?: string | null };
+
 export const searchApi = {
-  search: (q: string, scope: string, teamSlug?: string, channelName?: string) => {
-    const params = new URLSearchParams({ q, scope });
-    if (teamSlug) params.set("teamSlug", teamSlug);
-    if (channelName) params.set("channelName", channelName);
-    return api<{ items: FileItem[] }>(`/api/v1/search?${params}`);
+  search: (
+    q: string,
+    scope: number | string = SearchScope.Accessible,
+    opts: { teamSlug?: string; channelName?: string; cursor?: string | null; limit?: number } = {},
+  ) => {
+    const scopeName = typeof scope === "number" ? SEARCH_SCOPE_NAMES[scope] : scope;
+    const params = new URLSearchParams({ q, scope: scopeName });
+    if (opts.teamSlug) params.set("teamSlug", opts.teamSlug);
+    if (opts.channelName) params.set("channelName", opts.channelName);
+    if (opts.cursor) params.set("cursor", opts.cursor);
+    if (opts.limit) params.set("limit", String(opts.limit));
+    return api<SearchResponse>(`/api/v1/search?${params}`);
   },
 };
 

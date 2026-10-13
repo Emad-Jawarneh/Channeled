@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Channeled.Application.Abstractions.Email;
 using Channeled.Application.Abstractions.Realtime;
@@ -13,6 +14,7 @@ using Channeled.Domain.Identity;
 using Channeled.Domain.Teams;
 using Channeled.Infrastructure.Identity;
 using Channeled.Infrastructure.Jobs;
+using Channeled.Infrastructure.Notifications;
 using Channeled.Infrastructure.Persistence;
 using Channeled.Infrastructure.PublicLinks;
 using Channeled.Infrastructure.Security;
@@ -32,9 +34,14 @@ public sealed partial class TeamService(
     IAuthStateChanged authStateChanged,
     IChannelNotifier channelNotifier,
     ChannelWriteGuard channelWriteGuard,
-    IOptions<ChannelDeleteOptions> channelDeleteOptions) : ITeamService
+    IOptions<ChannelDeleteOptions> channelDeleteOptions,
+    TeamJoinLinkProtector joinLinkProtector,
+    IOptions<TeamJoinOptions> joinOptions) : ITeamService
 {
     private static readonly TimeSpan InvitationLifetime = TimeSpan.FromDays(7);
+
+    private static readonly HashSet<string> ReservedSlugs =
+        new(["join", "join-requests", "invitations", "pending-join-count"], StringComparer.Ordinal);
 
     public async Task<AppResult<TeamDto>> CreateTeamAsync(
         Guid userId,
@@ -55,7 +62,10 @@ public sealed partial class TeamService(
             Slug = slug,
             Description = request.Description?.Trim(),
             CreatedAt = clock.UtcNow,
+            JoinMode = TeamJoinMode.RequestToJoin,
+            DefaultJoinRole = MemberRole.Viewer,
         };
+        AssignNewJoinToken(team, expiresAt: null);
         db.Teams.Add(team);
         db.TeamMembers.Add(new TeamMemberEntity
         {
@@ -261,15 +271,63 @@ public sealed partial class TeamService(
             return AppResult.Fail(ErrorCodes.Forbidden, "Use ownership transfer for Owner role.");
         }
 
-        if (loaded.Role == MemberRole.Admin && request.Role == MemberRole.Admin && member.Role != MemberRole.Admin)
+        var teamId = loaded.Team.Id;
+        var fromRole = member.Role;
+        var toRole = request.Role;
+        if (fromRole == toRole)
         {
-            // Admin can set Admin
+            return AppResult.Ok();
         }
 
-        member.Role = request.Role;
-        await WriteAuditAsync(userId, AuditEventType.RoleChange, "user", memberUserId.ToString(), loaded.Team.Id, context, ct);
-        await db.SaveChangesAsync(ct);
+        var demotingAdmin = fromRole == MemberRole.Admin && toRole < MemberRole.Admin;
+        var promotingToAdmin = fromRole < MemberRole.Admin && toRole == MemberRole.Admin;
+
+        List<(Guid Id, string Name)> channelsLosingAccess = [];
+        IReadOnlyList<NotificationEntity> newJoinNotifications = [];
+
+        await using (var tx = await db.Database.BeginTransactionAsync(ct))
+        {
+            if (demotingAdmin)
+            {
+                // Restricted channels the user could only see through Admin implicit access (no explicit grant).
+                var rows = await db.Channels.AsNoTracking()
+                    .Where(c => c.TeamId == teamId
+                                && c.Visibility == ChannelVisibility.Restricted
+                                && !db.ChannelMembers.Any(m => m.ChannelId == c.Id && m.UserId == memberUserId))
+                    .OrderBy(c => c.Name)
+                    .Select(c => new { c.Id, c.Name })
+                    .ToListAsync(ct);
+                channelsLosingAccess = rows.Select(r => (r.Id, r.Name)).ToList();
+            }
+
+            member.Role = toRole;
+
+            if (promotingToAdmin)
+            {
+                // Admin access is implicit: drop redundant explicit grants in this team.
+                await DeleteChannelGrantsForUserAsync(teamId, memberUserId, ct);
+            }
+
+            var details = JsonSerializer.Serialize(new
+            {
+                from = (int)fromRole,
+                to = (int)toRole,
+                channelsLosingAccess = channelsLosingAccess.Select(c => new { id = c.Id, name = c.Name }),
+            });
+            await WriteAuditAsync(userId, AuditEventType.RoleChange, "user", memberUserId.ToString(), teamId, context, ct, details);
+            await db.SaveChangesAsync(ct);
+
+            if (demotingAdmin || promotingToAdmin)
+            {
+                // Demoted Admins stop receiving join-request notifications; new Admins start receiving them.
+                newJoinNotifications = await ReconcileJoinNotificationsAsync(teamId, ct);
+            }
+
+            await tx.CommitAsync(ct);
+        }
+
         authStateChanged.NotifyUser(memberUserId);
+        await PublishJoinNotificationsAsync(loaded.Team.Slug, newJoinNotifications, ct);
         return AppResult.Ok();
     }
 
@@ -292,15 +350,35 @@ public sealed partial class TeamService(
             return AppResult.Fail(ErrorCodes.NotFound, "Member not found.");
         }
 
+        if (memberUserId == userId)
+        {
+            return AppResult.Fail(ErrorCodes.Validation, "Use leave to remove yourself from the team.");
+        }
+
         if (member.Role == MemberRole.Owner)
         {
+            // Covers the last-Owner rule: an Owner is never removable, ownership must be transferred first.
             return AppResult.Fail(ErrorCodes.Forbidden, "Cannot remove an Owner.");
         }
 
-        db.TeamMembers.Remove(member);
-        await WriteAuditAsync(userId, AuditEventType.MemberRemove, "user", memberUserId.ToString(), loaded.Team.Id, context, ct);
-        await db.SaveChangesAsync(ct);
+        // Admins may only remove Viewers/Members; Owners may remove anyone except themselves/Owners.
+        if (loaded.Role == MemberRole.Admin && member.Role >= MemberRole.Admin)
+        {
+            return AppResult.Fail(ErrorCodes.Forbidden, "Admins can only remove Viewers and Members.");
+        }
+
+        IReadOnlyList<NotificationEntity> newJoinNotifications;
+        await using (var tx = await db.Database.BeginTransactionAsync(ct))
+        {
+            db.TeamMembers.Remove(member);
+            await WriteAuditAsync(userId, AuditEventType.MemberRemove, "user", memberUserId.ToString(), loaded.Team.Id, context, ct);
+            await db.SaveChangesAsync(ct);
+            newJoinNotifications = await RemoveMembershipSideEffectsAsync(loaded.Team.Id, memberUserId, ct);
+            await tx.CommitAsync(ct);
+        }
+
         authStateChanged.NotifyUser(memberUserId);
+        await PublishJoinNotificationsAsync(loaded.Team.Slug, newJoinNotifications, ct);
         return AppResult.Ok();
     }
 
@@ -478,7 +556,7 @@ public sealed partial class TeamService(
             .OrderBy(c => c.Name)
             .ToListAsync(ct);
 
-        var privateIds = channels.Where(c => c.Visibility == ChannelVisibility.Private).Select(c => c.Id).ToList();
+        var privateIds = channels.Where(c => c.Visibility == ChannelVisibility.Restricted).Select(c => c.Id).ToList();
         var memberships = await db.ChannelMembers.AsNoTracking()
             .Where(m => m.UserId == userId && privateIds.Contains(m.ChannelId))
             .Select(m => m.ChannelId)
@@ -998,7 +1076,7 @@ public sealed partial class TeamService(
         IReadOnlyList<ChannelMemberDto> dtos = members.Select(m =>
         {
             users.TryGetValue(m.UserId, out var u);
-            return new ChannelMemberDto(m.UserId, u?.Email ?? "", u?.DisplayName ?? "", m.CanWrite, m.CanManage);
+            return new ChannelMemberDto(m.UserId, u?.Email ?? "", u?.DisplayName ?? "", m.ReadOnly);
         }).ToList();
 
         return AppResult<IReadOnlyList<ChannelMemberDto>>.Ok(dtos);
@@ -1019,36 +1097,108 @@ public sealed partial class TeamService(
             return NotFoundChannel();
         }
 
-        if (loaded.Channel.Visibility != ChannelVisibility.Private)
+        // Grants may be created while the channel is Everyone: they stay dormant until it becomes Restricted.
+        var applied = await ApplyGrantsAsync(
+            userId, loaded.TeamMembership.Team.Id, loaded.Channel, [request], context, ct);
+        if (!applied.Succeeded)
         {
-            return AppResult.Fail(ErrorCodes.Validation, "Only private channels have membership lists.");
+            return applied;
         }
 
-        var teamMember = await db.TeamMembers.AnyAsync(m => m.TeamId == loaded.TeamMembership.Team.Id && m.UserId == request.UserId, ct);
-        if (!teamMember)
+        await db.SaveChangesAsync(ct);
+        return AppResult.Ok();
+    }
+
+    public async Task<AppResult> BulkUpsertChannelMembersAsync(
+        Guid userId,
+        string slug,
+        string channelName,
+        BulkUpsertChannelMembersRequest request,
+        RequestContext context,
+        CancellationToken ct = default)
+    {
+        var loaded = await LoadTeamAndChannelAsync(userId, slug, channelName, ct);
+        if (loaded is null
+            || !authorizer.Authorize(ChannelContext(userId, AuthAction.ManageChannelMembership, loaded.TeamMembership, loaded.Channel, loaded.IsChannelMember, loaded.CanWrite, loaded.CanManage)).Allowed)
+        {
+            return NotFoundChannel();
+        }
+
+        if (request.Members is null || request.Members.Count == 0)
+        {
+            return AppResult.Fail(ErrorCodes.Validation, "At least one member is required.");
+        }
+
+        if (request.Members.Count > MaxBulkGrants)
+        {
+            return AppResult.Fail(ErrorCodes.Validation, $"At most {MaxBulkGrants} members per request.");
+        }
+
+        var applied = await ApplyGrantsAsync(
+            userId, loaded.TeamMembership.Team.Id, loaded.Channel, request.Members, context, ct);
+        if (!applied.Succeeded)
+        {
+            return applied;
+        }
+
+        // Single SaveChanges: all-or-nothing.
+        await db.SaveChangesAsync(ct);
+        return AppResult.Ok();
+    }
+
+    /// <summary>Stages grant upserts (no SaveChanges). Validates every user is a team member first.</summary>
+    private async Task<AppResult> ApplyGrantsAsync(
+        Guid actorId,
+        Guid teamId,
+        ChannelEntity channel,
+        IReadOnlyList<UpsertChannelMemberRequest> grants,
+        RequestContext context,
+        CancellationToken ct)
+    {
+        // Last write wins for duplicate users in one request.
+        var byUser = grants.GroupBy(g => g.UserId).ToDictionary(g => g.Key, g => g.Last());
+        var userIds = byUser.Keys.ToList();
+
+        var memberIds = await db.TeamMembers.AsNoTracking()
+            .Where(m => m.TeamId == teamId && userIds.Contains(m.UserId))
+            .Select(m => m.UserId)
+            .ToListAsync(ct);
+        if (memberIds.Count != userIds.Count)
         {
             return AppResult.Fail(ErrorCodes.Validation, "User must be a team member.");
         }
 
-        var row = await db.ChannelMembers.FirstOrDefaultAsync(m => m.ChannelId == loaded.Channel.Id && m.UserId == request.UserId, ct);
-        if (row is null)
+        var existing = await db.ChannelMembers
+            .Where(m => m.ChannelId == channel.Id && userIds.Contains(m.UserId))
+            .ToDictionaryAsync(m => m.UserId, ct);
+
+        foreach (var (uid, grant) in byUser)
         {
-            db.ChannelMembers.Add(new ChannelMemberEntity
+            if (existing.TryGetValue(uid, out var row))
             {
-                ChannelId = loaded.Channel.Id,
-                UserId = request.UserId,
-                CanWrite = request.CanWrite,
-                CanManage = request.CanManage,
-            });
-        }
-        else
-        {
-            row.CanWrite = request.CanWrite;
-            row.CanManage = request.CanManage;
+                row.ReadOnly = grant.ReadOnly;
+            }
+            else
+            {
+                db.ChannelMembers.Add(new ChannelMemberEntity
+                {
+                    ChannelId = channel.Id,
+                    UserId = uid,
+                    ReadOnly = grant.ReadOnly,
+                });
+            }
+
+            await WriteAuditAsync(
+                actorId,
+                AuditEventType.ChannelMembershipAdd,
+                "channel",
+                channel.Id.ToString(),
+                teamId,
+                context,
+                ct,
+                JsonSerializer.Serialize(new { userId = uid, readOnly = grant.ReadOnly }));
         }
 
-        await WriteAuditAsync(userId, AuditEventType.ChannelMembershipAdd, "channel", loaded.Channel.Id.ToString(), loaded.TeamMembership.Team.Id, context, ct);
-        await db.SaveChangesAsync(ct);
         return AppResult.Ok();
     }
 
@@ -1103,10 +1253,10 @@ public sealed partial class TeamService(
         var cm = await db.ChannelMembers.AsNoTracking()
             .FirstOrDefaultAsync(m => m.ChannelId == channel.Id && m.UserId == userId, ct);
         var hasAccess = authorizer.Authorize(
-            ChannelContext(userId, AuthAction.ViewChannel, membership, channel, cm is not null, cm?.CanWrite ?? false, cm?.CanManage ?? false)).Allowed;
+            ChannelContext(userId, AuthAction.ViewChannel, membership, channel, cm is not null, cm is not null && !cm.ReadOnly, false)).Allowed;
 
         Guid? pendingId = null;
-        if (!hasAccess && channel.Visibility == ChannelVisibility.Private)
+        if (!hasAccess && channel.Visibility == ChannelVisibility.Restricted)
         {
             var pending = await db.ChannelJoinRequests.AsNoTracking()
                 .FirstOrDefaultAsync(
@@ -1145,7 +1295,7 @@ public sealed partial class TeamService(
             return NotFoundChannel<ChannelJoinRequestDto>();
         }
 
-        if (channel.Visibility != ChannelVisibility.Private)
+        if (channel.Visibility != ChannelVisibility.Restricted)
         {
             return AppResult<ChannelJoinRequestDto>.Fail(
                 ErrorCodes.Validation,
@@ -1155,7 +1305,7 @@ public sealed partial class TeamService(
         var cm = await db.ChannelMembers.AsNoTracking()
             .FirstOrDefaultAsync(m => m.ChannelId == channel.Id && m.UserId == userId, ct);
         var hasAccess = authorizer.Authorize(
-            ChannelContext(userId, AuthAction.ViewChannel, membership, channel, cm is not null, cm?.CanWrite ?? false, cm?.CanManage ?? false)).Allowed;
+            ChannelContext(userId, AuthAction.ViewChannel, membership, channel, cm is not null, cm is not null && !cm.ReadOnly, false)).Allowed;
         if (hasAccess)
         {
             return AppResult<ChannelJoinRequestDto>.Fail(ErrorCodes.Conflict, "You already have access to this channel.");
@@ -1257,7 +1407,7 @@ public sealed partial class TeamService(
             userId,
             slug,
             channelName,
-            new UpsertChannelMemberRequest(row.UserId, request.CanWrite, request.CanManage),
+            new UpsertChannelMemberRequest(row.UserId, ReadOnly: !request.CanWrite),
             context,
             ct);
         if (!upsert.Succeeded)
@@ -1358,7 +1508,7 @@ public sealed partial class TeamService(
         var cm = await db.ChannelMembers.AsNoTracking()
             .FirstOrDefaultAsync(m => m.ChannelId == channel.Id && m.UserId == userId, ct);
 
-        return new ChannelLoad(membership, channel, cm is not null, cm?.CanWrite ?? false, cm?.CanManage ?? false);
+        return new ChannelLoad(membership, channel, cm is not null, cm is not null && !cm.ReadOnly, false);
     }
 
     private static AuthorizationContext BaseContext(Guid userId, AuthAction action, TeamMembership loaded) =>
@@ -1425,7 +1575,8 @@ public sealed partial class TeamService(
     {
         var slug = basSlug;
         var i = 2;
-        while (await db.Teams.AnyAsync(t => t.Slug == slug, ct))
+        // Slugs that collide with literal route segments under /api/v1/teams/ are never allocated.
+        while (ReservedSlugs.Contains(slug) || await db.Teams.AnyAsync(t => t.Slug == slug, ct))
         {
             slug = $"{basSlug}-{i++}";
         }
@@ -1441,8 +1592,8 @@ public sealed partial class TeamService(
         return string.IsNullOrEmpty(normalized) ? "team" : normalized;
     }
 
-    private static TeamDto ToTeamDto(TeamEntity team, MemberRole role) =>
-        new(team.Id, team.Name, team.Slug, team.Description, team.QuotaBytes, team.ArchivedAt, role);
+    private static TeamDto ToTeamDto(TeamEntity team, MemberRole? role) =>
+        new(team.Id, team.Name, team.Slug, team.Description, team.QuotaBytes, team.ArchivedAt, role, team.JoinMode, team.DefaultJoinRole);
 
     private static ChannelDto ToChannelDto(ChannelEntity channel) =>
         new(channel.Id, channel.TeamId, channel.Name, channel.Description, channel.Visibility, channel.Kind, channel.ArchivedAt);

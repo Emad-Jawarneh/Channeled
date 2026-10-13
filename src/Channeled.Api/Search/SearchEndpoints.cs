@@ -31,7 +31,7 @@ public static class SearchEndpoints
 
             if (!Enum.TryParse<SearchScope>(scope, ignoreCase: true, out var parsedScope))
             {
-                return Problem(ErrorCodes.Validation, "scope must be channel, team, or personal.", StatusCodes.Status400BadRequest);
+                return Problem(ErrorCodes.Validation, "scope must be channel, team, personal, or accessible.", StatusCodes.Status400BadRequest);
             }
 
             return ToHttp(await search.SearchAsync(

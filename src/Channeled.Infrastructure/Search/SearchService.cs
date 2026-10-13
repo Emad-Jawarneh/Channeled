@@ -41,6 +41,7 @@ public sealed class SearchService(
             SearchScope.Personal => await SearchPersonalAsync(userId, q, pattern, query, limit, ct),
             SearchScope.Channel => await SearchChannelAsync(userId, q, pattern, query, limit, ct),
             SearchScope.Team => await SearchTeamAsync(userId, q, pattern, query, limit, ct),
+            SearchScope.Accessible => await SearchAccessibleAsync(userId, pattern, query, limit, ct),
             _ => AppResult<SearchResponse>.Fail(ErrorCodes.Validation, "Unknown search scope."),
         };
     }
@@ -238,6 +239,109 @@ public sealed class SearchService(
         return PageHits(combined, query.Cursor, limit);
     }
 
+    /// <summary>
+    /// Everything the user can see right now across all their teams. Visibility and grants are joined at query time
+    /// (no ACL cache), so Restricted channels, grants, role changes and leaves apply immediately.
+    /// Mirrors <c>Authorizer</c> BrowseFiles: channel Everyone, OR Admin+/Owner, OR an explicit channel grant.
+    /// Ordered by recency with keyset paging on (UpdatedAt, Id) entirely in SQL; trigram GIN serves the ILIKE.
+    /// </summary>
+    private async Task<AppResult<SearchResponse>> SearchAccessibleAsync(
+        Guid userId,
+        string pattern,
+        SearchQuery query,
+        int limit,
+        CancellationToken ct)
+    {
+        var typePattern = string.IsNullOrWhiteSpace(query.Type)
+            ? "%"
+            : query.Type.Trim().ToLowerInvariant() + "%";
+        var filterUploader = query.UploaderId.HasValue;
+        var uploader = query.UploaderId ?? Guid.Empty;
+
+        var hasCursor = !string.IsNullOrWhiteSpace(query.Cursor)
+                        && TryDecodeCursor(query.Cursor!, out _, out _);
+        DateTimeOffset cursorTime = DateTimeOffset.UtcNow;
+        var cursorId = Guid.Empty;
+        if (hasCursor)
+        {
+            TryDecodeCursor(query.Cursor!, out cursorTime, out cursorId);
+        }
+
+        var visible = ((int)ChannelVisibility.Everyone);
+        var adminRole = (int)MemberRole.Admin;
+        var take = Math.Min(limit, 200) + 1;
+        var noUploaderFilter = !filterUploader;
+        var noCursor = !hasCursor;
+
+        var rows = await db.Database.SqlQuery<AccessibleHitRow>(
+                $"""
+                 SELECT f."Id" AS "Id",
+                        f."Name" AS "Name",
+                        f."ChannelId" AS "ChannelId",
+                        f."OwnerUserId" AS "OwnerUserId",
+                        f."ContentType" AS "ContentType",
+                        f."SizeBytes" AS "SizeBytes",
+                        f."UploadedBy" AS "UploadedBy",
+                        f."UpdatedAt" AS "UpdatedAt",
+                        c."Name" AS "ChannelName",
+                        t."Slug" AS "TeamSlug"
+                 FROM team_members AS tm
+                 JOIN teams AS t ON t."Id" = tm."TeamId"
+                 JOIN channels AS c ON c."TeamId" = t."Id"
+                 JOIN files AS f ON f."ChannelId" = c."Id"
+                 WHERE tm."UserId" = {userId}
+                   AND f."DeletedAt" IS NULL
+                   AND f."Name" ILIKE {pattern}
+                   AND lower(f."ContentType") LIKE {typePattern}
+                   AND ({noUploaderFilter} OR f."UploadedBy" = {uploader})
+                   AND ({noCursor} OR f."UpdatedAt" < {cursorTime} OR (f."UpdatedAt" = {cursorTime} AND f."Id" < {cursorId}))
+                   AND (
+                        c."Visibility" = {visible}
+                        OR tm."Role" >= {adminRole}
+                        OR EXISTS (
+                            SELECT 1 FROM channel_members AS cm
+                            WHERE cm."ChannelId" = c."Id" AND cm."UserId" = {userId})
+                   )
+                 ORDER BY f."UpdatedAt" DESC, f."Id" DESC
+                 LIMIT {take}
+                 """)
+            .OrderByDescending(r => r.UpdatedAt)
+            .ThenByDescending(r => r.Id)
+            .ToListAsync(ct);
+
+        var page = rows.Take(limit).Select(r => new SearchHitDto(
+            r.Id,
+            ItemKind.File,
+            r.Name,
+            r.ChannelId,
+            r.OwnerUserId,
+            r.ContentType,
+            r.SizeBytes,
+            r.UploadedBy,
+            r.UpdatedAt,
+            r.ChannelName,
+            r.TeamSlug)).ToList();
+
+        string? next = rows.Count > limit && page.Count > 0
+            ? EncodeCursor(page[^1].UpdatedAt, page[^1].Id)
+            : null;
+        return AppResult<SearchResponse>.Ok(new SearchResponse(page, next));
+    }
+
+    private sealed class AccessibleHitRow
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = "";
+        public Guid? ChannelId { get; set; }
+        public Guid? OwnerUserId { get; set; }
+        public string? ContentType { get; set; }
+        public long SizeBytes { get; set; }
+        public Guid UploadedBy { get; set; }
+        public DateTimeOffset UpdatedAt { get; set; }
+        public string ChannelName { get; set; } = "";
+        public string TeamSlug { get; set; } = "";
+    }
+
     private bool AllowBrowse(Guid userId, ChannelAccess access) =>
         authorizer.Authorize(new AuthorizationContext
         {
@@ -279,7 +383,7 @@ public sealed class SearchService(
         var cm = await db.ChannelMembers.AsNoTracking()
             .FirstOrDefaultAsync(m => m.ChannelId == channel.Id && m.UserId == userId, ct);
 
-        return new ChannelAccess(team, member.Role, channel, cm is not null, cm?.CanWrite ?? false, cm?.CanManage ?? false);
+        return new ChannelAccess(team, member.Role, channel, cm is not null, cm is not null && !cm.ReadOnly, false);
     }
 
     private static AppResult<SearchResponse> PageHits(IEnumerable<SearchHitDto> hits, string? cursor, int limit)

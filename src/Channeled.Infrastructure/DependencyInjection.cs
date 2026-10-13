@@ -27,6 +27,7 @@ using Channeled.Infrastructure.Personal;
 using Channeled.Infrastructure.PublicLinks;
 using Channeled.Infrastructure.Realtime;
 using Channeled.Infrastructure.Search;
+using Channeled.Infrastructure.Security;
 using Channeled.Infrastructure.Storage;
 using Channeled.Infrastructure.Teams;
 using Channeled.Infrastructure.Time;
@@ -57,6 +58,7 @@ public static class DependencyInjection
         services.Configure<PublicFileLinksOptions>(configuration.GetSection(PublicFileLinksOptions.SectionName));
         services.Configure<ChatOptions>(configuration.GetSection(ChatOptions.SectionName));
         services.Configure<ChannelDeleteOptions>(configuration.GetSection(ChannelDeleteOptions.SectionName));
+        services.Configure<TeamJoinOptions>(configuration.GetSection(TeamJoinOptions.SectionName));
 
         var connectionString = configuration.GetConnectionString("Postgres")
             ?? throw new InvalidOperationException("Connection string 'Postgres' is required.");
@@ -99,6 +101,10 @@ public static class DependencyInjection
                 return Task.CompletedTask;
             };
         });
+
+        // Data Protection encrypts team join tokens at rest (key ring location configured by the host if needed).
+        services.AddDataProtection();
+        services.AddSingleton<TeamJoinLinkProtector>();
 
         services.AddSingleton<IClock, SystemClock>();
         services.AddSingleton<IEmailSender, LoggingEmailSender>();

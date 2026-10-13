@@ -1,6 +1,8 @@
 using Channeled.Application.Abstractions.Results;
 using Channeled.Application.Notifications;
+using Channeled.Application.Teams;
 using Channeled.Domain.Errors;
+using Channeled.Domain.Teams;
 using Channeled.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -66,6 +68,16 @@ public sealed class NotificationService(ApplicationDbContext db) : INotification
         var count = await db.Notifications.AsNoTracking()
             .CountAsync(n => n.UserId == userId && n.ReadAt == null, ct);
         return AppResult<UnreadCountResponse>.Ok(new UnreadCountResponse(count));
+    }
+
+    public async Task<AppResult<PendingJoinCountDto>> GetPendingTeamJoinCountAsync(Guid userId, CancellationToken ct = default)
+    {
+        var count = await db.TeamJoinRequests.AsNoTracking()
+            .CountAsync(
+                r => r.Status == TeamJoinRequestStatus.Pending
+                     && db.TeamMembers.Any(m => m.TeamId == r.TeamId && m.UserId == userId && m.Role >= MemberRole.Admin),
+                ct);
+        return AppResult<PendingJoinCountDto>.Ok(new PendingJoinCountDto(count));
     }
 
     public async Task<AppResult> MarkReadAsync(Guid userId, Guid notificationId, CancellationToken ct = default)

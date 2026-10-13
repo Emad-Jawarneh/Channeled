@@ -77,7 +77,7 @@ public class ChatHubTests : IClassFixture<ChatWorldFixture>, IAsyncLifetime
     public async Task Outsiders_and_unlisted_members_cannot_join_text_channels()
     {
         var open = await _w.CreateChannelAsync(ChannelKind.Text);
-        var vip = await _w.CreateChannelAsync(ChannelKind.Text, ChannelVisibility.Private, "vip");
+        var vip = await _w.CreateChannelAsync(ChannelKind.Text, ChannelVisibility.Restricted, "vip");
 
         await using var outsider = await ConnectAsync(_w.Outsider);
         var denied = async () => await outsider.Connection.InvokeAsync("JoinChannel", open.Id);

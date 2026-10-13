@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import { ThemeToggle } from "../../theme/ThemeToggle";
 import { Button } from "../../ui/Button";
@@ -7,6 +7,7 @@ import styles from "./LoginPage.module.css";
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -20,7 +21,8 @@ export function LoginPage() {
 
     try {
       await login(email, password);
-      navigate("/");
+      const from = (location.state as { from?: string } | null)?.from;
+      navigate(from && from.startsWith("/") && !from.startsWith("//") ? from : "/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign in failed.");
     } finally {

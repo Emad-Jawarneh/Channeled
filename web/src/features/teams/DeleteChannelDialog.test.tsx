@@ -7,7 +7,7 @@ const fileChannel: Channel = {
   id: "1",
   teamId: "t",
   name: "brand-assets",
-  visibility: ChannelVisibility.Open,
+  visibility: ChannelVisibility.Everyone,
   kind: ChannelKind.File,
 };
 
@@ -15,7 +15,7 @@ const other: Channel = {
   id: "2",
   teamId: "t",
   name: "general",
-  visibility: ChannelVisibility.Open,
+  visibility: ChannelVisibility.Everyone,
   kind: ChannelKind.File,
 };
 

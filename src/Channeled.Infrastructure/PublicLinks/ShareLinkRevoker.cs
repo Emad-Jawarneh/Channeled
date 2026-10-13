@@ -24,6 +24,7 @@ public static class ShareLinkRevoker
     public const string ReasonChannelDelete = "channel_deleted";
     public const string ReasonTeamDelete = "team_deleted";
     public const string ReasonPurge = "file_purged";
+    public const string ReasonChannelRestricted = "channel_restricted";
     public const string ReasonManual = "manual";
     public const string ReasonAdmin = "admin_revoke_all";
 

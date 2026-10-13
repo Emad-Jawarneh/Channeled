@@ -4,4 +4,5 @@ public enum NotificationType
 {
     Mention = 1,
     Reply = 2,
+    TeamJoinRequest = 3,
 }

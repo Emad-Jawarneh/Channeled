@@ -32,4 +32,12 @@ public enum AuthAction
     DeleteOwnChannelMessage,
     /// <summary>Moderate: soft-delete anyone's message (Admin+).</summary>
     DeleteAnyChannelMessage,
+    /// <summary>Leave a team as a member (service blocks the Owner).</summary>
+    LeaveTeam,
+    /// <summary>Change team join mode (Owner only).</summary>
+    ChangeTeamJoinMode,
+    /// <summary>Create/rotate/revoke the team join link (Admin+).</summary>
+    ManageTeamJoinLink,
+    /// <summary>Approve or reject team join requests (Admin+).</summary>
+    ApproveTeamJoinRequest,
 }

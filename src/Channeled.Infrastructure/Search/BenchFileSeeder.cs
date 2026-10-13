@@ -35,7 +35,7 @@ public sealed class BenchFileSeeder(ApplicationDbContext db)
             Id = UuidV7.NewGuid(),
             TeamId = team.Id,
             Name = "general",
-            Visibility = ChannelVisibility.Open,
+            Visibility = ChannelVisibility.Everyone,
             CreatedAt = DateTimeOffset.UtcNow,
         };
         db.Teams.Add(team);

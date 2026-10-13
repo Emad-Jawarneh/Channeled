@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Channeled.Application.Abstractions.Realtime;
+using Channeled.Infrastructure.Realtime;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
 
@@ -8,6 +9,8 @@ namespace Channeled.Api.Realtime;
 public sealed class CoalescingChannelNotifier(
     IHubContext<ChannelHub> hub,
     IOptions<RealtimeOptions> options,
+    HubConnectionRegistry registry,
+    PresenceTracker presence,
     ILogger<CoalescingChannelNotifier> logger) : IChannelNotifier, IDisposable
 {
     private readonly ConcurrentDictionary<Guid, ChannelCoalesceState> _filesChanged = new();
@@ -57,6 +60,38 @@ public sealed class CoalescingChannelNotifier(
 
     public void NotifyUser(Guid userId, string method, object payload) =>
         _ = SafeSendUserAsync(userId, method, payload);
+
+    public void NotifyChannelVisibilityChanged(Guid channelId) =>
+        _ = EvictChannelGroupAsync(channelId);
+
+    /// <summary>
+    /// Tells the group visibility changed, then removes every connection from the SignalR group (and registry/presence).
+    /// Clients that still have access re-invoke JoinChannel, which re-authorizes against live visibility + grants.
+    /// </summary>
+    private async Task EvictChannelGroupAsync(Guid channelId)
+    {
+        try
+        {
+            var group = ChannelHub.GroupName(channelId);
+            var connections = registry.ConnectionsForChannel(channelId);
+            await hub.Clients.Group(group).SendAsync("channelVisibilityChanged", new { channelId });
+
+            foreach (var ctx in connections)
+            {
+                registry.RemoveGroup(ctx.ConnectionId, channelId);
+                await hub.Groups.RemoveFromGroupAsync(ctx.ConnectionId, group);
+                var offline = presence.Leave(channelId, ctx.ConnectionId);
+                if (offline is not null)
+                {
+                    NotifyPresenceChanged(channelId, offline);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Channel group eviction failed for channel {ChannelId}", channelId);
+        }
+    }
 
     private async Task FlushFilesChangedAsync(Guid channelId, bool force)
     {

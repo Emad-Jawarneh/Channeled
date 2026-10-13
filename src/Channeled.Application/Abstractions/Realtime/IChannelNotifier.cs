@@ -15,4 +15,10 @@ public interface IChannelNotifier
 
     /// <summary>User-scoped event (e.g. notificationCreated) via hub group <c>user:{id}</c>.</summary>
     void NotifyUser(Guid userId, string method, object payload);
+
+    /// <summary>
+    /// Channel visibility or grants changed. Sends <c>channelVisibilityChanged</c> to the channel group, then evicts every
+    /// connection from the group; clients re-invoke JoinChannel (which re-authorizes) if they still have access.
+    /// </summary>
+    void NotifyChannelVisibilityChanged(Guid channelId);
 }

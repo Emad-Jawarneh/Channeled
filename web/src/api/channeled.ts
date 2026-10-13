@@ -393,10 +393,19 @@ export const filesApi = {
       method: "PATCH",
       json: { name },
     }),
-  move: (slug: string, channel: string, id: string, targetFolderId: string | null) =>
+  move: (
+    slug: string,
+    channel: string,
+    id: string,
+    targetFolderId: string | null,
+    targetChannelName?: string | null,
+  ) =>
     api<FileItem>(`/api/v1/teams/${slug}/channels/${channel}/items/${id}/move`, {
       method: "POST",
-      json: { targetFolderId },
+      json: {
+        targetFolderId,
+        targetChannelName: targetChannelName ?? null,
+      },
     }),
   trash: (slug: string, channel: string, id: string) =>
     api<void>(`/api/v1/teams/${slug}/channels/${channel}/items/${id}`, { method: "DELETE" }),
@@ -451,8 +460,18 @@ export const personalApi = {
   },
   recent: () => api<ItemList>("/api/v1/me/files/recent"),
   starred: () => api<ItemList>("/api/v1/me/files/starred"),
+  createFolder: (name: string, parentFolderId?: string | null) =>
+    api<FileItem>(`/api/v1/me/files/folders`, {
+      method: "POST",
+      json: { name, parentFolderId: parentFolderId ?? null },
+    }),
   rename: (id: string, name: string) =>
     api<FileItem>(`/api/v1/me/files/items/${id}`, { method: "PATCH", json: { name } }),
+  move: (id: string, targetFolderId: string | null) =>
+    api<FileItem>(`/api/v1/me/files/items/${id}/move`, {
+      method: "POST",
+      json: { targetFolderId },
+    }),
   trash: (id: string) => api<void>(`/api/v1/me/files/items/${id}`, { method: "DELETE" }),
   restore: (id: string) => api<void>(`/api/v1/me/files/items/${id}/restore`, { method: "POST" }),
   copyToChannel: (id: string, teamSlug: string, channelName: string, newName?: string) =>

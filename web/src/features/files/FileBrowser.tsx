@@ -1,14 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { filesApi, ItemKind, teamsApi, type FileItem } from "../../api/channeled";
+import { ChannelKind, filesApi, ItemKind, teamsApi, type FileItem } from "../../api/channeled";
 import { AppShell } from "../../components/AppShell";
 import { formatBytes } from "../../lib/formatBytes";
+import { ModifiedAt } from "../../lib/formatModified";
 import { useChannelFilesChanged } from "../../realtime/useChannelHub";
+import { DropOverlay } from "../../uploads/DropOverlay";
+import { useFileDrop } from "../../uploads/useFileDrop";
 import { useUploads } from "../../uploads/UploadContext";
 import { Button } from "../../ui/Button";
 import { ChannelSidebar } from "../teams/ChannelSidebar";
+import { BulkBar } from "./BulkBar";
 import { CreateFolderDialog } from "./CreateFolderDialog";
+import { PickListDialog } from "./PickListDialog";
 import { ShareLinkDialog } from "./ShareLinkDialog";
 import { UploadButton } from "./UploadButton";
 import styles from "./FileBrowser.module.css";
@@ -77,6 +82,11 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
   const [createFolderError, setCreateFolderError] = useState<string | null>(null);
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [shareItem, setShareItem] = useState<FileItem | null>(null);
+  const [checked, setChecked] = useState<Set<string>>(() => new Set());
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [sendOpen, setSendOpen] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
 
   const sortParam = `${sort}_${sortDir}`;
   const listKey = ["items", teamSlug, channelName, folderId, trash, sortParam];
@@ -84,6 +94,10 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
     queryKey: listKey,
     queryFn: () => filesApi.list(teamSlug, channelName, { folderId, trash, sort: sortParam }),
   });
+
+  useEffect(() => {
+    setChecked(new Set());
+  }, [folderId, trash, teamSlug, channelName]);
 
   const seenDone = useRef(new Set<string>());
   useEffect(() => {
@@ -143,6 +157,61 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
     return items;
   }, [list.data, typeFilter, nameQuery]);
 
+  const checkedItems = useMemo(
+    () => visibleItems.filter((i) => checked.has(i.id)),
+    [visibleItems, checked],
+  );
+  const allVisibleChecked =
+    visibleItems.length > 0 && visibleItems.every((i) => checked.has(i.id));
+  const someVisibleChecked = checkedItems.length > 0 && !allVisibleChecked;
+
+  const moveFolderOptions = useMemo(
+    () =>
+      folders
+        .filter((f) => !checked.has(f.id))
+        .map((f) => ({ id: f.id, label: f.name })),
+    [folders, checked],
+  );
+
+  const sendChannelOptions = useMemo(
+    () =>
+      (channels.data ?? [])
+        .filter(
+          (c) =>
+            (c.kind ?? ChannelKind.File) === ChannelKind.File && c.name !== channelName,
+        )
+        .map((c) => ({ id: c.name, label: `#${c.name}` })),
+    [channels.data, channelName],
+  );
+
+  function toggleChecked(id: string) {
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAllVisible() {
+    setChecked((prev) => {
+      if (allVisibleChecked) {
+        const next = new Set(prev);
+        for (const item of visibleItems) next.delete(item.id);
+        return next;
+      }
+      const next = new Set(prev);
+      for (const item of visibleItems) next.add(item.id);
+      return next;
+    });
+  }
+
+  async function moveIds(ids: string[], targetFolderId: string | null, targetChannelName?: string | null) {
+    for (const id of ids) {
+      await filesApi.move(teamSlug, channelName, id, targetFolderId, targetChannelName);
+    }
+  }
+
   const details = selected ? (
     <div data-testid="details-panel">
       <h2 style={{ margin: 0 }}>{selected.name}</h2>
@@ -179,13 +248,24 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
 
   const menuItem = menu ? visibleItems.find((i) => i.id === menu.id) ?? null : null;
 
+  function enqueueChannelFiles(files: File[]) {
+    uploads.enqueueChannel(files, teamSlug, channelName, folderId);
+    void qc.invalidateQueries({ queryKey: listKey });
+  }
+
+  const { dropActive } = useFileDrop({
+    enabled: !trash,
+    onFiles: enqueueChannelFiles,
+  });
+
   return (
     <AppShell
       title={trash ? `Trash · #${channelName}` : `#${channelName}`}
       sidebar={<ChannelSidebar teamSlug={teamSlug} channelName={channelName} trash={trash} />}
       details={details}
     >
-      <div className={styles.headingBar}>
+      <DropOverlay active={dropActive} label={`Drop files to upload to #${channelName}`} />
+      <div className={styles.headingBar} data-testid="dropzone">
         <div>
           <div className={styles.headingRow}>
             <h2 className={styles.heading}>{trash ? "Trash" : channelName}</h2>
@@ -211,17 +291,31 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
               >
                 New folder
               </Button>
-              <UploadButton
-                testId="file-input"
-                onFiles={(files) => {
-                  uploads.enqueueChannel(files, teamSlug, channelName, folderId);
-                  void qc.invalidateQueries({ queryKey: listKey });
-                }}
-              />
+              <UploadButton testId="file-input" onFiles={enqueueChannelFiles} />
             </>
           )}
         </div>
       </div>
+
+      {!trash && (
+        <BulkBar
+          count={checked.size}
+          busy={bulkBusy || creatingFolder}
+          onClear={() => setChecked(new Set())}
+          onNewFolder={() => {
+            setCreateFolderError(null);
+            setCreateFolderOpen(true);
+          }}
+          onMoveTo={() => {
+            setBulkError(null);
+            setMoveOpen(true);
+          }}
+          onSendToChannel={() => {
+            setBulkError(null);
+            setSendOpen(true);
+          }}
+        />
+      )}
 
       <div className={styles.controls}>
         <label className={styles.search}>
@@ -336,23 +430,26 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
         <p data-testid="filter-empty">No items match these filters</p>
       )}
 
-      <div
-        className={styles.dropzone}
-        data-testid="dropzone"
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => {
-          e.preventDefault();
-          if (trash) return;
-          const files = [...e.dataTransfer.files];
-          if (files.length) {
-            uploads.enqueueChannel(files, teamSlug, channelName, folderId);
-          }
-        }}
-      >
+      {(list.data?.items.length ?? 0) > 0 && (
         <div className={styles.tableWrap}>
           <table className={styles.table} data-testid="file-table">
             <thead>
               <tr>
+                <th scope="col">
+                  {!trash && (
+                    <input
+                      type="checkbox"
+                      className={styles.check}
+                      data-testid="select-all"
+                      checked={allVisibleChecked}
+                      ref={(el) => {
+                        if (el) el.indeterminate = someVisibleChecked;
+                      }}
+                      aria-label="Select all"
+                      onChange={toggleAllVisible}
+                    />
+                  )}
+                </th>
                 <th scope="col">Name</th>
                 <th scope="col">Size</th>
                 <th scope="col">Modified</th>
@@ -366,9 +463,21 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
                 <tr
                   key={item.id}
                   data-testid={`row-${item.name}`}
-                  data-selected={selected?.id === item.id ? "true" : "false"}
+                  data-selected={selected?.id === item.id || checked.has(item.id) ? "true" : "false"}
                   onClick={() => setSelected(item)}
                 >
+                  <td onClick={(e) => e.stopPropagation()}>
+                    {!trash && (
+                      <input
+                        type="checkbox"
+                        className={styles.check}
+                        data-testid={`check-${item.name}`}
+                        checked={checked.has(item.id)}
+                        aria-label={`Select ${item.name}`}
+                        onChange={() => toggleChecked(item.id)}
+                      />
+                    )}
+                  </td>
                   <td>
                     {item.kind === ItemKind.Folder ? (
                       <button
@@ -387,7 +496,9 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
                     )}
                   </td>
                   <td>{item.kind === ItemKind.Folder ? "—" : formatBytes(item.sizeBytes)}</td>
-                  <td>{new Date(item.updatedAt).toLocaleString()}</td>
+                  <td>
+                    <ModifiedAt value={item.updatedAt} />
+                  </td>
                   <td>
                     <div className={styles.actionWrap}>
                       <button
@@ -417,8 +528,10 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
             </tbody>
           </table>
         </div>
-        {!trash && <div className={styles.dropHint}>Drop files here to upload to # {channelName}</div>}
-      </div>
+      )}
+      {!trash && (
+        <div className={styles.dropHint}>Drop files anywhere on this page to upload to #{channelName}</div>
+      )}
 
       <ShareLinkDialog
         open={shareItem !== null}
@@ -433,6 +546,11 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
         open={createFolderOpen}
         busy={creatingFolder}
         error={createFolderError}
+        description={
+          checked.size > 0
+            ? `Create a folder and move ${checked.size} selected item${checked.size === 1 ? "" : "s"} into it.`
+            : null
+        }
         onClose={() => {
           if (creatingFolder) return;
           setCreateFolderOpen(false);
@@ -442,13 +560,84 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
           setCreatingFolder(true);
           setCreateFolderError(null);
           try {
-            await filesApi.createFolder(teamSlug, channelName, name, folderId ?? null);
+            const folder = await filesApi.createFolder(teamSlug, channelName, name, folderId ?? null);
+            if (checked.size > 0) {
+              await moveIds([...checked], folder.id);
+              setChecked(new Set());
+            }
             setCreateFolderOpen(false);
             void qc.invalidateQueries({ queryKey: listKey });
           } catch (e) {
             setCreateFolderError(e instanceof Error ? e.message : "Could not create folder.");
           } finally {
             setCreatingFolder(false);
+          }
+        }}
+      />
+
+      <PickListDialog
+        open={moveOpen}
+        title={`Move ${checked.size} item${checked.size === 1 ? "" : "s"}`}
+        testId="move-to-dialog"
+        options={moveFolderOptions}
+        allowNone
+        noneLabel={folderId ? "Parent folder / root" : "Channel root"}
+        busy={bulkBusy}
+        error={bulkError}
+        confirmLabel="Move"
+        onClose={() => {
+          if (bulkBusy) return;
+          setMoveOpen(false);
+          setBulkError(null);
+        }}
+        onPick={async (targetFolderId) => {
+          setBulkBusy(true);
+          setBulkError(null);
+          try {
+            await moveIds([...checked], targetFolderId);
+            setChecked(new Set());
+            setMoveOpen(false);
+            void qc.invalidateQueries({ queryKey: listKey });
+          } catch (e) {
+            setBulkError(e instanceof Error ? e.message : "Move failed");
+          } finally {
+            setBulkBusy(false);
+          }
+        }}
+      />
+
+      <PickListDialog
+        open={sendOpen}
+        title={`Send ${checkedItems.filter((i) => i.kind === ItemKind.File).length || checked.size} file${checked.size === 1 ? "" : "s"} to channel`}
+        testId="send-channel-dialog"
+        options={sendChannelOptions}
+        emptyLabel="No other file channels in this team"
+        busy={bulkBusy}
+        error={bulkError}
+        confirmLabel="Send"
+        onClose={() => {
+          if (bulkBusy) return;
+          setSendOpen(false);
+          setBulkError(null);
+        }}
+        onPick={async (targetChannelName) => {
+          if (!targetChannelName) return;
+          const fileIds = checkedItems.filter((i) => i.kind === ItemKind.File).map((i) => i.id);
+          if (fileIds.length === 0) {
+            setBulkError("Only files can be sent to another channel.");
+            return;
+          }
+          setBulkBusy(true);
+          setBulkError(null);
+          try {
+            await moveIds(fileIds, null, targetChannelName);
+            setChecked(new Set());
+            setSendOpen(false);
+            void qc.invalidateQueries({ queryKey: listKey });
+          } catch (e) {
+            setBulkError(e instanceof Error ? e.message : "Send failed");
+          } finally {
+            setBulkBusy(false);
           }
         }}
       />

@@ -20,7 +20,7 @@ export function SignupPage() {
     setError(null);
     try {
       await register(email, displayName, password);
-      navigate("/");
+      navigate("/welcome");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign up failed.");
     } finally {

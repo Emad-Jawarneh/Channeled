@@ -6,11 +6,19 @@ type Props = {
   open: boolean;
   busy?: boolean;
   error?: string | null;
+  description?: string | null;
   onClose: () => void;
   onCreate: (name: string) => void | Promise<void>;
 };
 
-export function CreateFolderDialog({ open, busy = false, error = null, onClose, onCreate }: Props) {
+export function CreateFolderDialog({
+  open,
+  busy = false,
+  error = null,
+  description = null,
+  onClose,
+  onCreate,
+}: Props) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const titleId = useId();
@@ -55,6 +63,7 @@ export function CreateFolderDialog({ open, busy = false, error = null, onClose, 
         <h2 id={titleId} className={styles.title}>
           New folder
         </h2>
+        {description && <p className={styles.description}>{description}</p>}
         <label className={styles.label}>
           Folder name
           <input

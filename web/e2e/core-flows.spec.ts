@@ -147,6 +147,7 @@ test("sign in, upload, rename, move, trash, restore, invite, role, private, copy
   });
   await expect(page.getByText("done · 100%").first()).toBeVisible({ timeout: 60_000 });
   await expect(page.getByTestId(`personal-row-${personalName}`)).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId(`actions-${personalName}`).click();
   await page.getByTestId(`copy-${personalName}`).click();
   await expect(page.getByTestId("copy-success")).toBeVisible();
 

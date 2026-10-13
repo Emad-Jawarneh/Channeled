@@ -206,11 +206,13 @@
 
 .content {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   padding: 24px 28px;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  overflow-x: hidden;
 }
 
 .details {

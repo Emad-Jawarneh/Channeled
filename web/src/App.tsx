@@ -78,6 +78,27 @@ function HomeRedirect() {
   });
 
   if (teams.isLoading) {
+    return <p className="loading-session">Loading…</p>;
+  }
+
+  const first = teams.data?.[0];
+  if (first) {
+    return <Navigate to={`/t/${first.slug}/c/general`} replace />;
+  }
+
+  // Returning users with no team go to personal files; create-team onboarding is signup-only (/welcome).
+  return <Navigate to="/me/files" replace />;
+}
+
+function WelcomeRoute() {
+  const { user } = useAuth();
+  const teams = useQuery({
+    queryKey: ["teams"],
+    queryFn: () => teamsApi.list(),
+    enabled: !!user,
+  });
+
+  if (teams.isLoading) {
     return <WelcomePage loadingTeams />;
   }
 
@@ -95,6 +116,14 @@ export function App() {
       <Route path="/" element={<RootGate />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
+      <Route
+        path="/welcome"
+        element={
+          <RequireAuth>
+            <WelcomeRoute />
+          </RequireAuth>
+        }
+      />
       <Route path="/invite/:token" element={<InvitePage />} />
       <Route path="/reset/:token" element={<ResetPage />} />
       <Route path="/s/:token" element={<SharePage />} />

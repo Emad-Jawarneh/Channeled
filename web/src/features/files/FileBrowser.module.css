@@ -27,7 +27,8 @@
   background: color-mix(in srgb, var(--color-surface) 88%, var(--color-soft));
 }
 
-.toolbar label {
+/* Form field labels only — do not target UploadButton's <label>. */
+.toolbar > label:not([class]) {
   display: grid;
   gap: 0.4rem;
   font-size: 0.7rem;
@@ -218,12 +219,13 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-card);
-  /* visible so row action menus are not clipped */
-  overflow: visible;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   background: var(--color-surface);
 }
@@ -235,6 +237,82 @@
   border-bottom: 1px solid var(--color-row-line);
   height: 60px;
   vertical-align: middle;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table th:nth-child(1),
+.table td:nth-child(1) {
+  width: 2.75rem;
+  padding-left: 12px;
+  padding-right: 4px;
+  overflow: visible;
+}
+
+.table th:nth-child(3),
+.table td:nth-child(3) {
+  width: 6.5rem;
+}
+
+.table th:nth-child(4),
+.table td:nth-child(4) {
+  width: 7.5rem;
+  white-space: normal;
+}
+
+.modified {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.modified span:last-child {
+  color: var(--color-text-muted);
+  font-size: 0.8em;
+  font-weight: 500;
+}
+
+.table th:nth-child(5),
+.table td:nth-child(5) {
+  width: 3.25rem;
+  padding-left: 8px;
+  padding-right: 12px;
+}
+
+.check {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+
+.bulkBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-4);
+  padding: 0.75rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--color-accent) 35%, var(--color-border));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface));
+}
+
+.bulkCount {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.bulkActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .table th {
@@ -268,6 +346,12 @@
   font-weight: 700;
   cursor: pointer;
   padding: 0;
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
 }
 
 .actionWrap {
@@ -444,6 +528,8 @@
   color: var(--color-text);
 }
 
+.channelNav a.active,
+.sideLinks a.active,
 .active {
   background: var(--color-soft);
   font-weight: 700;

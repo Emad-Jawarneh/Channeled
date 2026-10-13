@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { ItemKind } from "../api/channeled";
-import { describeFileKind } from "./describeFileKind";
+import {
+  describeFileKind,
+  formatFileType,
+  matchesTypeFilter,
+} from "./describeFileKind";
 
 describe("describeFileKind", () => {
   it("labels folders", () => {
@@ -70,5 +74,15 @@ describe("describeFileKind", () => {
 
   it("defaults unknown blobs to file", () => {
     expect(describeFileKind({ kind: ItemKind.File, name: "mysterious" })).toBe("file");
+  });
+
+  it("formats table type labels and matches filters", () => {
+    const pic = { kind: ItemKind.File, name: "a.png", contentType: "image/png" };
+    expect(formatFileType(pic)).toBe("Image");
+    expect(matchesTypeFilter(pic, "image")).toBe(true);
+    expect(matchesTypeFilter(pic, "video")).toBe(false);
+    expect(matchesTypeFilter({ kind: ItemKind.Folder, name: "Docs" }, "folder")).toBe(true);
+    expect(formatFileType({ kind: ItemKind.File, name: "x.glb" })).toBe("GLB");
+    expect(matchesTypeFilter({ kind: ItemKind.File, name: "x.glb" }, "other")).toBe(true);
   });
 });

@@ -3,7 +3,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChannelKind, ItemKind, personalApi, teamsApi, type FileItem } from "../../api/channeled";
 import { AppShell } from "../../components/AppShell";
-import { describeFileKind } from "../../lib/describeFileKind";
+import {
+  describeFileKind,
+  FILE_TYPE_FILTER_OPTIONS,
+  formatFileType,
+  matchesTypeFilter,
+  type FileTypeFilter,
+} from "../../lib/describeFileKind";
 import { formatBytes } from "../../lib/formatBytes";
 import { ModifiedAt } from "../../lib/formatModified";
 import { DropOverlay } from "../../uploads/DropOverlay";
@@ -14,6 +20,7 @@ import { BulkBar } from "../files/BulkBar";
 import { CreateFolderDialog } from "../files/CreateFolderDialog";
 import { PickListDialog } from "../files/PickListDialog";
 import { SelectionControls } from "../files/SelectionControls";
+import { nextSortState, SortableTh, type SortColumn } from "../files/SortableTh";
 import { UploadButton } from "../files/UploadButton";
 import styles from "../files/FileBrowser.module.css";
 import { PersonalSidebar } from "./PersonalSidebar";
@@ -39,8 +46,8 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nameQuery, setNameQuery] = useState("");
-  const [typeFilter, setTypeFilter] = useState<"all" | "files" | "folders">("all");
-  const [sort, setSort] = useState<"name" | "updated" | "size">("name");
+  const [typeFilter, setTypeFilter] = useState<FileTypeFilter>("all");
+  const [sort, setSort] = useState<SortColumn>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [copySuccess, setCopySuccess] = useState(false);
@@ -162,11 +169,7 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
 
   const visibleItems = useMemo(() => {
     let items = list.data?.items ?? [];
-    if (typeFilter === "files") {
-      items = items.filter((i) => i.kind === ItemKind.File);
-    } else if (typeFilter === "folders") {
-      items = items.filter((i) => i.kind === ItemKind.Folder);
-    }
+    items = items.filter((i) => matchesTypeFilter(i, typeFilter));
     const q = nameQuery.trim().toLowerCase();
     if (q) {
       items = items.filter((i) => i.name.toLowerCase().includes(q));
@@ -182,6 +185,12 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
       return a.name.localeCompare(b.name) * dir;
     });
   }, [list.data, typeFilter, nameQuery, sort, sortDir]);
+
+  function onSortColumn(column: SortColumn) {
+    const next = nextSortState(sort, sortDir, column);
+    setSort(next.sort);
+    setSortDir(next.sortDir);
+  }
 
   const checkedItems = useMemo(
     () => visibleItems.filter((i) => checked.has(i.id)),
@@ -391,72 +400,20 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
             <span className={styles.controlLabel} id="personal-type-filter-label">
               Type
             </span>
-            <div className={styles.segment} role="group" aria-labelledby="personal-type-filter-label">
-              {(
-                [
-                  { id: "all", label: "All" },
-                  { id: "files", label: "Files" },
-                  { id: "folders", label: "Folders" },
-                ] as const
-              ).map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  className={styles.segmentBtn}
-                  data-active={typeFilter === opt.id ? "true" : "false"}
-                  aria-pressed={typeFilter === opt.id}
-                  onClick={() => setTypeFilter(opt.id)}
-                >
+            <select
+              className={styles.filterSelect}
+              id="personal-type-filter"
+              aria-labelledby="personal-type-filter-label"
+              data-testid="filter-type"
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value as FileTypeFilter)}
+            >
+              {FILE_TYPE_FILTER_OPTIONS.map((opt) => (
+                <option key={opt.id} value={opt.id}>
                   {opt.label}
-                </button>
+                </option>
               ))}
-            </div>
-          </div>
-
-          <div className={styles.controlBlock}>
-            <span className={styles.controlLabel} id="personal-sort-label">
-              Sort by
-            </span>
-            <div className={styles.sortControls}>
-              <div className={styles.segment} role="group" aria-labelledby="personal-sort-label">
-                {(
-                  [
-                    { id: "name", label: "Name" },
-                    { id: "updated", label: "Updated" },
-                    { id: "size", label: "Size" },
-                  ] as const
-                ).map((opt) => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    className={styles.segmentBtn}
-                    data-active={sort === opt.id ? "true" : "false"}
-                    aria-pressed={sort === opt.id}
-                    onClick={() => {
-                      if (sort === opt.id) {
-                        setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-                      } else {
-                        setSort(opt.id);
-                        setSortDir(opt.id === "name" ? "asc" : "desc");
-                      }
-                    }}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-              <button
-                type="button"
-                className={styles.sortDir}
-                data-dir={sortDir}
-                aria-label={sortDir === "asc" ? "Ascending" : "Descending"}
-                title={sortDir === "asc" ? "Ascending" : "Descending"}
-                onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
-              >
-                <span aria-hidden="true">{sortDir === "asc" ? "↑" : "↓"}</span>
-                <span className={styles.sortDirText}>{sortDir === "asc" ? "Asc" : "Desc"}</span>
-              </button>
-            </div>
+            </select>
           </div>
         </div>
       </div>
@@ -515,9 +472,28 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
                     />
                   )}
                 </th>
-                <th scope="col">Name</th>
-                <th scope="col">Size</th>
-                <th scope="col">Modified</th>
+                <SortableTh
+                  column="name"
+                  label="Name"
+                  sort={sort}
+                  sortDir={sortDir}
+                  onSort={onSortColumn}
+                />
+                <th scope="col">Type</th>
+                <SortableTh
+                  column="size"
+                  label="Size"
+                  sort={sort}
+                  sortDir={sortDir}
+                  onSort={onSortColumn}
+                />
+                <SortableTh
+                  column="updated"
+                  label="Modified"
+                  sort={sort}
+                  sortDir={sortDir}
+                  onSort={onSortColumn}
+                />
                 <th scope="col">
                   <span className="visually-hidden">Actions</span>
                 </th>
@@ -561,6 +537,9 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
                         {item.kind === ItemKind.Folder ? `${item.name}/` : item.name}
                       </span>
                     )}
+                  </td>
+                  <td>
+                    <span className={styles.typeCell}>{formatFileType(item)}</span>
                   </td>
                   <td>{item.kind === ItemKind.Folder ? "—" : formatBytes(item.sizeBytes)}</td>
                   <td>

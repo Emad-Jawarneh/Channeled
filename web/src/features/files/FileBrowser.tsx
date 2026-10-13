@@ -3,7 +3,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChannelKind, filesApi, ItemKind, teamsApi, type FileItem } from "../../api/channeled";
 import { AppShell } from "../../components/AppShell";
-import { describeFileKind } from "../../lib/describeFileKind";
+import {
+  describeFileKind,
+  FILE_TYPE_FILTER_OPTIONS,
+  formatFileType,
+  matchesTypeFilter,
+  type FileTypeFilter,
+} from "../../lib/describeFileKind";
 import { formatBytes } from "../../lib/formatBytes";
 import { ModifiedAt } from "../../lib/formatModified";
 import { useChannelFilesChanged } from "../../realtime/useChannelHub";
@@ -17,6 +23,7 @@ import { CreateFolderDialog } from "./CreateFolderDialog";
 import { PickListDialog } from "./PickListDialog";
 import { SelectionControls } from "./SelectionControls";
 import { ShareLinkDialog } from "./ShareLinkDialog";
+import { nextSortState, SortableTh, type SortColumn } from "./SortableTh";
 import { UploadButton } from "./UploadButton";
 import styles from "./FileBrowser.module.css";
 
@@ -39,9 +46,9 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
   useChannelFilesChanged(channelId, teamSlug, channelName);
   const [selected, setSelected] = useState<FileItem | null>(null);
   const [folderId, setFolderId] = useState<string | undefined>();
-  const [sort, setSort] = useState<"name" | "updated" | "size">("name");
+  const [sort, setSort] = useState<SortColumn>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const [typeFilter, setTypeFilter] = useState<"all" | "files" | "folders">("all");
+  const [typeFilter, setTypeFilter] = useState<FileTypeFilter>("all");
   const [nameQuery, setNameQuery] = useState("");
   const [menu, setMenu] = useState<MenuState | null>(null);
   const menuRef = useRef<HTMLUListElement | null>(null);
@@ -90,11 +97,10 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkError, setBulkError] = useState<string | null>(null);
 
-  const sortParam = `${sort}_${sortDir}`;
-  const listKey = ["items", teamSlug, channelName, folderId, trash, sortParam];
+  const listKey = ["items", teamSlug, channelName, folderId, trash];
   const list = useQuery({
     queryKey: listKey,
-    queryFn: () => filesApi.list(teamSlug, channelName, { folderId, trash, sort: sortParam }),
+    queryFn: () => filesApi.list(teamSlug, channelName, { folderId, trash }),
   });
 
   useEffect(() => {
@@ -147,17 +153,28 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
 
   const visibleItems = useMemo(() => {
     let items = list.data?.items ?? [];
-    if (typeFilter === "files") {
-      items = items.filter((i) => i.kind === ItemKind.File);
-    } else if (typeFilter === "folders") {
-      items = items.filter((i) => i.kind === ItemKind.Folder);
-    }
+    items = items.filter((i) => matchesTypeFilter(i, typeFilter));
     const q = nameQuery.trim().toLowerCase();
     if (q) {
       items = items.filter((i) => i.name.toLowerCase().includes(q));
     }
-    return items;
-  }, [list.data, typeFilter, nameQuery]);
+    const dir = sortDir === "asc" ? 1 : -1;
+    return [...items].sort((a, b) => {
+      if (sort === "size") {
+        return ((a.sizeBytes ?? 0) - (b.sizeBytes ?? 0)) * dir;
+      }
+      if (sort === "updated") {
+        return (new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime()) * dir;
+      }
+      return a.name.localeCompare(b.name) * dir;
+    });
+  }, [list.data, typeFilter, nameQuery, sort, sortDir]);
+
+  function onSortColumn(column: SortColumn) {
+    const next = nextSortState(sort, sortDir, column);
+    setSort(next.sort);
+    setSortDir(next.sortDir);
+  }
 
   const checkedItems = useMemo(
     () => visibleItems.filter((i) => checked.has(i.id)),
@@ -355,81 +372,20 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
             <span className={styles.controlLabel} id="type-filter-label">
               Type
             </span>
-            <div className={styles.segment} role="group" aria-labelledby="type-filter-label">
-              {(
-                [
-                  { id: "all", label: "All" },
-                  { id: "files", label: "Files" },
-                  { id: "folders", label: "Folders" },
-                ] as const
-              ).map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  className={styles.segmentBtn}
-                  data-active={typeFilter === opt.id ? "true" : "false"}
-                  data-testid={`filter-type-${opt.id}`}
-                  aria-pressed={typeFilter === opt.id}
-                  onClick={() => setTypeFilter(opt.id)}
-                >
+            <select
+              className={styles.filterSelect}
+              id="type-filter"
+              aria-labelledby="type-filter-label"
+              data-testid="filter-type"
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value as FileTypeFilter)}
+            >
+              {FILE_TYPE_FILTER_OPTIONS.map((opt) => (
+                <option key={opt.id} value={opt.id}>
                   {opt.label}
-                </button>
+                </option>
               ))}
-            </div>
-          </div>
-
-          <div className={styles.controlBlock}>
-            <span className={styles.controlLabel} id="sort-label">
-              Sort by
-            </span>
-            <div className={styles.sortControls}>
-              <div
-                className={styles.segment}
-                role="group"
-                aria-labelledby="sort-label"
-                data-testid="sort-select"
-                data-sort={sortParam}
-              >
-                {(
-                  [
-                    { id: "name", label: "Name" },
-                    { id: "updated", label: "Updated" },
-                    { id: "size", label: "Size" },
-                  ] as const
-                ).map((opt) => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    className={styles.segmentBtn}
-                    data-active={sort === opt.id ? "true" : "false"}
-                    data-testid={`sort-${opt.id}`}
-                    aria-pressed={sort === opt.id}
-                    onClick={() => {
-                      if (sort === opt.id) {
-                        setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-                      } else {
-                        setSort(opt.id);
-                        setSortDir(opt.id === "name" ? "asc" : "desc");
-                      }
-                    }}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-              <button
-                type="button"
-                className={styles.sortDir}
-                data-testid="sort-direction"
-                data-dir={sortDir}
-                aria-label={sortDir === "asc" ? "Ascending" : "Descending"}
-                title={sortDir === "asc" ? "Ascending" : "Descending"}
-                onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
-              >
-                <span aria-hidden="true">{sortDir === "asc" ? "↑" : "↓"}</span>
-                <span className={styles.sortDirText}>{sortDir === "asc" ? "Asc" : "Desc"}</span>
-              </button>
-            </div>
+            </select>
           </div>
         </div>
       </div>
@@ -484,9 +440,28 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
                     />
                   )}
                 </th>
-                <th scope="col">Name</th>
-                <th scope="col">Size</th>
-                <th scope="col">Modified</th>
+                <SortableTh
+                  column="name"
+                  label="Name"
+                  sort={sort}
+                  sortDir={sortDir}
+                  onSort={onSortColumn}
+                />
+                <th scope="col">Type</th>
+                <SortableTh
+                  column="size"
+                  label="Size"
+                  sort={sort}
+                  sortDir={sortDir}
+                  onSort={onSortColumn}
+                />
+                <SortableTh
+                  column="updated"
+                  label="Modified"
+                  sort={sort}
+                  sortDir={sortDir}
+                  onSort={onSortColumn}
+                />
                 <th scope="col">
                   <span className="visually-hidden">Actions</span>
                 </th>
@@ -528,6 +503,9 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
                     ) : (
                       <span className={styles.linkish}>{item.name}</span>
                     )}
+                  </td>
+                  <td>
+                    <span className={styles.typeCell}>{formatFileType(item)}</span>
                   </td>
                   <td>{item.kind === ItemKind.Folder ? "—" : formatBytes(item.sizeBytes)}</td>
                   <td>

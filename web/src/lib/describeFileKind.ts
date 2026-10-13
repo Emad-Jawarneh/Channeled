@@ -366,6 +366,54 @@ function categoryFromMime(mime: string): FileKindCategory | null {
   return null;
 }
 
+export const FILE_KIND_CATEGORIES: readonly FileKindCategory[] = [
+  "image",
+  "video",
+  "audio",
+  "document",
+  "spreadsheet",
+  "presentation",
+  "archive",
+  "code",
+  "text",
+] as const;
+
+export type FileTypeFilter = "all" | "folder" | FileKindCategory | "other";
+
+const CATEGORY_SET = new Set<string>(FILE_KIND_CATEGORIES);
+
+const FILTER_LABELS: Record<FileTypeFilter, string> = {
+  all: "All",
+  folder: "Folders",
+  image: "Images",
+  video: "Videos",
+  audio: "Audio",
+  document: "Documents",
+  spreadsheet: "Spreadsheets",
+  presentation: "Presentations",
+  archive: "Archives",
+  code: "Code",
+  text: "Text",
+  other: "Other",
+};
+
+const TABLE_LABELS: Record<FileKindCategory | "folder", string> = {
+  folder: "Folder",
+  image: "Image",
+  video: "Video",
+  audio: "Audio",
+  document: "Document",
+  spreadsheet: "Spreadsheet",
+  presentation: "Presentation",
+  archive: "Archive",
+  code: "Code",
+  text: "Text",
+};
+
+export const FILE_TYPE_FILTER_OPTIONS: { id: FileTypeFilter; label: string }[] = (
+  ["all", "folder", ...FILE_KIND_CATEGORIES, "other"] as FileTypeFilter[]
+).map((id) => ({ id, label: FILTER_LABELS[id] }));
+
 /**
  * Kind for the details panel: Folder, a category (image/video/…), or the file extension.
  * Uses MIME when present, then extension.
@@ -402,4 +450,38 @@ export function describeFileKind(item: {
   }
 
   return "file";
+}
+
+/** Category key used for filtering (`folder` / known category / `other`). */
+export function fileTypeFilterKey(item: {
+  kind: number;
+  name: string;
+  contentType?: string | null;
+}): Exclude<FileTypeFilter, "all"> {
+  if (item.kind === ItemKind.Folder) return "folder";
+  const kind = describeFileKind(item);
+  if (CATEGORY_SET.has(kind)) return kind as FileKindCategory;
+  return "other";
+}
+
+/** Short label for the Type table column. */
+export function formatFileType(item: {
+  kind: number;
+  name: string;
+  contentType?: string | null;
+}): string {
+  const key = fileTypeFilterKey(item);
+  if (key === "other") {
+    const raw = describeFileKind(item);
+    return raw === "file" ? "Other" : raw;
+  }
+  return TABLE_LABELS[key];
+}
+
+export function matchesTypeFilter(
+  item: { kind: number; name: string; contentType?: string | null },
+  filter: FileTypeFilter,
+): boolean {
+  if (filter === "all") return true;
+  return fileTypeFilterKey(item) === filter;
 }

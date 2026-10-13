@@ -1,0 +1,83 @@
+.tableWrap {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--color-surface);
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--color-row-line);
+  vertical-align: middle;
+}
+
+.table th {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  background: var(--color-table-head);
+  white-space: nowrap;
+}
+
+.table td {
+  color: var(--color-text);
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.table tbody tr:hover {
+  background: var(--color-row-hover, color-mix(in srgb, var(--color-soft) 55%, transparent));
+}
+
+.member {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 12rem;
+}
+
+.memberName {
+  font-weight: 600;
+}
+
+.memberEmail {
+  color: var(--color-text-muted);
+  font-size: 0.9em;
+}
+
+.role {
+  white-space: nowrap;
+  min-width: 5rem;
+}
+
+.actions {
+  white-space: nowrap;
+  width: 1%;
+}
+
+.table select {
+  max-width: 10rem;
+}
+
+.leaveWrap {
+  margin-top: var(--space-5);
+}
+
+.error {
+  color: var(--color-danger);
+  margin-bottom: var(--space-3);
+}

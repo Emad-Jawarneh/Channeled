@@ -5,8 +5,8 @@ import { MemberRole, teamsApi, type TeamMember } from "../../api/channeled";
 import { useAuth } from "../../auth/AuthContext";
 import { AppShell } from "../../components/AppShell";
 import { Button } from "../../ui/Button";
-import styles from "../files/FileBrowser.module.css";
 import { ConfirmDialog } from "./ConfirmDialog";
+import styles from "./MembersPage.module.css";
 
 const roleLabel = ["Viewer", "Member", "Admin", "Owner"];
 
@@ -74,7 +74,7 @@ export function MembersPage({ teamSlug }: { teamSlug: string }) {
   return (
     <AppShell title={`${teamSlug} · Members`}>
       {error && (
-        <p role="alert" data-testid="members-error" style={{ color: "var(--color-danger)" }}>
+        <p role="alert" data-testid="members-error" className={styles.error}>
           {error}
         </p>
       )}
@@ -93,9 +93,12 @@ export function MembersPage({ teamSlug }: { teamSlug: string }) {
             {(members.data ?? []).map((m) => (
               <tr key={m.userId} data-testid={`member-${m.email}`}>
                 <td>
-                  {m.displayName} ({m.email})
+                  <div className={styles.member}>
+                    <span className={styles.memberName}>{m.displayName}</span>
+                    <span className={styles.memberEmail}>{m.email}</span>
+                  </div>
                 </td>
-                <td>{roleLabel[m.role] ?? m.role}</td>
+                <td className={styles.role}>{roleLabel[m.role] ?? m.role}</td>
                 {isOwner && (
                   <td>
                     {m.role !== MemberRole.Owner && m.userId !== user?.id && (
@@ -118,7 +121,7 @@ export function MembersPage({ teamSlug }: { teamSlug: string }) {
                     )}
                   </td>
                 )}
-                <td>
+                <td className={styles.actions}>
                   {canRemove(m) && (
                     <Button
                       type="button"
@@ -140,7 +143,7 @@ export function MembersPage({ teamSlug }: { teamSlug: string }) {
       </div>
 
       {team.data && !isOwner && (
-        <p>
+        <p className={styles.leaveWrap}>
           <Button
             type="button"
             data-testid="leave-team"

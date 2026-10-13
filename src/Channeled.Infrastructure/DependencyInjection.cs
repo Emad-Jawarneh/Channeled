@@ -19,6 +19,7 @@ using Channeled.Infrastructure.Chat;
 using Channeled.Infrastructure.Email;
 using Channeled.Infrastructure.Files;
 using Channeled.Infrastructure.Identity;
+using Channeled.Infrastructure.Jobs;
 using Channeled.Infrastructure.Notifications;
 using Channeled.Infrastructure.Operations;
 using Channeled.Infrastructure.Persistence;
@@ -55,6 +56,7 @@ public static class DependencyInjection
         services.Configure<RealtimeOptions>(configuration.GetSection(RealtimeOptions.SectionName));
         services.Configure<PublicFileLinksOptions>(configuration.GetSection(PublicFileLinksOptions.SectionName));
         services.Configure<ChatOptions>(configuration.GetSection(ChatOptions.SectionName));
+        services.Configure<ChannelDeleteOptions>(configuration.GetSection(ChannelDeleteOptions.SectionName));
 
         var connectionString = configuration.GetConnectionString("Postgres")
             ?? throw new InvalidOperationException("Connection string 'Postgres' is required.");
@@ -109,6 +111,7 @@ public static class DependencyInjection
         services.AddSingleton<IChannelNotifier, NullChannelNotifier>();
         services.AddSingleton<IAuthStateChanged, NullAuthStateChanged>();
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<ChannelWriteGuard>();
         services.AddScoped<ITeamService, TeamService>();
         services.AddScoped<IFileService, FileService>();
         services.AddScoped<IPersonalService, PersonalService>();
@@ -116,6 +119,8 @@ public static class DependencyInjection
         services.AddScoped<IUsageService, UsageService>();
         services.AddScoped<IQuotaReconciliationService, QuotaReconciliationService>();
         services.AddScoped<IAdminService, AdminService>();
+        services.AddScoped<IObjectDeleteJobProcessor, ObjectDeleteJobProcessor>();
+        services.AddScoped<ITrashPurgeService, TrashPurgeService>();
         services.AddSingleton<HmacTicketSigner>();
         services.AddSingleton<ClaimIdempotencyStore>();
         services.AddSingleton<TicketUsageTracker>();
@@ -143,6 +148,8 @@ public static class DependencyInjection
             services.AddHostedService<QuotaReconciliationHostedService>();
             services.AddHostedService<BackupHostedService>();
             services.AddHostedService<ChatPurgeHostedService>();
+            services.AddHostedService<ObjectDeleteHostedService>();
+            services.AddHostedService<TrashPurgeHostedService>();
         }
 
         return services;

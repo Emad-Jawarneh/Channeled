@@ -25,4 +25,5 @@ public static class ErrorCodes
     public const string MessageTooLong = "message_too_long";
     public const string WrongChannelKind = "wrong_channel_kind";
     public const string ChannelArchived = "channel_archived";
+    public const string LockTimeout = "lock_timeout";
 }

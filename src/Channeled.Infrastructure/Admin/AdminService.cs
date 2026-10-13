@@ -63,6 +63,7 @@ public sealed class AdminService(
             report.DiskFreeBytes,
             report.StoreKind,
             report.PendingJobs,
+            report.DeadJobs,
             report.Detail));
     }
 
@@ -442,23 +443,24 @@ public sealed class AdminService(
             return NotFound();
         }
 
-        try
-        {
-            await store.DeleteAsync(file.StorageKey, ct);
-        }
-        catch
-        {
-            // continue row purge
-        }
-
-        // Links are revoked here; the composite FK (ON DELETE SET NULL (file_id)) then nulls file_id when the
-        // file row is deleted, so purge never fails on live links and link rows survive for history/audit.
+        // Commit-then-bytes: remove the row first, then delete store object (missing key = success).
+        var storageKey = file.StorageKey;
         var purgedFileId = file.Id;
         await ShareLinkRevoker.RevokeAsync(
             db, clock, l => l.FileId == purgedFileId, ShareLinkRevoker.ReasonPurge, actorId, context, ct);
         db.Files.Remove(file);
         await WriteAuditAsync(actorId, AuditEventType.FilePurge, "file", fileId.ToString(), null, context, ct);
         await db.SaveChangesAsync(ct);
+
+        try
+        {
+            await store.DeleteAsync(storageKey, ct);
+        }
+        catch
+        {
+            // Row already committed; reconcile reports missing-object / orphan store separately.
+        }
+
         return AppResult.Ok();
     }
 

@@ -350,6 +350,7 @@ public static class TeamEndpoints
         ErrorCodes.Forbidden => StatusCodes.Status403Forbidden,
         ErrorCodes.NotFound => StatusCodes.Status404NotFound,
         ErrorCodes.Conflict => StatusCodes.Status409Conflict,
+        ErrorCodes.LockTimeout => StatusCodes.Status409Conflict,
         ErrorCodes.InvalidToken => StatusCodes.Status400BadRequest,
         _ => StatusCodes.Status400BadRequest,
     };

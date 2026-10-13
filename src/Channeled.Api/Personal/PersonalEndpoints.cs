@@ -310,6 +310,7 @@ public static class PersonalEndpoints
         ErrorCodes.Forbidden => StatusCodes.Status403Forbidden,
         ErrorCodes.NotFound => StatusCodes.Status404NotFound,
         ErrorCodes.Conflict or ErrorCodes.NameConflict => StatusCodes.Status409Conflict,
+        ErrorCodes.LockTimeout => StatusCodes.Status409Conflict,
         ErrorCodes.TeamQuotaExceeded or ErrorCodes.PersonalQuotaExceeded => StatusCodes.Status409Conflict,
         ErrorCodes.FileTooLarge => StatusCodes.Status413PayloadTooLarge,
         _ => StatusCodes.Status400BadRequest,

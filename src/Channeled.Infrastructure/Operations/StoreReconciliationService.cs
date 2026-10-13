@@ -38,11 +38,18 @@ public sealed class StoreReconciliationService(
             }
         }
 
+        var filesWithoutChannel = await db.Files.AsNoTracking()
+            .Where(f => f.ChannelId == null && f.OwnerUserId == null)
+            .Select(f => f.Id)
+            .OrderBy(id => id)
+            .ToListAsync(cancellationToken);
+
         return new StoreReconcileReport(
             dbKeys.Count,
             storeKeys.Count,
             missing,
             orphans,
-            mismatches);
+            mismatches,
+            filesWithoutChannel);
     }
 }

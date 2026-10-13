@@ -19,6 +19,7 @@ public sealed record AdminHealthDto(
     long DiskFreeBytes,
     string StoreKind,
     int PendingJobs,
+    int DeadJobs,
     string? Detail);
 
 public sealed record AdminUserDto(

@@ -15,6 +15,7 @@ import { Button } from "../../ui/Button";
 import styles from "../files/FileBrowser.module.css";
 import { validateChannelName } from "./channelName";
 import local from "./ChannelsSettingsPage.module.css";
+import { useUploads } from "../../uploads/UploadContext";
 import { DeleteChannelDialog, type DeleteChannelDisposition } from "./DeleteChannelDialog";
 
 function JoinRequests({ teamSlug, channel }: { teamSlug: string; channel: Channel }) {
@@ -78,6 +79,7 @@ export function ChannelsSettingsPage({ teamSlug }: { teamSlug: string }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const params = useParams();
+  const uploads = useUploads();
   const [name, setName] = useState("");
   const [visibility, setVisibility] = useState<number>(ChannelVisibility.Open);
   const [kind, setKind] = useState<number>(ChannelKind.File);
@@ -200,6 +202,7 @@ export function ChannelsSettingsPage({ teamSlug }: { teamSlug: string }) {
             ? { moveFilesToChannel: disposition.targetChannel }
             : undefined;
       await teamsApi.deleteChannel(teamSlug, ch.name, body);
+      uploads.clearChannel(teamSlug, ch.name);
       void qc.removeQueries({ queryKey: ["items", teamSlug, ch.name] });
       void qc.removeQueries({ queryKey: ["join-requests", teamSlug, ch.name] });
       void qc.removeQueries({ queryKey: ["messages", teamSlug, ch.name] });

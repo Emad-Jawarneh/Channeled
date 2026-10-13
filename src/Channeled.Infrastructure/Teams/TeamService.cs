@@ -2,7 +2,6 @@ using System.Text.RegularExpressions;
 using Channeled.Application.Abstractions.Email;
 using Channeled.Application.Abstractions.Realtime;
 using Channeled.Application.Abstractions.Results;
-using Channeled.Application.Abstractions.Storage;
 using Channeled.Application.Abstractions.Time;
 using Channeled.Application.Identity;
 using Channeled.Application.Teams;
@@ -12,13 +11,15 @@ using Channeled.Domain.Errors;
 using Channeled.Domain.Files;
 using Channeled.Domain.Identity;
 using Channeled.Domain.Teams;
-using Channeled.Infrastructure.Files;
 using Channeled.Infrastructure.Identity;
+using Channeled.Infrastructure.Jobs;
 using Channeled.Infrastructure.Persistence;
 using Channeled.Infrastructure.PublicLinks;
 using Channeled.Infrastructure.Security;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using Npgsql;
 
 namespace Channeled.Infrastructure.Teams;
 
@@ -29,8 +30,9 @@ public sealed partial class TeamService(
     IClock clock,
     IEmailSender emailSender,
     IAuthStateChanged authStateChanged,
-    IFileStore fileStore,
-    IChannelNotifier channelNotifier) : ITeamService
+    IChannelNotifier channelNotifier,
+    ChannelWriteGuard channelWriteGuard,
+    IOptions<ChannelDeleteOptions> channelDeleteOptions) : ITeamService
 {
     private static readonly TimeSpan InvitationLifetime = TimeSpan.FromDays(7);
 
@@ -637,19 +639,35 @@ public sealed partial class TeamService(
             return NotFoundChannel();
         }
 
+        var opts = channelDeleteOptions.Value;
         var channel = loaded.Channel;
         var team = loaded.TeamMembership.Team;
         var deletedChannelId = channel.Id;
+        var channelKind = channel.Kind;
+        var channelNameSnapshot = channel.Name;
         Guid? notifyTargetChannelId = null;
+        Guid? moveTargetId = null;
+        string? moveTargetName = null;
+
+        var messageCount = await db.ChannelMessages.CountAsync(m => m.ChannelId == deletedChannelId, ct);
+        if (messageCount > opts.MaxMessagesPerTxn)
+        {
+            return AppResult.Fail(
+                ErrorCodes.Validation,
+                $"Channel has too many messages to delete in one request (max {opts.MaxMessagesPerTxn:N0}).");
+        }
+
+        var fileCount = channel.Kind == ChannelKind.File
+            ? await db.Files.CountAsync(f => f.ChannelId == deletedChannelId, ct)
+            : 0;
+
+        var discard = request.DiscardFiles == true;
+        var moveTo = string.IsNullOrWhiteSpace(request.MoveFilesToChannel)
+            ? null
+            : request.MoveFilesToChannel.Trim();
 
         if (channel.Kind == ChannelKind.File)
         {
-            var fileCount = await db.Files.CountAsync(f => f.ChannelId == deletedChannelId, ct);
-            var discard = request.DiscardFiles == true;
-            var moveTo = string.IsNullOrWhiteSpace(request.MoveFilesToChannel)
-                ? null
-                : request.MoveFilesToChannel.Trim();
-
             if (discard && moveTo is not null)
             {
                 return AppResult.Fail(ErrorCodes.Validation, "Choose either discard or move files, not both.");
@@ -662,6 +680,13 @@ public sealed partial class TeamService(
                     "File channel has files: set discardFiles=true or moveFilesToChannel to another file channel.");
             }
 
+            if (fileCount > opts.MaxFilesPerTxn)
+            {
+                return AppResult.Fail(
+                    ErrorCodes.Validation,
+                    $"Channel has too many files to delete or move in one request (max {opts.MaxFilesPerTxn:N0}).");
+            }
+
             if (moveTo is not null)
             {
                 if (string.Equals(moveTo, channel.Name, StringComparison.OrdinalIgnoreCase))
@@ -669,7 +694,7 @@ public sealed partial class TeamService(
                     return AppResult.Fail(ErrorCodes.Validation, "Cannot move files into the channel being deleted.");
                 }
 
-                var target = await db.Channels.FirstOrDefaultAsync(
+                var target = await db.Channels.AsNoTracking().FirstOrDefaultAsync(
                     c => c.TeamId == team.Id && c.Name.ToLower() == moveTo.ToLower(),
                     ct);
                 if (target is null || target.Kind != ChannelKind.File || target.ArchivedAt is not null)
@@ -677,70 +702,143 @@ public sealed partial class TeamService(
                     return AppResult.Fail(ErrorCodes.Validation, "Move target must be an active file channel in this team.");
                 }
 
-                var moveResult = await MoveChannelFilesToAsync(userId, channel, target, context, ct);
-                if (!moveResult.Succeeded)
-                {
-                    return moveResult;
-                }
-
-                notifyTargetChannelId = target.Id;
+                moveTargetId = target.Id;
+                moveTargetName = target.Name;
             }
-            else if (discard || fileCount > 0)
+        }
+
+        try
+        {
+            await using var tx = await db.Database.BeginTransactionAsync(ct);
+
+            // Timeouts are sanitized to [A-Za-z0-9] only (e.g. 5s); cannot be bound as parameters for SET LOCAL.
+#pragma warning disable EF1002
+            await db.Database.ExecuteSqlRawAsync(
+                $"SET LOCAL lock_timeout = '{SanitizeTimeout(opts.LockTimeout)}'",
+                ct);
+            await db.Database.ExecuteSqlRawAsync(
+                $"SET LOCAL statement_timeout = '{SanitizeTimeout(opts.StatementTimeout)}'",
+                ct);
+#pragma warning restore EF1002
+
+            // Lock channels in ascending Id order (delete FOR UPDATE; move target FOR SHARE).
+            var locks = new List<(Guid Id, bool ForUpdate)> { (deletedChannelId, true) };
+            if (moveTargetId is Guid tid)
             {
-                var discardResult = await DiscardChannelFilesAsync(deletedChannelId, team, ct);
-                if (!discardResult.Succeeded)
+                locks.Add((tid, false));
+            }
+
+            var lockResult = await channelWriteGuard.LockOrderedAsync(locks, ct);
+            if (!lockResult.Succeeded)
+            {
+                return lockResult;
+            }
+
+            // Re-check existence after lock (race with concurrent delete).
+            if (!await db.Channels.AnyAsync(c => c.Id == deletedChannelId, ct))
+            {
+                return NotFoundChannel();
+            }
+
+            if (moveTargetId is Guid targetLockId)
+            {
+                var targetStillOk = await db.Channels.AnyAsync(
+                    c => c.Id == targetLockId && c.Kind == ChannelKind.File && c.ArchivedAt == null,
+                    ct);
+                if (!targetStillOk)
                 {
-                    return discardResult;
+                    return AppResult.Fail(ErrorCodes.Validation, "Move target must be an active file channel in this team.");
+                }
+            }
+
+            if (channel.Kind == ChannelKind.File)
+            {
+                if (moveTargetId is Guid targetId)
+                {
+                    var moveResult = await MoveChannelFilesInTxnAsync(userId, deletedChannelId, targetId, context, ct);
+                    if (!moveResult.Succeeded)
+                    {
+                        return moveResult;
+                    }
+
+                    notifyTargetChannelId = targetId;
+                }
+                else
+                {
+                    var discardResult = await DiscardChannelFilesInTxnAsync(deletedChannelId, team.Id, opts.ObjectDeleteChunkSize, ct);
+                    if (!discardResult.Succeeded)
+                    {
+                        return discardResult;
+                    }
                 }
             }
             else
             {
-                // Empty file channel: still drop folders/sessions if any.
-                await DiscardChannelFilesAsync(deletedChannelId, team, ct);
+                await CollectAndRemoveSessionsAsync(deletedChannelId, enqueueDeletes: true, opts.ObjectDeleteChunkSize, ct);
             }
+
+            if (messageCount > 0)
+            {
+                await db.ChannelMessages.Where(m => m.ChannelId == deletedChannelId).ExecuteDeleteAsync(ct);
+            }
+
+            await ShareLinkRevoker.RevokeAsync(
+                db, clock, l => l.ChannelId == deletedChannelId, ShareLinkRevoker.ReasonChannelDelete, userId, context, ct);
+
+            await db.Notifications.Where(n => n.ChannelId == deletedChannelId).ExecuteDeleteAsync(ct);
+
+            var tracked = await db.Channels.FirstAsync(c => c.Id == deletedChannelId, ct);
+            db.Channels.Remove(tracked);
+
+            var auditMove = moveTargetId is Guid mid
+                ? $",\"moveTargetId\":\"{mid}\",\"moveTargetName\":{JsonString(moveTargetName)}"
+                : ",\"moveTargetId\":null,\"moveTargetName\":null";
+            await WriteAuditAsync(
+                userId,
+                AuditEventType.ChannelDelete,
+                "channel",
+                deletedChannelId.ToString(),
+                team.Id,
+                context,
+                ct,
+                $"{{\"kind\":{(int)channelKind},\"name\":{JsonString(channelNameSnapshot)},\"discardFiles\":{(discard).ToString().ToLowerInvariant()},\"moveFilesToChannel\":{JsonString(moveTo)}{auditMove}}}");
+
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+        }
+        catch (PostgresException ex) when (ex.SqlState is PostgresErrorCodes.QueryCanceled or PostgresErrorCodes.LockNotAvailable)
+        {
+            return ex.SqlState == PostgresErrorCodes.LockNotAvailable
+                ? AppResult.Fail(ErrorCodes.LockTimeout, "Channel is busy; retry shortly.")
+                : AppResult.Fail(ErrorCodes.Validation, "Channel delete timed out; try again later.");
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException pg
+                                            && pg.SqlState is PostgresErrorCodes.QueryCanceled or PostgresErrorCodes.LockNotAvailable)
+        {
+            return pg.SqlState == PostgresErrorCodes.LockNotAvailable
+                ? AppResult.Fail(ErrorCodes.LockTimeout, "Channel is busy; retry shortly.")
+                : AppResult.Fail(ErrorCodes.Validation, "Channel delete timed out; try again later.");
         }
 
-        await AbortChannelUploadSessionsAsync(deletedChannelId, ct);
-
-        await ShareLinkRevoker.RevokeAsync(
-            db, clock, l => l.ChannelId == deletedChannelId, ShareLinkRevoker.ReasonChannelDelete, userId, context, ct);
-
-        await db.Notifications.Where(n => n.ChannelId == deletedChannelId).ExecuteDeleteAsync(ct);
-
-        db.Channels.Remove(channel);
-        await WriteAuditAsync(
-            userId,
-            AuditEventType.ChannelDelete,
-            "channel",
-            deletedChannelId.ToString(),
-            team.Id,
-            context,
-            ct,
-            $"{{\"kind\":{(int)channel.Kind},\"discardFiles\":{(request.DiscardFiles == true).ToString().ToLowerInvariant()},\"moveFilesToChannel\":{(moveFilesJson(request.MoveFilesToChannel))}}}");
-        await db.SaveChangesAsync(ct);
-
         authStateChanged.NotifyChannel(deletedChannelId);
-        if (notifyTargetChannelId is Guid targetId)
+        if (notifyTargetChannelId is Guid notifyId)
         {
-            channelNotifier.NotifyFilesChanged(targetId);
+            channelNotifier.NotifyFilesChanged(notifyId);
         }
 
         return AppResult.Ok();
-
-        static string moveFilesJson(string? name) =>
-            name is null ? "null" : $"\"{name.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal)}\"";
     }
 
-    private async Task<AppResult> MoveChannelFilesToAsync(
+    private async Task<AppResult> MoveChannelFilesInTxnAsync(
         Guid userId,
-        ChannelEntity source,
-        ChannelEntity target,
+        Guid sourceId,
+        Guid targetId,
         RequestContext context,
         CancellationToken ct)
     {
-        var files = await db.Files.Where(f => f.ChannelId == source.Id).ToListAsync(ct);
+        var files = await db.Files.Where(f => f.ChannelId == sourceId).ToListAsync(ct);
         var taken = await db.Files.AsNoTracking()
-            .Where(f => f.ChannelId == target.Id && f.FolderId == null && f.DeletedAt == null)
+            .Where(f => f.ChannelId == targetId && f.FolderId == null && f.DeletedAt == null)
             .Select(f => f.Name.ToLower())
             .ToListAsync(ct);
         var takenSet = taken.ToHashSet(StringComparer.Ordinal);
@@ -750,89 +848,88 @@ public sealed partial class TeamService(
             await ShareLinkRevoker.RevokeAsync(
                 db, clock, l => l.FileId == file.Id, ShareLinkRevoker.ReasonMove, userId, context, ct);
 
+            // Trashed files stay trashed; active files flatten to target root with unique names.
             if (file.DeletedAt is null)
             {
                 file.Name = AllocateUniqueFileName(file.Name, takenSet);
                 takenSet.Add(file.Name.ToLowerInvariant());
             }
 
-            file.ChannelId = target.Id;
+            file.ChannelId = targetId;
             file.FolderId = null;
             file.UpdatedAt = clock.UtcNow;
         }
 
-        var folders = await db.Folders.Where(f => f.ChannelId == source.Id).ToListAsync(ct);
-        db.Folders.RemoveRange(folders);
-
-        // Committed with the final channel remove + ChannelDelete audit.
+        await db.Folders.Where(f => f.ChannelId == sourceId).ExecuteDeleteAsync(ct);
+        await CollectAndRemoveSessionsAsync(sourceId, enqueueDeletes: true, channelDeleteOptions.Value.ObjectDeleteChunkSize, ct);
         return AppResult.Ok();
     }
 
-    private async Task<AppResult> DiscardChannelFilesAsync(Guid channelId, TeamEntity team, CancellationToken ct)
+    private async Task<AppResult> DiscardChannelFilesInTxnAsync(
+        Guid channelId,
+        Guid teamId,
+        int chunkSize,
+        CancellationToken ct)
     {
-        var files = await db.Files.Where(f => f.ChannelId == channelId).ToListAsync(ct);
-        var totalBytes = files.Sum(f => f.SizeBytes);
-        foreach (var file in files)
-        {
-            await TryDeleteObjectAsync(file.StorageKey, ct);
-        }
+        var files = await db.Files
+            .Where(f => f.ChannelId == channelId)
+            .Select(f => new { f.Id, f.StorageKey, f.SizeBytes })
+            .ToListAsync(ct);
 
+        var totalBytes = files.Sum(f => f.SizeBytes);
         var fileIds = files.Select(f => f.Id).ToList();
+        var keys = files.Select(f => f.StorageKey).ToList();
+
         if (fileIds.Count > 0)
         {
             await db.FileStars.Where(s => fileIds.Contains(s.FileId)).ExecuteDeleteAsync(ct);
+            await db.Files.Where(f => f.ChannelId == channelId).ExecuteDeleteAsync(ct);
         }
 
-        db.Files.RemoveRange(files);
+        await db.Folders.Where(f => f.ChannelId == channelId).ExecuteDeleteAsync(ct);
 
-        var folders = await db.Folders.Where(f => f.ChannelId == channelId).ToListAsync(ct);
-        db.Folders.RemoveRange(folders);
+        var multiparts = await CollectAndRemoveSessionsAsync(channelId, enqueueDeletes: false, chunkSize, ct);
+
+        ObjectDeleteOutbox.Enqueue(db, clock.UtcNow, keys, multiparts, chunkSize);
 
         if (totalBytes > 0)
         {
-            team.UsageBytes = Math.Max(0, team.UsageBytes - totalBytes);
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"""UPDATE teams SET "UsageBytes" = GREATEST("UsageBytes" - {totalBytes}, 0) WHERE "Id" = {teamId}""",
+                ct);
         }
 
         return AppResult.Ok();
     }
 
-    private async Task AbortChannelUploadSessionsAsync(Guid channelId, CancellationToken ct)
+    private async Task<List<ObjectDeleteMultipart>> CollectAndRemoveSessionsAsync(
+        Guid channelId,
+        bool enqueueDeletes,
+        int chunkSize,
+        CancellationToken ct)
     {
         var sessions = await db.UploadSessions.Where(s => s.ChannelId == channelId).ToListAsync(ct);
-        foreach (var session in sessions)
-        {
-            // Completed sessions share ObjectKey with the live file — never delete that object here.
-            if (session.State == UploadSessionState.Pending)
-            {
-                try
-                {
-                    await fileStore.AbortMultipartUploadAsync(session.ObjectKey, session.MultipartId, ct);
-                }
-                catch
-                {
-                    // best-effort
-                }
+        var multiparts = sessions
+            .Where(s => s.State == UploadSessionState.Pending)
+            .Select(s => new ObjectDeleteMultipart(s.ObjectKey, s.MultipartId))
+            .ToList();
 
-                await TryDeleteObjectAsync(session.ObjectKey, ct);
-            }
-        }
+        // Pending keys only — completed sessions share ObjectKey with live files.
+        var pendingKeys = multiparts.Select(m => m.ObjectKey).ToList();
 
         if (sessions.Count > 0)
         {
+            var sessionIds = sessions.Select(s => s.Id).ToList();
+            await db.UploadParts.Where(p => sessionIds.Contains(p.UploadSessionId)).ExecuteDeleteAsync(ct);
             db.UploadSessions.RemoveRange(sessions);
         }
-    }
 
-    private async Task TryDeleteObjectAsync(string objectKey, CancellationToken ct)
-    {
-        try
+        if (enqueueDeletes)
         {
-            await fileStore.DeleteAsync(objectKey, ct);
+            ObjectDeleteOutbox.Enqueue(db, clock.UtcNow, pendingKeys, multiparts, chunkSize);
         }
-        catch
-        {
-            // Best-effort: do not block channel delete on store failures.
-        }
+
+        return multiparts;
     }
 
     private static string AllocateUniqueFileName(string desired, HashSet<string> takenLower)
@@ -855,6 +952,30 @@ public sealed partial class TeamService(
 
         return $"{stem}-{Guid.NewGuid():N}{ext}";
     }
+
+    private static string SanitizeTimeout(string value)
+    {
+        // Only allow simple Postgres interval literals like 5s / 60s / 1min.
+        if (string.IsNullOrWhiteSpace(value) || value.Length > 16)
+        {
+            return "5s";
+        }
+
+        foreach (var ch in value)
+        {
+            if (!char.IsLetterOrDigit(ch))
+            {
+                return "5s";
+            }
+        }
+
+        return value;
+    }
+
+    private static string JsonString(string? value) =>
+        value is null
+            ? "null"
+            : $"\"{value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal)}\"";
 
     public async Task<AppResult<IReadOnlyList<ChannelMemberDto>>> ListChannelMembersAsync(
         Guid userId,

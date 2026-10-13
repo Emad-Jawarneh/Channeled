@@ -258,8 +258,10 @@ public sealed class ApplicationDbContext : IdentityDbContext<AppUser, AppRole, G
             entity.Property(x => x.State).HasMaxLength(32).IsRequired();
             entity.Property(x => x.DetailsJson).HasColumnType("jsonb");
             entity.Property(x => x.Error).HasMaxLength(2000);
+            entity.Property(x => x.Attempts).HasDefaultValue(0);
             entity.HasIndex(x => x.Type);
             entity.HasIndex(x => x.CreatedAt);
+            entity.HasIndex(x => new { x.Type, x.State, x.AvailableAt }).HasDatabaseName("ix_jobs_claim");
         });
 
         builder.Entity<BackupEntity>(entity =>

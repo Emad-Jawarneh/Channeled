@@ -26,7 +26,8 @@ public sealed class PersonalService(
     IAuthorizer authorizer,
     IFileStore store,
     IClock clock,
-    IOptions<UploadLimitsOptions> limitsOptions) : IPersonalService
+    IOptions<UploadLimitsOptions> limitsOptions,
+    ChannelWriteGuard channelWriteGuard) : IPersonalService
 {
     private readonly UploadLimitsOptions _limits = limitsOptions.Value;
 
@@ -702,6 +703,13 @@ public sealed class PersonalService(
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         try
         {
+            var guard = await channelWriteGuard.EnsureSharedAsync(channel.Channel.Id, ct);
+            if (!guard.Succeeded)
+            {
+                await tx.RollbackAsync(ct);
+                return AppResult<FileItemDto>.Fail(guard.Code!, guard.Message!);
+            }
+
             db.Files.Add(copy);
             channel.Team.UsageBytes += source.SizeBytes;
             db.AuditEvents.Add(new AuditEvent

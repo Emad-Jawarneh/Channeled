@@ -184,3 +184,8 @@
 
 **Decision:** Hard-delete is `POST /api/v1/teams/{slug}/channels/{name}/delete` with `DeleteChannelRequest`. File channels that still have files must choose `discardFiles: true` (delete store objects, decrement `UsageBytes`) or `moveFilesToChannel` (flatten into another file channel root, auto-rename conflicts). Text channels ignore disposition. Delete also aborts pending uploads, revokes share links, removes notifications, writes `ChannelDelete` audit, and `NotifyChannel`. SPA delete dialog requires typing the channel name and offers Archive instead.
 **Reason:** Files have no FK to channels; a row-only delete orphans MinIO objects. Explicit disposition avoids silent data loss; POST carries the body reliably.
+
+## 2026-10-13 — Channel delete locking + object_delete outbox
+
+**Decision:** No `DeletingAt`. Delete takes `FOR UPDATE` on the channel (and `FOR SHARE` on a move target), locking by ascending channel Id. Writers use `ChannelWriteGuard` (`FOR SHARE` + exists). Caps: 10k files / 10k messages per txn; `SET LOCAL lock_timeout` + `statement_timeout`. Discard enqueues `object_delete` jobs in the same txn (chunk ≤2000, SKIP LOCKED worker, retry/backoff/`dead` on health). Admin purge and trash purge commit rows then delete bytes/outbox. Reconcile reports missing store keys and files with neither channel nor personal owner.
+**Reason:** Exists-check after lock wait matches a deleting flag without a useless column; async deletes keep the request under statement timeout.

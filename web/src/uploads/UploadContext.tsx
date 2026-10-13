@@ -31,6 +31,7 @@ type UploadApi = {
   pause: (id: string) => void;
   resume: (id: string) => void;
   retry: (id: string) => void;
+  clearChannel: (teamSlug: string, channelName: string) => void;
 };
 
 const UploadContext = createContext<UploadApi | null>(null);
@@ -204,6 +205,24 @@ export function UploadProvider({ children }: { children: ReactNode }) {
         queue.current.push(id);
         update(id, { status: "queued", error: undefined, progress: 0 });
         pump();
+      },
+      clearChannel: (teamSlug, channelName) => {
+        setJobs((prev) => {
+          const next = prev.filter(
+            (j) =>
+              !(
+                j.scope === "channel" &&
+                j.teamSlug === teamSlug &&
+                j.channelName === channelName &&
+                j.status !== "done"
+              ),
+          );
+          const removed = new Set(prev.filter((j) => !next.includes(j)).map((j) => j.id));
+          queue.current = queue.current.filter((id) => !removed.has(id));
+          for (const id of removed) paused.current.delete(id);
+          jobsRef.current = next;
+          return next;
+        });
       },
     }),
     [enqueue, jobs, pump, update],

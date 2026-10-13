@@ -37,6 +37,8 @@ public class AuthApiFactory : WebApplicationFactory<Program>
                 ["PublicFileLinks:AnonRequestsPerMinutePerIp"] = "100000",
                 // High default so functional chat tests never trip the limiter; the rate-limit test lowers it.
                 ["Chat:PostsPerMinutePerUser"] = "100000",
+                ["ChannelDelete:MaxMessagesPerTxn"] = "50",
+                ["ChannelDelete:MaxFilesPerTxn"] = "10000",
             });
         });
 

@@ -126,6 +126,8 @@ public class ChannelDeleteApiTests : IClassFixture<AuthApiFactory>, IAsyncLifeti
 
         (await _owner.GetAsync($"/api/v1/teams/{_slug}/channels/scratch")).StatusCode.Should().Be(HttpStatusCode.NotFound);
 
+        await DrainObjectDeleteJobsAsync();
+
         await using (var scope = _factory.Services.CreateAsyncScope())
         {
             var store = scope.ServiceProvider.GetRequiredService<IFileStore>();
@@ -135,6 +137,8 @@ public class ChannelDeleteApiTests : IClassFixture<AuthApiFactory>, IAsyncLifeti
             (await db.Files.AnyAsync(f => f.Id == file.Id)).Should().BeFalse();
             (await db.AuditEvents.CountAsync(a => a.EventType == AuditEventType.ChannelDelete))
                 .Should().BeGreaterThan(0);
+            (await db.Jobs.CountAsync(j => j.Type == "object_delete" && j.State == "pending"))
+                .Should().Be(0);
         }
 
         var after = await _owner.GetFromJsonAsync<TeamStorageDto>($"/api/v1/teams/{_slug}/storage");
@@ -230,6 +234,20 @@ public class ChannelDeleteApiTests : IClassFixture<AuthApiFactory>, IAsyncLifeti
         await using var scope = _factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         return (await db.Files.AsNoTracking().SingleAsync(f => f.Id == fileId)).StorageKey;
+    }
+
+    private async Task DrainObjectDeleteJobsAsync()
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var processor = scope.ServiceProvider.GetRequiredService<Channeled.Infrastructure.Jobs.IObjectDeleteJobProcessor>();
+        for (var i = 0; i < 20; i++)
+        {
+            var n = await processor.ProcessPendingAsync(50);
+            if (n == 0)
+            {
+                break;
+            }
+        }
     }
 
     private HttpClient CreateClient() =>

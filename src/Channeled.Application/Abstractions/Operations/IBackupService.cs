@@ -18,10 +18,14 @@ public sealed record StoreReconcileReport(
     int StoreKeys,
     IReadOnlyList<string> MissingInStore,
     IReadOnlyList<string> OrphansInStore,
-    IReadOnlyList<string> ChecksumMismatches)
+    IReadOnlyList<string> ChecksumMismatches,
+    IReadOnlyList<Guid> FilesWithoutChannel)
 {
     public bool IsClean =>
-        MissingInStore.Count == 0 && OrphansInStore.Count == 0 && ChecksumMismatches.Count == 0;
+        MissingInStore.Count == 0
+        && OrphansInStore.Count == 0
+        && ChecksumMismatches.Count == 0
+        && FilesWithoutChannel.Count == 0;
 }
 
 public interface IBackupService
@@ -65,5 +69,6 @@ public sealed record SystemHealthReport(
     bool Disk,
     long DiskFreeBytes,
     int PendingJobs,
+    int DeadJobs,
     string StoreKind,
     string? Detail);

@@ -20,7 +20,7 @@ If present, read first and treat as authoritative over this prompt where they co
 2. Deny by default. Resources the user cannot see return **404**, not 403 (channels, files, folders, teams).
 3. Browsers never get object-store credentials. All bytes flow through the API (stream, never buffer whole files in memory).
 4. Metadata in PostgreSQL is the source of truth; object keys are opaque (`objects/<2 hex>/<2 hex>/<file-uuid>`); names never appear in the store.
-5. Soft delete first; bytes are purged by a background job after retention, bytes before row.
+5. Soft delete first; bytes are purged by a background job after retention (commit row, then bytes/outbox).
 6. Audit events are written in the same DB transaction as the change; the table is append-only for the app role.
 7. Personal files are visible only to their owner. Platform admins manage accounts and quotas but have no API path to personal file names or content.
 8. No secrets in the repo. No `localStorage` for auth. No `dangerouslySetInnerHTML`. No raw SQL string concatenation. No swallowed exceptions.

@@ -52,7 +52,12 @@ public sealed class SystemHealthService(
         }
 
         var pending = await db.Jobs.CountAsync(j => j.State == "pending" || j.State == "running", cancellationToken);
-        var status = dbOk && storeOk && diskOk ? "ok" : "degraded";
+        var dead = await db.Jobs.CountAsync(j => j.State == "dead", cancellationToken);
+        var status = dbOk && storeOk && diskOk && dead == 0 ? "ok" : "degraded";
+        if (dead > 0)
+        {
+            detail = (detail is null ? "" : detail + "; ") + $"dead_jobs:{dead}";
+        }
 
         return new SystemHealthReport(
             status,
@@ -62,6 +67,7 @@ public sealed class SystemHealthService(
             diskOk,
             free,
             pending,
+            dead,
             storeOptions.Value.Kind.ToString(),
             detail);
     }

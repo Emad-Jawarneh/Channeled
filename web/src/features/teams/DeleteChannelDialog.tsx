@@ -100,6 +100,12 @@ export function DeleteChannelDialog({
         </h2>
         <p className={styles.lede}>
           Permanent: removes all files and messages in this channel. This cannot be undone.
+          {isFile && (
+            <>
+              {" "}
+              Channels with more than <strong>10,000</strong> files cannot be deleted in one step.
+            </>
+          )}
         </p>
 
         {isFile && (

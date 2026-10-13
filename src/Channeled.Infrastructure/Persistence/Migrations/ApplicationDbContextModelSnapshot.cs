@@ -588,6 +588,14 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<int>("Attempts")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<DateTimeOffset?>("AvailableAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTimeOffset?>("CompletedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -619,6 +627,9 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                     b.HasIndex("CreatedAt");
 
                     b.HasIndex("Type");
+
+                    b.HasIndex("Type", "State", "AvailableAt")
+                        .HasDatabaseName("ix_jobs_claim");
 
                     b.ToTable("jobs", (string)null);
                 });

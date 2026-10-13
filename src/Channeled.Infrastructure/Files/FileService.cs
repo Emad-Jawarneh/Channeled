@@ -28,7 +28,8 @@ public sealed class FileService(
     IFileStore store,
     IClock clock,
     IOptions<UploadLimitsOptions> limitsOptions,
-    IChannelNotifier channelNotifier) : IFileService
+    IChannelNotifier channelNotifier,
+    ChannelWriteGuard channelWriteGuard) : IFileService
 {
     private readonly UploadLimitsOptions _limits = limitsOptions.Value;
 
@@ -83,9 +84,18 @@ public sealed class FileService(
             CreatedAt = now,
             UpdatedAt = now,
         };
+
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        var guard = await channelWriteGuard.EnsureSharedAsync(channel.Channel.Id, ct);
+        if (!guard.Succeeded)
+        {
+            return AppResult<FileItemDto>.Fail(guard.Code!, guard.Message!);
+        }
+
         db.Folders.Add(folder);
         await WriteAuditAsync(userId, AuditEventType.FolderCreate, "folder", folder.Id.ToString(), channel.Team.Id, context, ct);
         await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
         channelNotifier.NotifyFilesChanged(channel.Channel.Id);
         return AppResult<FileItemDto>.Ok(ToFolderDto(folder));
     }
@@ -322,10 +332,18 @@ public sealed class FileService(
                 return AppResult<FileItemDto>.Fail(ErrorCodes.NameConflict, "An item with that name already exists.");
             }
 
+            await using var fileTx = await db.Database.BeginTransactionAsync(ct);
+            var fileGuard = await channelWriteGuard.EnsureSharedAsync(channel.Channel.Id, ct);
+            if (!fileGuard.Succeeded)
+            {
+                return AppResult<FileItemDto>.Fail(fileGuard.Code!, fileGuard.Message!);
+            }
+
             file.FolderId = request.TargetFolderId;
             file.UpdatedAt = clock.UtcNow;
             await WriteAuditAsync(userId, AuditEventType.FileMove, "file", file.Id.ToString(), channel.Team.Id, context, ct);
             await db.SaveChangesAsync(ct);
+            await fileTx.CommitAsync(ct);
             channelNotifier.NotifyFilesChanged(channel.Channel.Id);
             return AppResult<FileItemDto>.Ok(ToFileDto(file));
         }
@@ -351,10 +369,18 @@ public sealed class FileService(
             return AppResult<FileItemDto>.Fail(ErrorCodes.NameConflict, "An item with that name already exists.");
         }
 
+        await using var folderTx = await db.Database.BeginTransactionAsync(ct);
+        var folderGuard = await channelWriteGuard.EnsureSharedAsync(channel.Channel.Id, ct);
+        if (!folderGuard.Succeeded)
+        {
+            return AppResult<FileItemDto>.Fail(folderGuard.Code!, folderGuard.Message!);
+        }
+
         folder.ParentId = request.TargetFolderId;
         folder.UpdatedAt = clock.UtcNow;
         await WriteAuditAsync(userId, AuditEventType.FolderMove, "folder", folder.Id.ToString(), channel.Team.Id, context, ct);
         await db.SaveChangesAsync(ct);
+        await folderTx.CommitAsync(ct);
         channelNotifier.NotifyFilesChanged(channel.Channel.Id);
         return AppResult<FileItemDto>.Ok(ToFolderDto(folder));
     }
@@ -458,10 +484,18 @@ public sealed class FileService(
                 return AppResult<FileItemDto>.Fail(ErrorCodes.NameConflict, "An item with that name already exists.");
             }
 
+            await using var fileTx = await db.Database.BeginTransactionAsync(ct);
+            var fileGuard = await channelWriteGuard.EnsureSharedAsync(channel.Channel.Id, ct);
+            if (!fileGuard.Succeeded)
+            {
+                return AppResult<FileItemDto>.Fail(fileGuard.Code!, fileGuard.Message!);
+            }
+
             file.DeletedAt = null;
             file.UpdatedAt = clock.UtcNow;
             await WriteAuditAsync(userId, AuditEventType.FileRestore, "file", file.Id.ToString(), channel.Team.Id, context, ct);
             await db.SaveChangesAsync(ct);
+            await fileTx.CommitAsync(ct);
             channelNotifier.NotifyFilesChanged(channel.Channel.Id);
             return AppResult<FileItemDto>.Ok(ToFileDto(file));
         }
@@ -482,10 +516,18 @@ public sealed class FileService(
             return AppResult<FileItemDto>.Fail(ErrorCodes.NameConflict, "An item with that name already exists.");
         }
 
+        await using var folderTx = await db.Database.BeginTransactionAsync(ct);
+        var folderGuard = await channelWriteGuard.EnsureSharedAsync(channel.Channel.Id, ct);
+        if (!folderGuard.Succeeded)
+        {
+            return AppResult<FileItemDto>.Fail(folderGuard.Code!, folderGuard.Message!);
+        }
+
         folder.DeletedAt = null;
         folder.UpdatedAt = clock.UtcNow;
         await WriteAuditAsync(userId, AuditEventType.FolderRestore, "folder", folder.Id.ToString(), channel.Team.Id, context, ct);
         await db.SaveChangesAsync(ct);
+        await folderTx.CommitAsync(ct);
         channelNotifier.NotifyFilesChanged(channel.Channel.Id);
         return AppResult<FileItemDto>.Ok(ToFolderDto(folder));
     }
@@ -853,6 +895,16 @@ public sealed class FileService(
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         try
         {
+            if (session.ChannelId is Guid channelId)
+            {
+                var guard = await channelWriteGuard.EnsureSharedAsync(channelId, ct);
+                if (!guard.Succeeded)
+                {
+                    await tx.RollbackAsync(ct);
+                    return AppResult<FileItemDto>.Fail(guard.Code!, guard.Message!);
+                }
+            }
+
             db.Files.Add(file);
             if (isPersonal)
             {
@@ -1163,6 +1215,15 @@ public sealed class FileService(
             return AppResult<FileItemDto>.Fail(ErrorCodes.NameConflict, "An item with that name already exists.");
         }
 
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        var ordered = await channelWriteGuard.LockOrderedAsync(
+            [(source.Channel.Id, false), (target.Channel.Id, false)],
+            ct);
+        if (!ordered.Succeeded)
+        {
+            return AppResult<FileItemDto>.Fail(ordered.Code!, ordered.Message!);
+        }
+
         // Public links never follow a file into another channel: revoke in the SAME SaveChanges (one txn)
         // as the move. The FK's ON UPDATE CASCADE then carries channel_id; original_channel_id is kept.
         var movedFileId = file.Id;
@@ -1174,6 +1235,7 @@ public sealed class FileService(
         file.UpdatedAt = clock.UtcNow;
         await WriteAuditAsync(userId, AuditEventType.FileMove, "file", file.Id.ToString(), source.Team.Id, context, ct);
         await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
         channelNotifier.NotifyFilesChanged(source.Channel.Id);
         channelNotifier.NotifyFilesChanged(target.Channel.Id);
         return AppResult<FileItemDto>.Ok(ToFileDto(file));

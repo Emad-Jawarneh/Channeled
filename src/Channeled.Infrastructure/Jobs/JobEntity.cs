@@ -10,4 +10,6 @@ public sealed class JobEntity
     public DateTimeOffset? StartedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
     public string? Error { get; set; }
+    public int Attempts { get; set; }
+    public DateTimeOffset? AvailableAt { get; set; }
 }

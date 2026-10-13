@@ -424,6 +424,11 @@
   padding-top: var(--space-4);
 }
 
+.sideLinkIcon {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+}
+
 .dropHint {
   border: 1.5px dashed var(--color-focus);
   border-radius: 14px;

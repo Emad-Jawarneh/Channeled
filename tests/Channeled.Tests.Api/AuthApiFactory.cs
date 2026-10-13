@@ -56,6 +56,8 @@ public class AuthApiFactory : WebApplicationFactory<Program>
 
         await db.Database.ExecuteSqlRawAsync("""
             TRUNCATE TABLE
+              "notifications",
+              "message_mentions",
               "file_share_links",
               "channel_messages",
               "backups",

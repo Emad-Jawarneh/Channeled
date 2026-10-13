@@ -55,6 +55,9 @@ public sealed class CoalescingChannelNotifier(
     public void NotifyPresenceChanged(Guid channelId, object payload) =>
         _ = SafeSendAsync(channelId, "presenceChanged", payload);
 
+    public void NotifyUser(Guid userId, string method, object payload) =>
+        _ = SafeSendUserAsync(userId, method, payload);
+
     private async Task FlushFilesChangedAsync(Guid channelId, bool force)
     {
         if (!_filesChanged.TryGetValue(channelId, out var state))
@@ -98,6 +101,18 @@ public sealed class CoalescingChannelNotifier(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Realtime broadcast {Method} failed for channel {ChannelId}", method, channelId);
+        }
+    }
+
+    private async Task SafeSendUserAsync(Guid userId, string method, object payload)
+    {
+        try
+        {
+            await hub.Clients.Group(ChannelHub.UserGroupName(userId)).SendAsync(method, payload);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Realtime user broadcast {Method} failed for user {UserId}", method, userId);
         }
     }
 

@@ -2,14 +2,17 @@ using System.Text.RegularExpressions;
 using Channeled.Application.Abstractions.Email;
 using Channeled.Application.Abstractions.Realtime;
 using Channeled.Application.Abstractions.Results;
+using Channeled.Application.Abstractions.Storage;
 using Channeled.Application.Abstractions.Time;
 using Channeled.Application.Identity;
 using Channeled.Application.Teams;
 using Channeled.Domain.Audit;
 using Channeled.Domain.Authorization;
 using Channeled.Domain.Errors;
+using Channeled.Domain.Files;
 using Channeled.Domain.Identity;
 using Channeled.Domain.Teams;
+using Channeled.Infrastructure.Files;
 using Channeled.Infrastructure.Identity;
 using Channeled.Infrastructure.Persistence;
 using Channeled.Infrastructure.PublicLinks;
@@ -25,7 +28,9 @@ public sealed partial class TeamService(
     IAuthorizer authorizer,
     IClock clock,
     IEmailSender emailSender,
-    IAuthStateChanged authStateChanged) : ITeamService
+    IAuthStateChanged authStateChanged,
+    IFileStore fileStore,
+    IChannelNotifier channelNotifier) : ITeamService
 {
     private static readonly TimeSpan InvitationLifetime = TimeSpan.FromDays(7);
 
@@ -421,12 +426,13 @@ public sealed partial class TeamService(
             return NotFoundTeam<ChannelDto>();
         }
 
-        if (string.IsNullOrWhiteSpace(request.Name))
+        var nameError = ChannelNameRules.Validate(request.Name);
+        if (nameError is not null)
         {
-            return AppResult<ChannelDto>.Fail(ErrorCodes.Validation, "Channel name is required.");
+            return AppResult<ChannelDto>.Fail(ErrorCodes.Validation, nameError);
         }
 
-        var name = request.Name.Trim();
+        var name = ChannelNameRules.Normalize(request.Name!);
         var exists = await db.Channels.AnyAsync(
             c => c.TeamId == loaded.Team.Id && c.Name.ToLower() == name.ToLower(),
             ct);
@@ -535,25 +541,49 @@ public sealed partial class TeamService(
             return NotFoundChannel<ChannelDto>();
         }
 
-        if (!string.IsNullOrWhiteSpace(request.Name))
+        var nameChanged = false;
+        if (request.Name is not null)
         {
-            var name = request.Name.Trim();
-            var clash = await db.Channels.AnyAsync(
-                c => c.TeamId == loaded.TeamMembership.Team.Id
-                     && c.Id != loaded.Channel.Id
-                     && c.Name.ToLower() == name.ToLower(),
-                ct);
-            if (clash)
+            var nameError = ChannelNameRules.Validate(request.Name);
+            if (nameError is not null)
             {
-                return AppResult<ChannelDto>.Fail(ErrorCodes.Conflict, "Channel name already exists.");
+                return AppResult<ChannelDto>.Fail(ErrorCodes.Validation, nameError);
             }
 
-            loaded.Channel.Name = name;
+            var name = ChannelNameRules.Normalize(request.Name);
+            if (!string.Equals(name, loaded.Channel.Name, StringComparison.Ordinal))
+            {
+                var clash = await db.Channels.AnyAsync(
+                    c => c.TeamId == loaded.TeamMembership.Team.Id
+                         && c.Id != loaded.Channel.Id
+                         && c.Name.ToLower() == name.ToLower(),
+                    ct);
+                if (clash)
+                {
+                    return AppResult<ChannelDto>.Fail(ErrorCodes.Conflict, "Channel name already exists.");
+                }
+
+                loaded.Channel.Name = name;
+                nameChanged = true;
+            }
         }
 
+        var descriptionChanged = false;
         if (request.Description is not null)
         {
-            loaded.Channel.Description = request.Description.Trim();
+            var nextDescription = string.IsNullOrWhiteSpace(request.Description)
+                ? null
+                : request.Description.Trim();
+            if (!string.Equals(nextDescription, loaded.Channel.Description, StringComparison.Ordinal))
+            {
+                loaded.Channel.Description = nextDescription;
+                descriptionChanged = true;
+            }
+        }
+
+        if (!nameChanged && !descriptionChanged)
+        {
+            return AppResult<ChannelDto>.Ok(ToChannelDto(loaded.Channel));
         }
 
         await WriteAuditAsync(
@@ -596,6 +626,7 @@ public sealed partial class TeamService(
         Guid userId,
         string slug,
         string channelName,
+        DeleteChannelRequest request,
         RequestContext context,
         CancellationToken ct = default)
     {
@@ -606,13 +637,223 @@ public sealed partial class TeamService(
             return NotFoundChannel();
         }
 
-        var deletedChannelId = loaded.Channel.Id;
+        var channel = loaded.Channel;
+        var team = loaded.TeamMembership.Team;
+        var deletedChannelId = channel.Id;
+        Guid? notifyTargetChannelId = null;
+
+        if (channel.Kind == ChannelKind.File)
+        {
+            var fileCount = await db.Files.CountAsync(f => f.ChannelId == deletedChannelId, ct);
+            var discard = request.DiscardFiles == true;
+            var moveTo = string.IsNullOrWhiteSpace(request.MoveFilesToChannel)
+                ? null
+                : request.MoveFilesToChannel.Trim();
+
+            if (discard && moveTo is not null)
+            {
+                return AppResult.Fail(ErrorCodes.Validation, "Choose either discard or move files, not both.");
+            }
+
+            if (fileCount > 0 && !discard && moveTo is null)
+            {
+                return AppResult.Fail(
+                    ErrorCodes.Validation,
+                    "File channel has files: set discardFiles=true or moveFilesToChannel to another file channel.");
+            }
+
+            if (moveTo is not null)
+            {
+                if (string.Equals(moveTo, channel.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    return AppResult.Fail(ErrorCodes.Validation, "Cannot move files into the channel being deleted.");
+                }
+
+                var target = await db.Channels.FirstOrDefaultAsync(
+                    c => c.TeamId == team.Id && c.Name.ToLower() == moveTo.ToLower(),
+                    ct);
+                if (target is null || target.Kind != ChannelKind.File || target.ArchivedAt is not null)
+                {
+                    return AppResult.Fail(ErrorCodes.Validation, "Move target must be an active file channel in this team.");
+                }
+
+                var moveResult = await MoveChannelFilesToAsync(userId, channel, target, context, ct);
+                if (!moveResult.Succeeded)
+                {
+                    return moveResult;
+                }
+
+                notifyTargetChannelId = target.Id;
+            }
+            else if (discard || fileCount > 0)
+            {
+                var discardResult = await DiscardChannelFilesAsync(deletedChannelId, team, ct);
+                if (!discardResult.Succeeded)
+                {
+                    return discardResult;
+                }
+            }
+            else
+            {
+                // Empty file channel: still drop folders/sessions if any.
+                await DiscardChannelFilesAsync(deletedChannelId, team, ct);
+            }
+        }
+
+        await AbortChannelUploadSessionsAsync(deletedChannelId, ct);
+
         await ShareLinkRevoker.RevokeAsync(
             db, clock, l => l.ChannelId == deletedChannelId, ShareLinkRevoker.ReasonChannelDelete, userId, context, ct);
-        db.Channels.Remove(loaded.Channel);
-        await WriteAuditAsync(userId, AuditEventType.ChannelDelete, "channel", loaded.Channel.Id.ToString(), loaded.TeamMembership.Team.Id, context, ct);
+
+        await db.Notifications.Where(n => n.ChannelId == deletedChannelId).ExecuteDeleteAsync(ct);
+
+        db.Channels.Remove(channel);
+        await WriteAuditAsync(
+            userId,
+            AuditEventType.ChannelDelete,
+            "channel",
+            deletedChannelId.ToString(),
+            team.Id,
+            context,
+            ct,
+            $"{{\"kind\":{(int)channel.Kind},\"discardFiles\":{(request.DiscardFiles == true).ToString().ToLowerInvariant()},\"moveFilesToChannel\":{(moveFilesJson(request.MoveFilesToChannel))}}}");
         await db.SaveChangesAsync(ct);
+
+        authStateChanged.NotifyChannel(deletedChannelId);
+        if (notifyTargetChannelId is Guid targetId)
+        {
+            channelNotifier.NotifyFilesChanged(targetId);
+        }
+
         return AppResult.Ok();
+
+        static string moveFilesJson(string? name) =>
+            name is null ? "null" : $"\"{name.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal)}\"";
+    }
+
+    private async Task<AppResult> MoveChannelFilesToAsync(
+        Guid userId,
+        ChannelEntity source,
+        ChannelEntity target,
+        RequestContext context,
+        CancellationToken ct)
+    {
+        var files = await db.Files.Where(f => f.ChannelId == source.Id).ToListAsync(ct);
+        var taken = await db.Files.AsNoTracking()
+            .Where(f => f.ChannelId == target.Id && f.FolderId == null && f.DeletedAt == null)
+            .Select(f => f.Name.ToLower())
+            .ToListAsync(ct);
+        var takenSet = taken.ToHashSet(StringComparer.Ordinal);
+
+        foreach (var file in files)
+        {
+            await ShareLinkRevoker.RevokeAsync(
+                db, clock, l => l.FileId == file.Id, ShareLinkRevoker.ReasonMove, userId, context, ct);
+
+            if (file.DeletedAt is null)
+            {
+                file.Name = AllocateUniqueFileName(file.Name, takenSet);
+                takenSet.Add(file.Name.ToLowerInvariant());
+            }
+
+            file.ChannelId = target.Id;
+            file.FolderId = null;
+            file.UpdatedAt = clock.UtcNow;
+        }
+
+        var folders = await db.Folders.Where(f => f.ChannelId == source.Id).ToListAsync(ct);
+        db.Folders.RemoveRange(folders);
+
+        // Committed with the final channel remove + ChannelDelete audit.
+        return AppResult.Ok();
+    }
+
+    private async Task<AppResult> DiscardChannelFilesAsync(Guid channelId, TeamEntity team, CancellationToken ct)
+    {
+        var files = await db.Files.Where(f => f.ChannelId == channelId).ToListAsync(ct);
+        var totalBytes = files.Sum(f => f.SizeBytes);
+        foreach (var file in files)
+        {
+            await TryDeleteObjectAsync(file.StorageKey, ct);
+        }
+
+        var fileIds = files.Select(f => f.Id).ToList();
+        if (fileIds.Count > 0)
+        {
+            await db.FileStars.Where(s => fileIds.Contains(s.FileId)).ExecuteDeleteAsync(ct);
+        }
+
+        db.Files.RemoveRange(files);
+
+        var folders = await db.Folders.Where(f => f.ChannelId == channelId).ToListAsync(ct);
+        db.Folders.RemoveRange(folders);
+
+        if (totalBytes > 0)
+        {
+            team.UsageBytes = Math.Max(0, team.UsageBytes - totalBytes);
+        }
+
+        return AppResult.Ok();
+    }
+
+    private async Task AbortChannelUploadSessionsAsync(Guid channelId, CancellationToken ct)
+    {
+        var sessions = await db.UploadSessions.Where(s => s.ChannelId == channelId).ToListAsync(ct);
+        foreach (var session in sessions)
+        {
+            // Completed sessions share ObjectKey with the live file — never delete that object here.
+            if (session.State == UploadSessionState.Pending)
+            {
+                try
+                {
+                    await fileStore.AbortMultipartUploadAsync(session.ObjectKey, session.MultipartId, ct);
+                }
+                catch
+                {
+                    // best-effort
+                }
+
+                await TryDeleteObjectAsync(session.ObjectKey, ct);
+            }
+        }
+
+        if (sessions.Count > 0)
+        {
+            db.UploadSessions.RemoveRange(sessions);
+        }
+    }
+
+    private async Task TryDeleteObjectAsync(string objectKey, CancellationToken ct)
+    {
+        try
+        {
+            await fileStore.DeleteAsync(objectKey, ct);
+        }
+        catch
+        {
+            // Best-effort: do not block channel delete on store failures.
+        }
+    }
+
+    private static string AllocateUniqueFileName(string desired, HashSet<string> takenLower)
+    {
+        if (!takenLower.Contains(desired.ToLowerInvariant()))
+        {
+            return desired;
+        }
+
+        var ext = Path.GetExtension(desired);
+        var stem = Path.GetFileNameWithoutExtension(desired);
+        for (var i = 2; i < 10_000; i++)
+        {
+            var candidate = $"{stem}-{i}{ext}";
+            if (!takenLower.Contains(candidate.ToLowerInvariant()))
+            {
+                return candidate;
+            }
+        }
+
+        return $"{stem}-{Guid.NewGuid():N}{ext}";
     }
 
     public async Task<AppResult<IReadOnlyList<ChannelMemberDto>>> ListChannelMembersAsync(

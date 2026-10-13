@@ -98,11 +98,17 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("DeletedBy")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("ReplyToMessageId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
                     b.HasIndex("DeletedAt")
                         .HasDatabaseName("ix_channel_messages_deleted_at")
                         .HasFilter("\"DeletedAt\" IS NOT NULL");
+
+                    b.HasIndex("ReplyToMessageId")
+                        .HasDatabaseName("ix_channel_messages_reply_to");
 
                     b.HasIndex("ChannelId", "CreatedAt", "Id")
                         .HasDatabaseName("ix_channel_messages_channel_created_id");
@@ -113,6 +119,22 @@ namespace Channeled.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_channel_messages_deleted_scrubbed", "\"DeletedAt\" IS NULL OR \"Body\" = ''");
                         });
+                });
+
+            modelBuilder.Entity("Channeled.Infrastructure.Chat.MessageMentionEntity", b =>
+                {
+                    b.Property<Guid>("MessageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("MessageId", "UserId");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_message_mentions_user");
+
+                    b.ToTable("message_mentions", (string)null);
                 });
 
             modelBuilder.Entity("Channeled.Infrastructure.Files.FileEntity", b =>
@@ -601,6 +623,52 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                     b.ToTable("jobs", (string)null);
                 });
 
+            modelBuilder.Entity("Channeled.Infrastructure.Notifications.NotificationEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ActorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BodyPreview")
+                        .IsRequired()
+                        .HasMaxLength(280)
+                        .HasColumnType("character varying(280)");
+
+                    b.Property<Guid>("ChannelId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("MessageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ReadAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("TeamId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "CreatedAt")
+                        .HasDatabaseName("ix_notifications_user_created");
+
+                    b.HasIndex("UserId", "ReadAt")
+                        .HasDatabaseName("ix_notifications_user_read");
+
+                    b.ToTable("notifications", (string)null);
+                });
+
             modelBuilder.Entity("Channeled.Infrastructure.Operations.BackupEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1043,6 +1111,24 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                         .HasForeignKey("ChannelId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("Channeled.Infrastructure.Chat.ChannelMessageEntity", "ReplyToMessage")
+                        .WithMany()
+                        .HasForeignKey("ReplyToMessageId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("ReplyToMessage");
+                });
+
+            modelBuilder.Entity("Channeled.Infrastructure.Chat.MessageMentionEntity", b =>
+                {
+                    b.HasOne("Channeled.Infrastructure.Chat.ChannelMessageEntity", "Message")
+                        .WithMany("Mentions")
+                        .HasForeignKey("MessageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Message");
                 });
 
             modelBuilder.Entity("Channeled.Infrastructure.Files.FileEntity", b =>
@@ -1202,6 +1288,11 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Channeled.Infrastructure.Chat.ChannelMessageEntity", b =>
+                {
+                    b.Navigation("Mentions");
                 });
 
             modelBuilder.Entity("Channeled.Infrastructure.Files.UploadSessionEntity", b =>

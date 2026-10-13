@@ -17,6 +17,10 @@ public sealed class NullChannelNotifier : IChannelNotifier
     public void NotifyPresenceChanged(Guid channelId, object payload)
     {
     }
+
+    public void NotifyUser(Guid userId, string method, object payload)
+    {
+    }
 }
 
 public sealed class NullAuthStateChanged : IAuthStateChanged

@@ -9,13 +9,16 @@
 | M9 Realtime | ✅ Complete | SignalR WS-only hub; Origin filter; coalesce; AuthStateChanged; hub Join/Leave only; API hub tests |
 | M10 Public links | ✅ Complete | ShareLinkApiTests (claim/idempotency/expiry/purge FK/move/anon vs auth); unit primitives; restore revokes links |
 | M11 Text chat | ✅ Complete | ChatApiTests + ChatHubTests + ChatAuthorizerTests + rate-limit; TextChannelPage composer |
+| M12 Replies / mentions / notifications | ✅ Complete | ReplyMentionNotificationTests + MentionResolverTests; NotificationBell + TextChannelPage reply/@ |
+| M13 Channel edit / delete | ✅ Complete | ChannelDeleteApiTests (discard/move/quota/perms); settings edit + type-to-confirm delete (move|discard) |
 
-## M9–M11 notes
+## M9–M12 notes
 
-- Hub: `/hubs/channel`, WebSockets only; client methods `JoinChannel` / `LeaveChannel` only
+- Hub: `/hubs/channel`, WebSockets only; client methods `JoinChannel` / `LeaveChannel` only; auto-join `user:{id}` for notifications
 - SPA: `@microsoft/signalr`; Vite proxies `/hubs` with `ws: true`
 - Public links: `PublicFileLinks:*` (default Enabled=false); anonymous `/api/v1/public/shares/{token}` + `/s/:token` UI
 - Chat: REST under channel routes; presence in-memory (text only); message purge after retention
+- Replies: `ReplyToMessageId`; mentions: `message_mentions` + `@DisplayName`; notifications: Mention/Reply + `/api/v1/notifications`
 - Stack minimum: PostgreSQL 15+ (documented in AGENTS + OPERATOR_GUIDE)
 
 ## M8 exit gate

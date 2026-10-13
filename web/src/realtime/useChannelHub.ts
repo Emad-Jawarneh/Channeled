@@ -7,7 +7,12 @@ import {
 } from "@microsoft/signalr";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
-import type { ChannelMessage, MessageDeletedEvent, PresenceChangedEvent } from "../api/channeled";
+import type {
+  ChannelMessage,
+  MessageDeletedEvent,
+  NotificationDto,
+  PresenceChangedEvent,
+} from "../api/channeled";
 
 type FilesChangedPayload = { channelId: string };
 
@@ -62,6 +67,52 @@ function onReconnected(listener: () => void): () => void {
   return () => {
     reconnectListeners.delete(listener);
   };
+}
+
+export type NotificationHandlers = {
+  /** Hub `notificationCreated` payload (pushed to the signed-in user's own group; no join needed). */
+  onNotification: (notification: NotificationDto) => void;
+  /** Called after a reconnect: events may have been missed, so refetch the count/list. */
+  onResync?: () => void;
+};
+
+/** Subscribes to per-user notification pushes on the shared hub connection. */
+export function useNotifications(enabled: boolean, handlers: NotificationHandlers) {
+  const handlersRef = useRef(handlers);
+  handlersRef.current = handlers;
+
+  useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+    const conn = getConnection();
+    let cancelled = false;
+
+    const created = (notification: NotificationDto) => {
+      handlersRef.current.onNotification(notification);
+    };
+    conn.on("notificationCreated", created);
+    const offReconnect = onReconnected(() => {
+      handlersRef.current.onResync?.();
+    });
+
+    void ensureStarted(conn)
+      .then(() => {
+        // Anything pushed before the socket was up is not replayed.
+        if (!cancelled) {
+          handlersRef.current.onResync?.();
+        }
+      })
+      .catch(() => {
+        /* reconnect will retry; REST polling on mount still gives a count */
+      });
+
+    return () => {
+      cancelled = true;
+      conn.off("notificationCreated", created);
+      offReconnect();
+    };
+  }, [enabled]);
 }
 
 export function useChannelFilesChanged(channelId: string | undefined, teamSlug: string, channelName: string) {

@@ -10,6 +10,14 @@ public sealed record ChangeMemberRoleRequest(MemberRole Role);
 /// <summary>Kind is required in JSON; missing/null is rejected (do not default to File).</summary>
 public sealed record CreateChannelRequest(string Name, string? Description, ChannelVisibility Visibility, ChannelKind? Kind);
 public sealed record UpdateChannelRequest(string? Name, string? Description);
+
+/// <summary>
+/// File channels with files must choose exactly one disposition:
+/// <see cref="DiscardFiles"/> = true, or <see cref="MoveFilesToChannel"/> set to another file channel name.
+/// Text channels ignore these fields. Empty file channels may omit both.
+/// </summary>
+public sealed record DeleteChannelRequest(bool? DiscardFiles = null, string? MoveFilesToChannel = null);
+
 public sealed record ChannelDto(Guid Id, Guid TeamId, string Name, string? Description, ChannelVisibility Visibility, ChannelKind Kind, DateTimeOffset? ArchivedAt);
 public sealed record ChannelMemberDto(Guid UserId, string Email, string DisplayName, bool CanWrite, bool CanManage);
 public sealed record UpsertChannelMemberRequest(Guid UserId, bool CanWrite, bool CanManage);

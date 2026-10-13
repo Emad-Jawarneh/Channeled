@@ -26,7 +26,13 @@ public interface ITeamService
     Task<AppResult<ChannelDto>> GetChannelAsync(Guid userId, string slug, string channelName, CancellationToken ct = default);
     Task<AppResult<ChannelDto>> UpdateChannelAsync(Guid userId, string slug, string channelName, UpdateChannelRequest request, RequestContext context, CancellationToken ct = default);
     Task<AppResult> ArchiveChannelAsync(Guid userId, string slug, string channelName, RequestContext context, CancellationToken ct = default);
-    Task<AppResult> DeleteChannelAsync(Guid userId, string slug, string channelName, RequestContext context, CancellationToken ct = default);
+    Task<AppResult> DeleteChannelAsync(
+        Guid userId,
+        string slug,
+        string channelName,
+        DeleteChannelRequest request,
+        RequestContext context,
+        CancellationToken ct = default);
 
     Task<AppResult<IReadOnlyList<ChannelMemberDto>>> ListChannelMembersAsync(Guid userId, string slug, string channelName, CancellationToken ct = default);
     Task<AppResult> UpsertChannelMemberAsync(Guid userId, string slug, string channelName, UpsertChannelMemberRequest request, RequestContext context, CancellationToken ct = default);

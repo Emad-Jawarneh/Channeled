@@ -6,11 +6,14 @@ using Channeled.Application.Abstractions.Results;
 using Channeled.Application.Abstractions.Time;
 using Channeled.Application.Chat;
 using Channeled.Application.Identity;
+using Channeled.Application.Notifications;
 using Channeled.Domain.Audit;
 using Channeled.Domain.Authorization;
 using Channeled.Domain.Errors;
 using Channeled.Domain.Identity;
+using Channeled.Domain.Notifications;
 using Channeled.Domain.Teams;
+using Channeled.Infrastructure.Notifications;
 using Channeled.Infrastructure.Persistence;
 using Channeled.Infrastructure.Realtime;
 using Channeled.Infrastructure.Teams;
@@ -63,7 +66,25 @@ public sealed class ChatService(
         var author = await db.Users.AsNoTracking()
             .Where(u => u.Id == userId)
             .Select(u => u.DisplayName)
-            .FirstOrDefaultAsync(ct);
+            .FirstOrDefaultAsync(ct) ?? "Unknown user";
+
+        ChannelMessageEntity? parent = null;
+        if (request.ReplyToMessageId is Guid replyId)
+        {
+            parent = await db.ChannelMessages.AsNoTracking()
+                .FirstOrDefaultAsync(m => m.Id == replyId && m.ChannelId == channel.Channel.Id, ct);
+            if (parent is null)
+            {
+                return AppResult<ChannelMessageDto>.Fail(ErrorCodes.Validation, "Reply target was not found in this channel.");
+            }
+        }
+
+        var teamMembers = await db.TeamMembers.AsNoTracking()
+            .Where(m => m.TeamId == channel.Team.Id)
+            .Join(db.Users.AsNoTracking(), m => m.UserId, u => u.Id, (m, u) => new { u.Id, u.DisplayName })
+            .ToListAsync(ct);
+        var memberTuples = teamMembers.Select(m => (m.Id, m.DisplayName)).ToList();
+        var mentionIds = MentionResolver.Resolve(body, memberTuples, request.MentionedUserIds);
 
         // Postgres timestamptz is microsecond-precise; truncate so the returned value equals the stored value.
         var now = clock.UtcNow;
@@ -76,12 +97,72 @@ public sealed class ChatService(
             AuthorId = userId,
             Body = body,
             CreatedAt = now,
+            ReplyToMessageId = parent?.Id,
         };
         db.ChannelMessages.Add(message);
+        foreach (var mentionedId in mentionIds)
+        {
+            db.MessageMentions.Add(new MessageMentionEntity { MessageId = message.Id, UserId = mentionedId });
+        }
+
+        var preview = Truncate(body.Trim(), 280);
+        var notifications = BuildNotifications(
+            actorId: userId,
+            messageId: message.Id,
+            teamId: channel.Team.Id,
+            channelId: channel.Channel.Id,
+            bodyPreview: preview,
+            createdAt: now,
+            parentAuthorId: parent is { DeletedAt: null } ? parent.AuthorId : null,
+            mentionIds: mentionIds);
+        foreach (var n in notifications)
+        {
+            db.Notifications.Add(n);
+        }
+
         await db.SaveChangesAsync(ct);
 
-        var dto = ToDto(message, author ?? "Unknown user");
+        MessageReplyPreviewDto? replyDto = null;
+        if (parent is not null)
+        {
+            var parentName = await db.Users.AsNoTracking()
+                .Where(u => u.Id == parent.AuthorId)
+                .Select(u => u.DisplayName)
+                .FirstOrDefaultAsync(ct) ?? "Unknown user";
+            replyDto = ToReplyPreview(parent, parentName);
+        }
+
+        var mentionDtos = mentionIds
+            .Select(id => new MessageMentionDto(
+                id,
+                teamMembers.FirstOrDefault(m => m.Id == id)?.DisplayName ?? "Unknown user"))
+            .OrderBy(m => m.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var dto = ToDto(message, author, replyDto, mentionDtos);
         notifier.NotifyMessageCreated(channel.Channel.Id, dto);
+
+        var actorName = author;
+        foreach (var n in notifications)
+        {
+            notifier.NotifyUser(
+                n.UserId,
+                "notificationCreated",
+                new NotificationDto(
+                    n.Id,
+                    n.Type,
+                    n.TeamId,
+                    channel.Team.Slug,
+                    n.ChannelId,
+                    channel.Channel.Name,
+                    n.MessageId,
+                    n.ActorId,
+                    actorName,
+                    n.BodyPreview,
+                    n.CreatedAt,
+                    n.ReadAt));
+        }
+
         return AppResult<ChannelMessageDto>.Ok(dto);
     }
 
@@ -131,14 +212,53 @@ public sealed class ChatService(
             next = EncodeCursor(last.CreatedAt, last.Id);
         }
 
-        var authorIds = rows.Select(r => r.AuthorId).Distinct().ToList();
+        var messageIds = rows.Select(r => r.Id).ToList();
+        var replyIds = rows.Where(r => r.ReplyToMessageId is not null).Select(r => r.ReplyToMessageId!.Value).Distinct().ToList();
+
+        var parents = replyIds.Count == 0
+            ? new Dictionary<Guid, ChannelMessageEntity>()
+            : await db.ChannelMessages.AsNoTracking()
+                .Where(m => replyIds.Contains(m.Id))
+                .ToDictionaryAsync(m => m.Id, ct);
+
+        var authorIds = rows.Select(r => r.AuthorId)
+            .Concat(parents.Values.Select(p => p.AuthorId))
+            .Distinct()
+            .ToList();
+
         var names = await db.Users.AsNoTracking()
             .Where(u => authorIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, u => u.DisplayName, ct);
 
-        var items = rows
-            .Select(r => ToDto(r, names.GetValueOrDefault(r.AuthorId, "Deleted user")))
-            .ToList();
+        var mentions = messageIds.Count == 0
+            ? new List<MessageMentionEntity>()
+            : await db.MessageMentions.AsNoTracking()
+                .Where(m => messageIds.Contains(m.MessageId))
+                .ToListAsync(ct);
+        var mentionUserIds = mentions.Select(m => m.UserId).Distinct().ToList();
+        var mentionNames = mentionUserIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await db.Users.AsNoTracking()
+                .Where(u => mentionUserIds.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id, u => u.DisplayName, ct);
+
+        var items = rows.Select(r =>
+        {
+            MessageReplyPreviewDto? reply = null;
+            if (r.ReplyToMessageId is Guid pid && parents.TryGetValue(pid, out var parent))
+            {
+                reply = ToReplyPreview(parent, names.GetValueOrDefault(parent.AuthorId, "Deleted user"));
+            }
+
+            var msgMentions = mentions
+                .Where(m => m.MessageId == r.Id)
+                .Select(m => new MessageMentionDto(m.UserId, mentionNames.GetValueOrDefault(m.UserId, "Deleted user")))
+                .OrderBy(m => m.DisplayName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            return ToDto(r, names.GetValueOrDefault(r.AuthorId, "Deleted user"), reply, msgMentions);
+        }).ToList();
+
         return AppResult<MessageListResponse>.Ok(new MessageListResponse(items, next));
     }
 
@@ -295,8 +415,74 @@ public sealed class ChatService(
             IsMessageAuthor = isAuthor,
         };
 
-    private static ChannelMessageDto ToDto(ChannelMessageEntity m, string authorDisplayName) =>
-        new(m.Id, m.ChannelId, m.AuthorId, authorDisplayName, m.Body, m.CreatedAt);
+    private static ChannelMessageDto ToDto(
+        ChannelMessageEntity m,
+        string authorDisplayName,
+        MessageReplyPreviewDto? replyTo,
+        IReadOnlyList<MessageMentionDto> mentions) =>
+        new(m.Id, m.ChannelId, m.AuthorId, authorDisplayName, m.Body, m.CreatedAt, replyTo, mentions);
+
+    private static MessageReplyPreviewDto ToReplyPreview(ChannelMessageEntity parent, string authorDisplayName)
+    {
+        var deleted = parent.DeletedAt is not null;
+        var preview = deleted ? "" : Truncate(parent.Body.Trim(), 140);
+        return new MessageReplyPreviewDto(parent.Id, parent.AuthorId, authorDisplayName, preview, deleted);
+    }
+
+    private static List<NotificationEntity> BuildNotifications(
+        Guid actorId,
+        Guid messageId,
+        Guid teamId,
+        Guid channelId,
+        string bodyPreview,
+        DateTimeOffset createdAt,
+        Guid? parentAuthorId,
+        HashSet<Guid> mentionIds)
+    {
+        var rows = new List<NotificationEntity>();
+        var covered = new HashSet<Guid>();
+
+        if (parentAuthorId is Guid replyUser && replyUser != actorId)
+        {
+            rows.Add(new NotificationEntity
+            {
+                Id = UuidV7.NewGuid(),
+                UserId = replyUser,
+                Type = NotificationType.Reply,
+                TeamId = teamId,
+                ChannelId = channelId,
+                MessageId = messageId,
+                ActorId = actorId,
+                BodyPreview = bodyPreview,
+                CreatedAt = createdAt,
+            });
+            covered.Add(replyUser);
+        }
+
+        foreach (var mentioned in mentionIds)
+        {
+            if (mentioned == actorId || covered.Contains(mentioned))
+            {
+                continue;
+            }
+
+            rows.Add(new NotificationEntity
+            {
+                Id = UuidV7.NewGuid(),
+                UserId = mentioned,
+                Type = NotificationType.Mention,
+                TeamId = teamId,
+                ChannelId = channelId,
+                MessageId = messageId,
+                ActorId = actorId,
+                BodyPreview = bodyPreview,
+                CreatedAt = createdAt,
+            });
+            covered.Add(mentioned);
+        }
+
+        return rows;
+    }
 
     /// <summary>Unicode code points: matches Postgres <c>char_length</c> used by the DB check constraint.</summary>
     internal static int CodePointCount(string value)

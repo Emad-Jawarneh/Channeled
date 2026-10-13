@@ -136,6 +136,37 @@ export const teamsApi = {
         kind: input.kind,
       },
     }),
+  updateChannel: (
+    slug: string,
+    channel: string,
+    input: { name?: string; description?: string | null },
+  ) =>
+    api<Channel>(`/api/v1/teams/${encodeURIComponent(slug)}/channels/${encodeURIComponent(channel)}`, {
+      method: "PUT",
+      json: {
+        name: input.name ?? null,
+        description: input.description === undefined ? null : input.description,
+      },
+    }),
+  archiveChannel: (slug: string, channel: string) =>
+    api<void>(`/api/v1/teams/${encodeURIComponent(slug)}/channels/${encodeURIComponent(channel)}/archive`, {
+      method: "POST",
+    }),
+  deleteChannel: (
+    slug: string,
+    channel: string,
+    input?: { discardFiles?: boolean; moveFilesToChannel?: string | null },
+  ) =>
+    api<void>(
+      `/api/v1/teams/${encodeURIComponent(slug)}/channels/${encodeURIComponent(channel)}/delete`,
+      {
+        method: "POST",
+        json: {
+          discardFiles: input?.discardFiles ?? null,
+          moveFilesToChannel: input?.moveFilesToChannel ?? null,
+        },
+      },
+    ),
   members: (slug: string) => api<TeamMember[]>(`/api/v1/teams/${slug}/members`),
   changeRole: (slug: string, userId: string, role: number) =>
     api<void>(`/api/v1/teams/${slug}/members/${userId}/role`, {
@@ -178,6 +209,25 @@ export type ChannelMessage = {
   authorDisplayName: string;
   body: string;
   createdAt: string;
+  /** Quote of the message this one replies to (absent/null when it is not a reply). */
+  replyTo?: ReplyPreview | null;
+  mentions: MessageMention[];
+};
+
+export type ReplyPreview = {
+  id: string;
+  authorId: string;
+  authorDisplayName: string;
+  bodyPreview: string;
+  deleted: boolean;
+};
+
+export type MessageMention = { userId: string; displayName: string };
+
+export type PostMessageRequest = {
+  body: string;
+  replyToMessageId?: string | null;
+  mentionedUserIds?: string[];
 };
 
 /** Newest-first page; `nextCursor` pages toward older messages. */
@@ -210,10 +260,17 @@ export const messagesApi = {
       `/api/v1/teams/${encodeURIComponent(slug)}/channels/${encodeURIComponent(channel)}/messages?${q}`,
     );
   },
-  post: (slug: string, channel: string, body: string) =>
+  post: (slug: string, channel: string, request: PostMessageRequest) =>
     api<ChannelMessage>(
       `/api/v1/teams/${encodeURIComponent(slug)}/channels/${encodeURIComponent(channel)}/messages`,
-      { method: "POST", json: { body } },
+      {
+        method: "POST",
+        json: {
+          body: request.body,
+          replyToMessageId: request.replyToMessageId ?? null,
+          mentionedUserIds: request.mentionedUserIds ?? [],
+        },
+      },
     ),
   remove: (slug: string, channel: string, messageId: string) =>
     api<void>(
@@ -224,6 +281,36 @@ export const messagesApi = {
     api<PresenceList>(
       `/api/v1/teams/${encodeURIComponent(slug)}/channels/${encodeURIComponent(channel)}/presence`,
     ),
+};
+
+export const NotificationType = { Mention: 1, Reply: 2 } as const;
+
+export type NotificationDto = {
+  id: string;
+  type: number;
+  teamId: string;
+  teamSlug: string;
+  channelId: string;
+  channelName: string;
+  messageId: string;
+  actorId: string;
+  actorDisplayName: string;
+  bodyPreview: string;
+  createdAt: string;
+  readAt?: string | null;
+};
+
+export const notificationsApi = {
+  list: (opts: { limit?: number; unreadOnly?: boolean } = {}) => {
+    const q = new URLSearchParams();
+    q.set("limit", String(opts.limit ?? 20));
+    if (opts.unreadOnly) q.set("unreadOnly", "true");
+    return api<NotificationDto[]>(`/api/v1/notifications?${q}`);
+  },
+  unreadCount: () => api<{ unreadCount: number }>("/api/v1/notifications/unread-count"),
+  markRead: (id: string) =>
+    api<void>(`/api/v1/notifications/${encodeURIComponent(id)}/read`, { method: "POST" }),
+  markAllRead: () => api<void>("/api/v1/notifications/read-all", { method: "POST" }),
 };
 
 export type ShareLinkCreated = {

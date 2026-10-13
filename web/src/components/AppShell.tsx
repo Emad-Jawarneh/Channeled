@@ -8,6 +8,7 @@ import { createTeamWithGeneral } from "../features/teams/createTeam";
 import { UploadTray } from "../uploads/UploadTray";
 import { ThemeToggle } from "../theme/ThemeToggle";
 import { Button } from "../ui/Button";
+import { NotificationBell } from "./NotificationBell";
 import styles from "./AppShell.module.css";
 
 type AppShellProps = {
@@ -121,6 +122,7 @@ export function AppShell({ children, sidebar, details, title }: AppShellProps) {
           </h1>
           <div className={styles.topActions}>
             <ThemeToggle compact />
+            <NotificationBell />
             {user && (
               <span className={styles.user} data-testid="current-user">
                 {user.displayName}

@@ -12,4 +12,7 @@ public interface IChannelNotifier
     void NotifyMessageDeleted(Guid channelId, object payload);
 
     void NotifyPresenceChanged(Guid channelId, object payload);
+
+    /// <summary>User-scoped event (e.g. notificationCreated) via hub group <c>user:{id}</c>.</summary>
+    void NotifyUser(Guid userId, string method, object payload);
 }

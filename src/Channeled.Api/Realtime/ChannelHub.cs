@@ -28,6 +28,8 @@ public sealed class ChannelHub(
 {
     public static string GroupName(Guid channelId) => $"channel:{channelId:D}";
 
+    public static string UserGroupName(Guid userId) => $"user:{userId:D}";
+
     public override async Task OnConnectedAsync()
     {
         var userId = RequireUserId();
@@ -37,6 +39,8 @@ public sealed class ChannelHub(
             return;
         }
 
+        // Personal inbox (mentions / replies) — independent of channel joins.
+        await Groups.AddToGroupAsync(Context.ConnectionId, UserGroupName(userId));
         await base.OnConnectedAsync();
     }
 

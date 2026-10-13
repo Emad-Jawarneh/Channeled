@@ -3,6 +3,7 @@ using Channeled.Infrastructure.Chat;
 using Channeled.Infrastructure.Files;
 using Channeled.Infrastructure.Identity;
 using Channeled.Infrastructure.Jobs;
+using Channeled.Infrastructure.Notifications;
 using Channeled.Infrastructure.Operations;
 using Channeled.Infrastructure.PublicLinks;
 using Channeled.Infrastructure.Teams;
@@ -37,6 +38,8 @@ public sealed class ApplicationDbContext : IdentityDbContext<AppUser, AppRole, G
     public DbSet<BackupEntity> Backups => Set<BackupEntity>();
     public DbSet<FileShareLinkEntity> FileShareLinks => Set<FileShareLinkEntity>();
     public DbSet<ChannelMessageEntity> ChannelMessages => Set<ChannelMessageEntity>();
+    public DbSet<MessageMentionEntity> MessageMentions => Set<MessageMentionEntity>();
+    public DbSet<NotificationEntity> Notifications => Set<NotificationEntity>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -150,6 +153,11 @@ public sealed class ApplicationDbContext : IdentityDbContext<AppUser, AppRole, G
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Body).IsRequired();
             entity.HasOne<ChannelEntity>().WithMany().HasForeignKey(x => x.ChannelId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.ReplyToMessage)
+                .WithMany()
+                .HasForeignKey(x => x.ReplyToMessageId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(x => x.ReplyToMessageId).HasDatabaseName("ix_channel_messages_reply_to");
             // Keyset pagination order: (created_at, id) newest first.
             entity.HasIndex(x => new { x.ChannelId, x.CreatedAt, x.Id }).HasDatabaseName("ix_channel_messages_channel_created_id");
             entity.HasIndex(x => x.DeletedAt).HasFilter("\"DeletedAt\" IS NOT NULL").HasDatabaseName("ix_channel_messages_deleted_at");
@@ -160,6 +168,26 @@ public sealed class ApplicationDbContext : IdentityDbContext<AppUser, AppRole, G
                 // Soft-delete must scrub the body in the same write.
                 t.HasCheckConstraint("ck_channel_messages_deleted_scrubbed", "\"DeletedAt\" IS NULL OR \"Body\" = ''");
             });
+        });
+
+        builder.Entity<MessageMentionEntity>(entity =>
+        {
+            entity.ToTable("message_mentions");
+            entity.HasKey(x => new { x.MessageId, x.UserId });
+            entity.HasOne(x => x.Message)
+                .WithMany(m => m.Mentions)
+                .HasForeignKey(x => x.MessageId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => x.UserId).HasDatabaseName("ix_message_mentions_user");
+        });
+
+        builder.Entity<NotificationEntity>(entity =>
+        {
+            entity.ToTable("notifications");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.BodyPreview).HasMaxLength(280).IsRequired();
+            entity.HasIndex(x => new { x.UserId, x.CreatedAt }).HasDatabaseName("ix_notifications_user_created");
+            entity.HasIndex(x => new { x.UserId, x.ReadAt }).HasDatabaseName("ix_notifications_user_read");
         });
 
         builder.Entity<FolderEntity>(entity =>

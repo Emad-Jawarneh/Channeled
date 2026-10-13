@@ -193,14 +193,28 @@ public static class TeamEndpoints
             return ToHttp(await teamsSvc.ArchiveChannelAsync(userId, slug, channelName, Ctx(http), ct));
         });
 
-        teams.MapDelete("/{slug}/channels/{channelName}", async Task<IResult> (string slug, string channelName, ITeamService teamsSvc, ClaimsPrincipal principal, HttpContext http, CancellationToken ct) =>
+        // POST (not DELETE): disposition body (discard vs move files) must bind reliably.
+        teams.MapPost("/{slug}/channels/{channelName}/delete", async Task<IResult> (
+            string slug,
+            string channelName,
+            DeleteChannelRequest? body,
+            ITeamService teamsSvc,
+            ClaimsPrincipal principal,
+            HttpContext http,
+            CancellationToken ct) =>
         {
             if (!TryUser(principal, out var userId))
             {
                 return Unauthorized();
             }
 
-            return ToHttp(await teamsSvc.DeleteChannelAsync(userId, slug, channelName, Ctx(http), ct));
+            return ToHttp(await teamsSvc.DeleteChannelAsync(
+                userId,
+                slug,
+                channelName,
+                body ?? new DeleteChannelRequest(),
+                Ctx(http),
+                ct));
         });
 
         teams.MapGet("/{slug}/channels/{channelName}/members", async Task<IResult> (string slug, string channelName, ITeamService teamsSvc, ClaimsPrincipal principal, CancellationToken ct) =>

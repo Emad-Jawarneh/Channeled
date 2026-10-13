@@ -13,4 +13,18 @@ public sealed class ChannelMessageEntity
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? DeletedAt { get; set; }
     public Guid? DeletedBy { get; set; }
+
+    /// <summary>Optional parent message in the same channel (flat reply, not a nested thread).</summary>
+    public Guid? ReplyToMessageId { get; set; }
+
+    public ChannelMessageEntity? ReplyToMessage { get; set; }
+    public List<MessageMentionEntity> Mentions { get; set; } = [];
+}
+
+public sealed class MessageMentionEntity
+{
+    public Guid MessageId { get; set; }
+    public Guid UserId { get; set; }
+
+    public ChannelMessageEntity? Message { get; set; }
 }

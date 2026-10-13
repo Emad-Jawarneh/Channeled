@@ -174,3 +174,13 @@
 
 **Decision:** CI runs a reduced concurrency/latency profile (`LOAD_USERS`/`LOAD_ITERATIONS`). Full AGENTS scale (200 users, 50 teams, 1M files, ~2 TB) is documented and operator-run after bench seed; object corpus for 2 TB is not required for the latency harness.
 **Reason:** CI machines cannot hold a 2 TB store; metadata bench + concurrent list/search still validates scale path.
+
+## 2026-10-13 — Chat replies, @mentions, notifications
+
+**Decision:** Messages may set `ReplyToMessageId` (same channel; SET NULL on parent delete). Mentions are stored in `message_mentions` and resolved from `@DisplayName` (longest-match) plus optional explicit team-member ids. Notifications (`Mention` / `Reply`) are persisted and pushed via hub group `user:{id}` as `notificationCreated`; no self-notify. List/mark-read under `/api/v1/notifications`.
+**Reason:** Keep reply/mention durable and queryable; reuse the existing hub with a per-user group so recipients get alerts without joining the channel.
+
+## 2026-10-13 — Channel delete: move or discard files
+
+**Decision:** Hard-delete is `POST /api/v1/teams/{slug}/channels/{name}/delete` with `DeleteChannelRequest`. File channels that still have files must choose `discardFiles: true` (delete store objects, decrement `UsageBytes`) or `moveFilesToChannel` (flatten into another file channel root, auto-rename conflicts). Text channels ignore disposition. Delete also aborts pending uploads, revokes share links, removes notifications, writes `ChannelDelete` audit, and `NotifyChannel`. SPA delete dialog requires typing the channel name and offers Archive instead.
+**Reason:** Files have no FK to channels; a row-only delete orphans MinIO objects. Explicit disposition avoids silent data loss; POST carries the body reliably.

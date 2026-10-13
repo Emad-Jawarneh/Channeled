@@ -132,8 +132,19 @@
   color: var(--color-text-muted);
 }
 
-.deleteButton {
+.messageMentionsMe {
+  background: color-mix(in srgb, var(--color-soft) 70%, transparent);
+  box-shadow: inset 3px 0 0 var(--color-accent);
+  padding-left: 0.6rem;
+}
+
+.actions {
+  display: inline-flex;
+  gap: 0.15rem;
   margin-left: auto;
+}
+
+.actionButton {
   padding: 0.1rem 0.4rem;
   border: 0;
   border-radius: 6px;
@@ -144,10 +155,135 @@
   cursor: pointer;
 }
 
-.deleteButton:hover,
-.deleteButton:focus-visible {
+.actionButton:hover,
+.actionButton:focus-visible {
   color: var(--color-text);
   background: var(--color-soft);
+}
+
+.quote {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  max-width: 100%;
+  margin: 0 0 0.25rem;
+  padding: 0.2rem 0.6rem;
+  border: 0;
+  border-left: 3px solid var(--color-accent);
+  border-radius: 0 6px 6px 0;
+  background: color-mix(in srgb, var(--color-soft) 55%, transparent);
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--text-xs);
+  text-align: left;
+  cursor: pointer;
+}
+
+button.quote:hover,
+button.quote:focus-visible {
+  background: var(--color-soft);
+}
+
+.quoteDeleted {
+  font-style: italic;
+  cursor: default;
+}
+
+.quoteAuthor {
+  flex-shrink: 0;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.quoteText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mention {
+  padding: 0 0.2rem;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+  color: var(--color-focus);
+  font-weight: 700;
+}
+
+.mentionSelf {
+  background: color-mix(in srgb, var(--color-accent) 45%, transparent);
+  color: var(--color-text);
+}
+
+.replyChip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 0.35rem 0.5rem 0.35rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-accent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-soft) 55%, var(--color-surface));
+  font-size: var(--text-sm);
+}
+
+.replyChipText {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.replyChipText strong {
+  flex-shrink: 0;
+}
+
+.replyChipPreview {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-muted);
+}
+
+.inputWrap {
+  position: relative;
+}
+
+.mentionList {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 6px);
+  z-index: 20;
+  min-width: 14rem;
+  max-width: 100%;
+  max-height: 14rem;
+  margin: 0;
+  padding: 0.25rem;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.mentionOption {
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.mentionOption::before {
+  content: "@";
+  color: var(--color-text-muted);
+}
+
+.mentionOptionActive {
+  background: var(--color-soft);
+  font-weight: 700;
 }
 
 .body {

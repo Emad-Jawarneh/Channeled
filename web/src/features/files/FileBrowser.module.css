@@ -435,6 +435,49 @@
   background: var(--color-soft);
 }
 
+.nameCell {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.folderGlyph {
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--color-soft);
+  color: var(--color-text-muted);
+  font-size: 0.95rem;
+}
+
+.table tr[data-drop-active="true"] {
+  background: var(--color-soft);
+  outline: 1px solid var(--color-focus);
+}
+
+.dragGhost {
+  position: absolute;
+  top: -1000px;
+  left: -1000px;
+  padding: 0.35rem 0.65rem;
+  border-radius: 8px;
+  background: var(--color-surface, #222);
+  color: var(--color-text);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.15));
+  font-size: 0.85rem;
+  pointer-events: none;
+}
+
+.nameText {
+  min-width: 0;
+  flex: 1;
+}
+
 .linkish {
   border: 0;
   background: transparent;
@@ -449,6 +492,12 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: left;
+}
+
+.previewBlock {
+  display: grid;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
 }
 
 .actionWrap {

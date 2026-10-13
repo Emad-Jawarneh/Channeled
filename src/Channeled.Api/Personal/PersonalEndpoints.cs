@@ -218,6 +218,7 @@ public static class PersonalEndpoints
 
         files.MapGet("/items/{itemId:guid}/content", async Task<IResult> (
             Guid itemId,
+            bool? download,
             IPersonalService personal,
             ClaimsPrincipal principal,
             HttpContext http,
@@ -246,7 +247,9 @@ public static class PersonalEndpoints
             }
 
             var d = result.Value;
-            var disposition = ContentTypeDetector.AllowInline(d.ContentType) ? "inline" : "attachment";
+            var disposition = download == true || !ContentTypeDetector.AllowInline(d.ContentType)
+                ? "attachment"
+                : "inline";
             http.Response.Headers.Append("X-Content-Type-Options", "nosniff");
             http.Response.Headers.ContentDisposition = $"{disposition}; filename=\"{d.FileName.Replace("\"", "")}\"";
 

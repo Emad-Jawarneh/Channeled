@@ -145,6 +145,54 @@ public class FilesApiTests : IClassFixture<AuthApiFactory>, IAsyncLifetime
         body.GetProperty("code").GetString().Should().Be("name_conflict");
     }
 
+    [Fact]
+    public async Task List_returns_ordered_folder_path_and_missing_folder_is_404()
+    {
+        var parentRes = await _owner.PostAsJsonAsync(
+            $"/api/v1/teams/{_slug}/channels/general/folders",
+            new CreateFolderRequest("Parent", null));
+        parentRes.EnsureSuccessStatusCode();
+        var parent = await parentRes.Content.ReadFromJsonAsync<FileItemDto>();
+
+        var childRes = await _owner.PostAsJsonAsync(
+            $"/api/v1/teams/{_slug}/channels/general/folders",
+            new CreateFolderRequest("Child", parent!.Id));
+        childRes.EnsureSuccessStatusCode();
+        var child = await childRes.Content.ReadFromJsonAsync<FileItemDto>();
+
+        var list = await _owner.GetFromJsonAsync<ItemListResponse>(
+            $"/api/v1/teams/{_slug}/channels/general/items?folderId={child!.Id}");
+        list!.Path.Should().NotBeNull();
+        var path = list.Path!;
+        path.Select(p => p.Name).Should().Equal("Parent", "Child");
+        path.Select(p => p.Id).Should().Equal(parent.Id, child.Id);
+
+        var missing = await _owner.GetAsync(
+            $"/api/v1/teams/{_slug}/channels/general/items?folderId={Guid.NewGuid()}");
+        missing.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task Move_folder_into_descendant_is_rejected()
+    {
+        var parentRes = await _owner.PostAsJsonAsync(
+            $"/api/v1/teams/{_slug}/channels/general/folders",
+            new CreateFolderRequest("A", null));
+        parentRes.EnsureSuccessStatusCode();
+        var parent = await parentRes.Content.ReadFromJsonAsync<FileItemDto>();
+
+        var childRes = await _owner.PostAsJsonAsync(
+            $"/api/v1/teams/{_slug}/channels/general/folders",
+            new CreateFolderRequest("B", parent!.Id));
+        childRes.EnsureSuccessStatusCode();
+        var child = await childRes.Content.ReadFromJsonAsync<FileItemDto>();
+
+        var move = await _owner.PostAsJsonAsync(
+            $"/api/v1/teams/{_slug}/channels/general/items/{parent.Id}/move",
+            new MoveItemRequest(child!.Id));
+        move.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
     private HttpClient CreateClient() =>
         _factory.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions
         {

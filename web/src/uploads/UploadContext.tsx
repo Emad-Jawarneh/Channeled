@@ -36,13 +36,20 @@ type UploadApi = {
 };
 
 const UploadContext = createContext<UploadApi | null>(null);
-const FILE_CONCURRENCY = 3;
-const PART_CONCURRENCY = 3;
+const FILE_CONCURRENCY = 2;
+const PART_CONCURRENCY = 2;
 
-async function sha256Hex(file: File): Promise<string> {
-  const buffer = await file.arrayBuffer();
-  const hash = await crypto.subtle.digest("SHA-256", buffer);
-  return [...new Uint8Array(hash)].map((b) => b.toString(16).padStart(2, "0")).join("");
+function uploadErrorMessage(err: unknown): string {
+  if (err instanceof DOMException && err.name === "NotReadableError") {
+    return "Could not read this file (it may be locked, moved, or too large to load at once). Try again.";
+  }
+  if (err instanceof TypeError || (err instanceof Error && /failed to fetch/i.test(err.message))) {
+    return "Network error while uploading a part. Check the API is running, then retry.";
+  }
+  if (err instanceof Error && err.message) {
+    return err.message;
+  }
+  return "Upload failed";
 }
 
 export function UploadProvider({ children }: { children: ReactNode }) {
@@ -66,8 +73,10 @@ export function UploadProvider({ children }: { children: ReactNode }) {
       try {
         update(job.id, { status: "uploading", progress: 0, error: undefined });
         const csrf = await ensureCsrf();
-        const sha = await sha256Hex(job.file);
 
+        // Do not hash the whole file in the browser — multi-GB files fail with
+        // NotReadableError when loaded via arrayBuffer(). The API computes SHA-256
+        // on complete when ExpectedSha256Hex is omitted.
         let uploadId: string;
         let partSize: number;
         if (job.scope === "channel") {
@@ -94,6 +103,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
 
         const partCount = Math.max(1, Math.ceil(job.sizeBytes / partSize));
         let nextPart = 1;
+        let completedParts = 0;
         const workers: Promise<void>[] = [];
 
         const runPart = async () => {
@@ -107,7 +117,8 @@ export function UploadProvider({ children }: { children: ReactNode }) {
             const end = Math.min(start + partSize, job.sizeBytes);
             const blob = job.file.slice(start, end);
             await filesApi.putPart(uploadId, partNumber, blob, csrf);
-            update(job.id, { progress: Math.round((partNumber / partCount) * 100) });
+            completedParts += 1;
+            update(job.id, { progress: Math.round((completedParts / partCount) * 100) });
           }
         };
 
@@ -120,12 +131,12 @@ export function UploadProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        await filesApi.complete(uploadId, sha);
+        await filesApi.complete(uploadId);
         update(job.id, { status: "done", progress: 100 });
       } catch (err) {
         update(job.id, {
           status: "error",
-          error: err instanceof Error ? err.message : "Upload failed",
+          error: uploadErrorMessage(err),
         });
       }
     },

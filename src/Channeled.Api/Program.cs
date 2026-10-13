@@ -30,6 +30,12 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Multipart part uploads stream the body; keep headroom above PartSizeBytes (default 8 MiB).
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = 128L * 1024 * 1024;
+});
+
 builder.Services.AddChanneledInfrastructure(builder.Configuration);
 builder.Services.AddOpenApi();
 builder.Services.AddAntiforgery(options =>

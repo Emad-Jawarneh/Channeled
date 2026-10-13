@@ -48,9 +48,12 @@ public sealed record FileItemDto(
     Guid? OwnerUserId = null,
     bool Starred = false);
 
+public sealed record FolderPathSegmentDto(Guid Id, string Name);
+
 public sealed record ItemListResponse(
     IReadOnlyList<FileItemDto> Items,
-    string? NextCursor);
+    string? NextCursor,
+    IReadOnlyList<FolderPathSegmentDto>? Path = null);
 
 public sealed record ListItemsQuery(
     Guid? FolderId,

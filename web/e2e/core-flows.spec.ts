@@ -38,29 +38,30 @@ test("sign in, upload, rename, move, trash, restore, invite, role, private, copy
   await page.getByRole("menuitem", { name: "Rename" }).click();
   await expect(page.getByTestId(`row-${renamed}`)).toBeVisible();
 
-  // --- Move (into new folder) ---
+  // --- Move via picker into new folder ---
   await page.getByTestId("new-folder").click();
   await page.getByTestId("create-folder-name").fill("Docs");
   await page.getByTestId("create-folder-submit").click();
   await expect(page.getByTestId("row-Docs")).toBeVisible();
 
-  // Get folder id from prompt path: click Move and accept folder id from prompt text is hard;
-  // instead move to root after opening folder then back — use API for move target simplicity:
-  const csrf = await apiLogin(request, E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD);
-  const items = await request.get(`/api/v1/teams/${teamSlug}/channels/general/items`);
-  const list = (await items.json()) as { items: { id: string; name: string; kind: number }[] };
-  const folder = list.items.find((i) => i.name === "Docs" && i.kind === 1);
-  const file = list.items.find((i) => i.name === renamed && i.kind === 0);
-  expect(folder && file).toBeTruthy();
-  const moved = await request.post(
-    `/api/v1/teams/${teamSlug}/channels/general/items/${file!.id}/move`,
-    {
-      headers: { "X-CSRF-TOKEN": csrf, "Content-Type": "application/json" },
-      data: { targetFolderId: folder!.id },
-    },
-  );
-  expect(moved.ok()).toBeTruthy();
-  await page.reload();
+  await page.getByTestId(`actions-${renamed}`).click();
+  await page.getByTestId(`move-${renamed}`).click();
+  await page.getByTestId("move-to-dialog-select").selectOption({ label: "Docs" });
+  await page.getByTestId("move-to-dialog-submit").click();
+  await expect(page.getByTestId(`row-${renamed}`)).toHaveCount(0);
+
+  await page.getByTestId("open-folder-Docs").click();
+  await expect(page).toHaveURL(/folder=/);
+  await expect(page.getByTestId("folder-breadcrumbs")).toBeVisible();
+  await expect(page.getByTestId("crumb-root")).toBeVisible();
+  await expect(page.getByTestId(`row-${renamed}`)).toBeVisible();
+
+  // Back returns to parent (root)
+  await page.goBack();
+  await expect(page).not.toHaveURL(/folder=/);
+  await expect(page.getByTestId("row-Docs")).toBeVisible();
+
+  // Re-enter for trash/restore
   await page.getByTestId("open-folder-Docs").click();
   await expect(page.getByTestId(`row-${renamed}`)).toBeVisible();
 
@@ -70,6 +71,7 @@ test("sign in, upload, rename, move, trash, restore, invite, role, private, copy
   await expect(page.getByTestId(`row-${renamed}`)).toHaveCount(0);
 
   // --- Restore ---
+  const csrf = await apiLogin(request, E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD);
   await page.goto(`/t/${teamSlug}/c/general/trash`);
   await expect(page.getByTestId(`row-${renamed}`)).toBeVisible();
   await page.getByTestId(`actions-${renamed}`).click();

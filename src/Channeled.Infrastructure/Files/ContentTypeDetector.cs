@@ -37,5 +37,7 @@ public static class ContentTypeDetector
 
     public static bool AllowInline(string contentType) =>
         contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
+        || contentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase)
+        || contentType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase)
         || string.Equals(contentType, "application/pdf", StringComparison.OrdinalIgnoreCase);
 }

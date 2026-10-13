@@ -1,22 +1,48 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { createPortal } from "react-dom";
-import { ChannelKind, ItemKind, personalApi, teamsApi, type FileItem } from "../../api/channeled";
+import {
+  ChannelKind,
+  ItemKind,
+  personalApi,
+  teamsApi,
+  type FileItem,
+  type FolderPathSegment,
+} from "../../api/channeled";
+import { ApiError } from "../../api/http";
 import { AppShell } from "../../components/AppShell";
-import { describeFileKind, formatFileType } from "../../lib/describeFileKind";
+import { formatFileType } from "../../lib/describeFileKind";
 import { formatBytes } from "../../lib/formatBytes";
 import { ModifiedAt } from "../../lib/formatModified";
+import { triggerDownload, triggerDownloads } from "../../lib/triggerDownload";
 import { DropOverlay } from "../../uploads/DropOverlay";
 import { useFileDrop } from "../../uploads/useFileDrop";
 import { useUploads } from "../../uploads/UploadContext";
 import { Button } from "../../ui/Button";
 import { BulkBar } from "../files/BulkBar";
 import { CreateFolderDialog } from "../files/CreateFolderDialog";
+import {
+  CHANNELED_ITEMS_MIME,
+  clearDraggedItemIds,
+  getDraggedItemIds,
+  setDraggedItemIds,
+} from "../files/dragItems";
+import { FileThumb } from "../files/FileThumb";
+import { FilePreviewPanel } from "../files/FilePreviewPanel";
 import { FilesSearchField } from "../files/FilesSearchField";
+import { FolderBreadcrumbs } from "../files/FolderBreadcrumbs";
+import {
+  MoveProgress,
+  MoveSummary,
+  UndoToast,
+  type UndoToastState,
+} from "../files/MoveFeedback";
+import { moveBatch, summarizeMoveResult, type MoveBatchPrior } from "../files/moveBatch";
 import { PickListDialog } from "../files/PickListDialog";
 import { SelectionControls } from "../files/SelectionControls";
 import { nextSortState, SortableTh, type SortColumn } from "../files/SortableTh";
 import { UploadButton } from "../files/UploadButton";
+import { useFolderNav } from "../files/useFolderNav";
 import styles from "../files/FileBrowser.module.css";
 import { PersonalSidebar } from "./PersonalSidebar";
 
@@ -33,13 +59,41 @@ const titles: Record<Mode, string> = {
 export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
   const qc = useQueryClient();
   const uploads = useUploads();
+  const trash = mode === "trash";
+  const canBrowseFolders = mode === "files";
+  const canUpload = !trash && mode === "files";
+  const canBulk = !trash && mode === "files";
+
+  const { folderId, folderNameHint, openFolder, goToSegment, clearInvalidFolder, goToRoot } =
+    useFolderNav(canBrowseFolders);
+
+  useEffect(() => {
+    if (!canBrowseFolders) {
+      goToRoot({ replace: true });
+    }
+  }, [canBrowseFolders, goToRoot]);
+
   const [selected, setSelected] = useState<FileItem | null>(null);
-  const [folderId, setFolderId] = useState<string | undefined>();
-  const [folderStack, setFolderStack] = useState<{ id: string; name: string }[]>([]);
+  const [previewOpen, setPreviewOpen] = useState(() => {
+    try {
+      return localStorage.getItem("channeled.previewOpen") !== "0";
+    } catch {
+      return true;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("channeled.previewOpen", previewOpen ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, [previewOpen]);
   const [createFolderOpen, setCreateFolderOpen] = useState(false);
   const [createFolderError, setCreateFolderError] = useState<string | null>(null);
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [folderUnavailable, setFolderUnavailable] = useState(false);
   const [nameQuery, setNameQuery] = useState("");
   const [sort, setSort] = useState<SortColumn>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -47,25 +101,24 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
   const [copySuccess, setCopySuccess] = useState(false);
   const [checked, setChecked] = useState<Set<string>>(() => new Set());
   const [moveOpen, setMoveOpen] = useState(false);
+  const [singleMoveItem, setSingleMoveItem] = useState<FileItem | null>(null);
   const [sendOpen, setSendOpen] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkError, setBulkError] = useState<string | null>(null);
+  const [moveProgress, setMoveProgress] = useState<{ done: number; total: number } | null>(null);
+  const [moveSummary, setMoveSummary] = useState<{
+    message: string;
+    failures: { id: string; name?: string; message: string }[];
+  } | null>(null);
+  const [undoToast, setUndoToast] = useState<UndoToastState | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null | "root">(null);
   const menuRef = useRef<HTMLUListElement | null>(null);
-
-  const trash = mode === "trash";
-  const canBrowseFolders = mode === "files";
-  const canUpload = !trash && mode === "files";
-  const canBulk = !trash && mode === "files";
-
-  useEffect(() => {
-    if (!canBrowseFolders) {
-      setFolderId(undefined);
-      setFolderStack([]);
-    }
-  }, [canBrowseFolders]);
+  const dropDepth = useRef(0);
 
   useEffect(() => {
     setChecked(new Set());
+    setSelected(null);
+    setMoveSummary(null);
   }, [folderId, mode]);
 
   useEffect(() => {
@@ -114,7 +167,23 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
       if (mode === "starred") return personalApi.starred();
       return personalApi.list({ trash, folderId: canBrowseFolders ? folderId : undefined });
     },
+    retry: (count, err) => {
+      if (err instanceof ApiError && err.status === 404) return false;
+      return count < 2;
+    },
   });
+
+  useEffect(() => {
+    if (!folderId || !canBrowseFolders) return;
+    if (list.error instanceof ApiError && list.error.status === 404) {
+      clearInvalidFolder();
+      setFolderUnavailable(true);
+    }
+  }, [list.error, folderId, canBrowseFolders, clearInvalidFolder]);
+
+  useEffect(() => {
+    if (list.isSuccess && folderId) setFolderUnavailable(false);
+  }, [list.isSuccess, folderId]);
 
   function enqueue(files: File[]) {
     uploads.enqueuePersonal(files, folderId);
@@ -160,6 +229,8 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
     () => (list.data?.items ?? []).filter((i) => i.kind === ItemKind.Folder),
     [list.data?.items],
   );
+  const path =
+    list.data?.path ?? (list.data as { Path?: FolderPathSegment[] } | undefined)?.Path ?? null;
 
   const visibleItems = useMemo(() => {
     let items = list.data?.items ?? [];
@@ -196,13 +267,24 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
     visibleItems.length > 0 && visibleItems.every((i) => checked.has(i.id));
   const someVisibleChecked = checkedItems.length > 0 && !allVisibleChecked;
 
-  const moveFolderOptions = useMemo(
-    () =>
-      foldersHere
-        .filter((f) => !checked.has(f.id))
-        .map((f) => ({ id: f.id, label: f.name })),
-    [foldersHere, checked],
-  );
+  const movePickerOptions = useMemo(() => {
+    const exclude = new Set(checked);
+    if (singleMoveItem) exclude.add(singleMoveItem.id);
+    const ancestors = (path ?? [])
+      .filter((p) => p.id !== folderId)
+      .map((p) => ({ id: p.id, label: p.name }));
+    const siblings = foldersHere
+      .filter((f) => !exclude.has(f.id))
+      .map((f) => ({ id: f.id, label: f.name }));
+    const seen = new Set<string>();
+    const options: { id: string; label: string }[] = [];
+    for (const opt of [...ancestors, ...siblings]) {
+      if (seen.has(opt.id)) continue;
+      seen.add(opt.id);
+      options.push(opt);
+    }
+    return options;
+  }, [path, folderId, foldersHere, checked, singleMoveItem]);
 
   const sendChannelOptions = useMemo(
     () =>
@@ -260,26 +342,73 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
     });
   }
 
-  async function moveIds(ids: string[], targetFolderId: string | null) {
-    for (const id of ids) {
-      await personalApi.move(id, targetFolderId);
-    }
-  }
-
-  function openFolder(folder: FileItem) {
-    setFolderStack((s) => [...s, { id: folder.id, name: folder.name }]);
-    setFolderId(folder.id);
-    setSelected(null);
-  }
-
-  function goUp() {
-    setFolderStack((s) => {
-      const next = s.slice(0, -1);
-      setFolderId(next.at(-1)?.id);
-      return next;
-    });
-    setSelected(null);
-  }
+  const runMove = useCallback(
+    async (items: MoveBatchPrior[], targetFolderId: string | null) => {
+      if (items.length === 0) return;
+      setBulkBusy(true);
+      setBulkError(null);
+      setMoveProgress({ done: 0, total: items.length });
+      setMoveSummary(null);
+      try {
+        const result = await moveBatch({
+          items,
+          targetFolderId,
+          moveOne: (id, folder) => personalApi.move(id, folder),
+          onProgress: (done, total) => setMoveProgress({ done, total }),
+        });
+        setMoveSummary({
+          message: summarizeMoveResult(result),
+          failures: result.failures,
+        });
+        setChecked((prev) => {
+          const next = new Set(prev);
+          for (const s of result.successes) next.delete(s.id);
+          return next;
+        });
+        void qc.invalidateQueries({ queryKey: ["personal"] });
+        if (result.successes.length > 0) {
+          const undos = result.successes;
+          setUndoToast({
+            message: `Moved ${undos.length} item${undos.length === 1 ? "" : "s"}`,
+            onUndo: () => {
+              setUndoToast(null);
+              void (async () => {
+                setBulkBusy(true);
+                setMoveProgress({ done: 0, total: undos.length });
+                try {
+                  const undoResult = await moveBatch({
+                    items: undos.map((u) => ({
+                      id: u.id,
+                      previousFolderId: targetFolderId,
+                      name: u.name,
+                    })),
+                    targetFolderId: null,
+                    moveOne: async (id) => {
+                      const prior = undos.find((u) => u.id === id)!;
+                      await personalApi.move(id, prior.previousFolderId);
+                    },
+                    onProgress: (done, total) => setMoveProgress({ done, total }),
+                  });
+                  setMoveSummary({
+                    message: summarizeMoveResult(undoResult).replace(/^Moved/, "Restored"),
+                    failures: undoResult.failures,
+                  });
+                  void qc.invalidateQueries({ queryKey: ["personal"] });
+                } finally {
+                  setBulkBusy(false);
+                  setMoveProgress(null);
+                }
+              })();
+            },
+          });
+        }
+      } finally {
+        setBulkBusy(false);
+        setMoveProgress(null);
+      }
+    },
+    [qc],
+  );
 
   async function onRename(item: FileItem) {
     const name = window.prompt("Rename to", item.name);
@@ -293,43 +422,138 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
     }
   }
 
-  async function onMove(item: FileItem) {
-    const choices = foldersHere.filter((f) => f.id !== item.id);
-    if (choices.length === 0) {
-      await personalApi.move(item.id, null);
-      void qc.invalidateQueries({ queryKey: ["personal"] });
-      return;
-    }
-    const target = window.prompt(
-      `Move to folder id (blank=root):\n${choices.map((f) => `${f.name}=${f.id}`).join("\n")}`,
-    );
-    await personalApi.move(item.id, target ? target.trim() : null);
-    void qc.invalidateQueries({ queryKey: ["personal"] });
-  }
-
   const menuItem = menu ? visibleItems.find((i) => i.id === menu.id) ?? null : null;
-  const currentFolderName = folderStack.at(-1)?.name;
+  const currentFolderName = path?.at(-1)?.name ?? folderNameHint ?? undefined;
   const heading = mode === "files" && currentFolderName ? currentFolderName : titles[mode];
   const rawCount = list.data?.items.length ?? 0;
 
-  const details = selected ? (
-    <div data-testid="details-panel">
-      <h2 style={{ margin: 0 }}>{selected.name}</h2>
-      <p className={styles.lede}>Kind: {describeFileKind(selected)}</p>
-      {selected.sizeBytes != null && selected.kind !== ItemKind.Folder && (
-        <p className={styles.lede}>Size: {formatBytes(selected.sizeBytes)}</p>
-      )}
-      <p className={styles.lede}>Updated: {new Date(selected.updatedAt).toLocaleString()}</p>
-    </div>
-  ) : (
-    <p className={styles.lede}>Select an item for details.</p>
+  function contentUrlFor(item: FileItem, opts?: { download?: boolean }) {
+    if (item.kind === ItemKind.Folder) return null;
+    return personalApi.contentUrl(item.id, opts);
+  }
+
+  function downloadItem(item: FileItem) {
+    const url = contentUrlFor(item, { download: true });
+    if (!url) return;
+    triggerDownload(url, item.name);
+  }
+
+  function downloadChecked() {
+    const items = visibleItems
+      .filter((i) => checked.has(i.id) && i.kind === ItemKind.File)
+      .map((i) => ({
+        url: personalApi.contentUrl(i.id, { download: true }),
+        fileName: i.name,
+      }));
+    void triggerDownloads(items);
+  }
+
+  const details = (
+    <FilePreviewPanel
+      item={selected}
+      contentUrl={selected ? contentUrlFor(selected) : null}
+      showDownload={!trash}
+      onDownload={selected ? () => downloadItem(selected) : undefined}
+    />
   );
+
+  function idsForDrag(item: FileItem): string[] {
+    if (checked.has(item.id) && checked.size > 1) {
+      return checkedItems.map((i) => i.id);
+    }
+    return [item.id];
+  }
+
+  function onRowDragStart(e: DragEvent, item: FileItem) {
+    if (!canBulk) {
+      e.preventDefault();
+      return;
+    }
+    const ids = idsForDrag(item);
+    setDraggedItemIds(ids);
+    e.dataTransfer.setData(CHANNELED_ITEMS_MIME, JSON.stringify(ids));
+    e.dataTransfer.effectAllowed = "move";
+    if (ids.length > 1) {
+      const ghost = document.createElement("div");
+      ghost.textContent = `${ids.length} items`;
+      ghost.className = styles.dragGhost;
+      document.body.appendChild(ghost);
+      e.dataTransfer.setDragImage(ghost, 12, 12);
+      requestAnimationFrame(() => ghost.remove());
+    }
+  }
+
+  function onRowDragEnd() {
+    clearDraggedItemIds();
+    dropDepth.current = 0;
+    setDropTargetId(null);
+  }
+
+  function bindFolderDrop(targetFolderId: string) {
+    return {
+      onDragEnter: (e: DragEvent) => {
+        if (getDraggedItemIds().length === 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        dropDepth.current += 1;
+        setDropTargetId(targetFolderId);
+      },
+      onDragOver: (e: DragEvent) => {
+        if (getDraggedItemIds().length === 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = "move";
+      },
+      onDragLeave: (e: DragEvent) => {
+        if (getDraggedItemIds().length === 0) return;
+        e.stopPropagation();
+        dropDepth.current = Math.max(0, dropDepth.current - 1);
+        if (dropDepth.current === 0) setDropTargetId(null);
+      },
+      onDrop: (e: DragEvent) => {
+        if (getDraggedItemIds().length === 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        dropDepth.current = 0;
+        setDropTargetId(null);
+        void dropOntoFolder(targetFolderId);
+      },
+    };
+  }
+
+  async function dropOntoFolder(targetFolderId: string | null) {
+    const ids = getDraggedItemIds().filter((id) => id !== targetFolderId);
+    clearDraggedItemIds();
+    if (ids.length === 0) return;
+    const byId = new Map(visibleItems.map((i) => [i.id, i]));
+    const items: MoveBatchPrior[] = ids.map((id) => {
+      const item = byId.get(id);
+      return {
+        id,
+        previousFolderId: item?.folderId ?? folderId ?? null,
+        name: item?.name,
+      };
+    });
+    await runMove(items, targetFolderId);
+  }
+
+  async function applyPickerMove(targetFolderId: string | null) {
+    const sourceItems = singleMoveItem ? [singleMoveItem] : checkedItems;
+    const items: MoveBatchPrior[] = sourceItems.map((i) => ({
+      id: i.id,
+      previousFolderId: i.folderId ?? folderId ?? null,
+      name: i.name,
+    }));
+    await runMove(items, targetFolderId);
+    setMoveOpen(false);
+    setSingleMoveItem(null);
+  }
 
   return (
     <AppShell
       title={trash ? "Trash · My files" : "My files"}
       sidebar={<PersonalSidebar />}
-      details={details}
+      details={previewOpen ? details : undefined}
       topbarExtra={
         <FilesSearchField value={nameQuery} onChange={setNameQuery} placeholder="Filter files…" />
       }
@@ -342,16 +566,23 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
             <h2 className={styles.heading}>{heading}</h2>
             {!trash && <span className={styles.pill}>Personal</span>}
           </div>
+          {canBrowseFolders && (
+            <FolderBreadcrumbs
+              rootLabel="My files"
+              folderId={folderId}
+              folderNameHint={folderNameHint}
+              path={path}
+              onNavigate={goToSegment}
+              onDropItems={(id) => void dropOntoFolder(id)}
+              dropActiveId={dropTargetId}
+              onDropTargetChange={setDropTargetId}
+            />
+          )}
           <p className={styles.lede}>
             {trash ? "Items in your personal trash" : "Your private files"}
           </p>
         </div>
         <div className={styles.toolbarActions}>
-          {canBrowseFolders && folderId && (
-            <Button type="button" data-testid="personal-up" onClick={goUp}>
-              Up
-            </Button>
-          )}
           {canBulk && (
             <SelectionControls
               hasItems={visibleItems.length > 0}
@@ -365,7 +596,7 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
             <>
               <Button
                 type="button"
-                data-testid="personal-new-folder"
+                data-testid="new-folder"
                 onClick={() => {
                   setCreateFolderError(null);
                   setCreateFolderOpen(true);
@@ -373,23 +604,46 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
               >
                 New folder
               </Button>
+              <Button
+                type="button"
+                data-testid="toggle-preview"
+                aria-pressed={previewOpen}
+                title={previewOpen ? "Hide preview" : "Show preview"}
+                onClick={() => setPreviewOpen((v) => !v)}
+              >
+                {previewOpen ? "Hide preview" : "Preview"}
+              </Button>
               <UploadButton testId="personal-file-input" onFiles={enqueue} />
             </>
           )}
         </div>
       </div>
 
+      {folderUnavailable && (
+        <p className={styles.error} role="status" data-testid="folder-unavailable">
+          Folder unavailable — showing root.
+        </p>
+      )}
+
+      {moveProgress && <MoveProgress done={moveProgress.done} total={moveProgress.total} />}
+      {moveSummary && (
+        <MoveSummary message={moveSummary.message} failures={moveSummary.failures} />
+      )}
+
       {canBulk && (
         <BulkBar
           count={checked.size}
           busy={bulkBusy || creatingFolder}
+          downloadEnabled={visibleItems.some((i) => checked.has(i.id) && i.kind === ItemKind.File)}
           onClear={selectNone}
+          onDownload={downloadChecked}
           onNewFolder={() => {
             setCreateFolderError(null);
             setCreateFolderOpen(true);
           }}
           onMoveTo={() => {
             setBulkError(null);
+            setSingleMoveItem(null);
             setMoveOpen(true);
           }}
           onSendToChannel={() => {
@@ -407,7 +661,13 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
 
       {list.isLoading && <p>Loading…</p>}
       {!list.isLoading && rawCount === 0 && (
-        <p data-testid="personal-empty">{canUpload ? "No files yet" : "No items here."}</p>
+        <p data-testid="personal-empty">
+          {canBrowseFolders && folderId
+            ? "This folder is empty"
+            : canUpload
+              ? "No files yet"
+              : "No items here."}
+        </p>
       )}
       {!list.isLoading && rawCount > 0 && visibleItems.length === 0 && (
         <p>No items match these filters</p>
@@ -467,77 +727,103 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
               </tr>
             </thead>
             <tbody>
-              {visibleItems.map((item) => (
-                <tr
-                  key={item.id}
-                  data-testid={`personal-row-${item.name}`}
-                  data-selected={selected?.id === item.id || checked.has(item.id) ? "true" : "false"}
-                  onClick={() => setSelected(item)}
-                >
-                  <td onClick={(e) => e.stopPropagation()}>
-                    {canBulk && (
-                      <input
-                        type="checkbox"
-                        className={styles.check}
-                        data-testid={`check-${item.name}`}
-                        checked={checked.has(item.id)}
-                        aria-label={`Select ${item.name}`}
-                        onChange={() => toggleChecked(item.id)}
-                      />
-                    )}
-                  </td>
-                  <td>
-                    {item.kind === ItemKind.Folder && canBrowseFolders && !trash ? (
-                      <button
-                        type="button"
-                        className={styles.linkish}
-                        data-testid={`personal-open-folder-${item.name}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openFolder(item);
-                        }}
-                      >
-                        {item.name}
-                      </button>
-                    ) : (
-                      <span className={styles.linkish}>
-                        {item.kind === ItemKind.Folder ? `${item.name}/` : item.name}
-                      </span>
-                    )}
-                  </td>
-                  <td>
-                    <span className={styles.typeCell}>{formatFileType(item)}</span>
-                  </td>
-                  <td>{item.kind === ItemKind.Folder ? "—" : formatBytes(item.sizeBytes)}</td>
-                  <td>
-                    <ModifiedAt value={item.updatedAt} />
-                  </td>
-                  <td>
-                    <div className={styles.actionWrap}>
-                      <button
-                        type="button"
-                        className={styles.moreBtn}
-                        aria-label={`Actions for ${item.name}`}
-                        aria-haspopup="menu"
-                        aria-expanded={menu?.id === item.id}
-                        data-open={menu?.id === item.id ? "true" : undefined}
-                        data-menu-trigger={item.id}
-                        data-testid={`actions-${item.name}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openMenu(item.id, e.currentTarget);
-                        }}
-                      >
-                        <span className={styles.moreDots} aria-hidden="true">
-                          <span />
-                          <span />
-                          <span />
-                        </span>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {visibleItems.map((item) => {
+                const isFolder = item.kind === ItemKind.Folder;
+                return (
+                  <tr
+                    key={item.id}
+                    data-testid={`personal-row-${item.name}`}
+                    data-selected={
+                      selected?.id === item.id || checked.has(item.id) ? "true" : "false"
+                    }
+                    data-drop-active={
+                      isFolder && dropTargetId === item.id ? "true" : undefined
+                    }
+                    draggable={canBulk}
+                    onDragStart={(e) => onRowDragStart(e, item)}
+                    onDragEnd={onRowDragEnd}
+                    onClick={() => setSelected(item)}
+                    {...(isFolder && canBrowseFolders ? bindFolderDrop(item.id) : {})}
+                  >
+                    <td onClick={(e) => e.stopPropagation()}>
+                      {canBulk && (
+                        <input
+                          type="checkbox"
+                          className={styles.check}
+                          data-testid={`check-${item.name}`}
+                          checked={checked.has(item.id)}
+                          aria-label={`Select ${item.name}`}
+                          onChange={() => toggleChecked(item.id)}
+                          onMouseDown={(e) => e.stopPropagation()}
+                        />
+                      )}
+                    </td>
+                    <td>
+                      <div className={styles.nameCell}>
+                        {isFolder && canBrowseFolders ? (
+                          <span className={styles.folderGlyph} aria-hidden="true">
+                            ▦
+                          </span>
+                        ) : (
+                          <FileThumb item={item} contentUrl={contentUrlFor(item)} />
+                        )}
+                        <div className={styles.nameText}>
+                          {isFolder && canBrowseFolders && !trash ? (
+                            <button
+                              type="button"
+                              className={styles.linkish}
+                              data-testid={`personal-open-folder-${item.name}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openFolder(item.id, item.name);
+                              }}
+                              onMouseDown={(e) => e.stopPropagation()}
+                            >
+                              {item.name}
+                            </button>
+                          ) : (
+                            <span className={styles.linkish}>
+                              {isFolder ? `${item.name}/` : item.name}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <span className={styles.typeCell}>{formatFileType(item)}</span>
+                    </td>
+                    <td>{isFolder ? "—" : formatBytes(item.sizeBytes)}</td>
+                    <td>
+                      <ModifiedAt value={item.updatedAt} />
+                    </td>
+                    <td>
+                      <div className={styles.actionWrap}>
+                        <button
+                          type="button"
+                          className={styles.moreBtn}
+                          aria-label={`Actions for ${item.name}`}
+                          aria-haspopup="menu"
+                          aria-expanded={menu?.id === item.id}
+                          data-open={menu?.id === item.id ? "true" : undefined}
+                          data-menu-trigger={item.id}
+                          data-testid={`actions-${item.name}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openMenu(item.id, e.currentTarget);
+                          }}
+                          onMouseDown={(e) => e.stopPropagation()}
+                        >
+                          <span className={styles.moreDots} aria-hidden="true">
+                            <span />
+                            <span />
+                            <span />
+                          </span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -548,6 +834,8 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
       )}
 
       {copySuccess && <p data-testid="copy-success">Copied to team channel.</p>}
+
+      <UndoToast toast={undoToast} onDismiss={() => setUndoToast(null)} />
 
       <CreateFolderDialog
         open={createFolderOpen}
@@ -569,8 +857,14 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
           try {
             const folder = await personalApi.createFolder(name, folderId ?? null);
             if (checked.size > 0) {
-              await moveIds([...checked], folder.id);
-              setChecked(new Set());
+              await runMove(
+                checkedItems.map((i) => ({
+                  id: i.id,
+                  previousFolderId: i.folderId ?? folderId ?? null,
+                  name: i.name,
+                })),
+                folder.id,
+              );
             }
             setCreateFolderOpen(false);
             void qc.invalidateQueries({ queryKey: ["personal"] });
@@ -583,32 +877,30 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
       />
 
       <PickListDialog
-        open={moveOpen}
-        title={`Move ${checked.size} item${checked.size === 1 ? "" : "s"}`}
+        open={moveOpen || singleMoveItem !== null}
+        title={
+          singleMoveItem
+            ? `Move “${singleMoveItem.name}”`
+            : `Move ${checked.size} item${checked.size === 1 ? "" : "s"}`
+        }
         testId="move-to-dialog"
-        options={moveFolderOptions}
+        options={movePickerOptions}
         allowNone
-        noneLabel={folderId ? "Parent folder / root" : "My files root"}
+        noneLabel="My files root"
         busy={bulkBusy}
         error={bulkError}
         confirmLabel="Move"
         onClose={() => {
           if (bulkBusy) return;
           setMoveOpen(false);
+          setSingleMoveItem(null);
           setBulkError(null);
         }}
         onPick={async (targetFolderId) => {
-          setBulkBusy(true);
-          setBulkError(null);
           try {
-            await moveIds([...checked], targetFolderId);
-            setChecked(new Set());
-            setMoveOpen(false);
-            void qc.invalidateQueries({ queryKey: ["personal"] });
+            await applyPickerMove(targetFolderId);
           } catch (e) {
             setBulkError(e instanceof Error ? e.message : "Move failed");
-          } finally {
-            setBulkBusy(false);
           }
         }}
       />
@@ -681,9 +973,11 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
                       <button
                         type="button"
                         role="menuitem"
+                        data-testid={`move-${menuItem.name}`}
                         onClick={() => {
                           closeMenu();
-                          void onMove(menuItem);
+                          setBulkError(null);
+                          setSingleMoveItem(menuItem);
                         }}
                       >
                         Move
@@ -692,19 +986,34 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
                   </>
                 )}
                 {menuItem.kind === ItemKind.File && (
-                  <li>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      data-testid={`copy-${menuItem.name}`}
-                      onClick={() => {
-                        closeMenu();
-                        void copy.mutateAsync(menuItem);
-                      }}
-                    >
-                      Copy to channel
-                    </button>
-                  </li>
+                  <>
+                    <li>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        data-testid={`download-${menuItem.name}`}
+                        onClick={() => {
+                          closeMenu();
+                          downloadItem(menuItem);
+                        }}
+                      >
+                        Download
+                      </button>
+                    </li>
+                    <li>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        data-testid={`copy-${menuItem.name}`}
+                        onClick={() => {
+                          closeMenu();
+                          void copy.mutateAsync(menuItem);
+                        }}
+                      >
+                        Copy to channel
+                      </button>
+                    </li>
+                  </>
                 )}
                 <li>
                   <button
@@ -713,7 +1022,9 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
                     data-testid={`trash-${menuItem.name}`}
                     onClick={() => {
                       closeMenu();
-                      void personalApi.trash(menuItem.id).then(() => qc.invalidateQueries({ queryKey: ["personal"] }));
+                      void personalApi.trash(menuItem.id).then(() =>
+                        qc.invalidateQueries({ queryKey: ["personal"] }),
+                      );
                     }}
                   >
                     Move to trash
@@ -729,7 +1040,9 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
                   data-testid={`restore-${menuItem.name}`}
                   onClick={() => {
                     closeMenu();
-                    void personalApi.restore(menuItem.id).then(() => qc.invalidateQueries({ queryKey: ["personal"] }));
+                    void personalApi.restore(menuItem.id).then(() =>
+                      qc.invalidateQueries({ queryKey: ["personal"] }),
+                    );
                   }}
                 >
                   Restore

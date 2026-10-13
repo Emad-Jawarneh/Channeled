@@ -125,7 +125,19 @@ public sealed class FileService(
 
         var limit = Math.Clamp(query.Limit <= 0 ? 50 : query.Limit, 1, 200);
         var trashOnly = query.TrashOnly;
-        var folderId = query.FolderId;
+        var folderId = trashOnly ? null : query.FolderId;
+
+        IReadOnlyList<FolderPathSegmentDto>? path = null;
+        if (!trashOnly && folderId is Guid requestedFolderId)
+        {
+            var pathResult = await BuildFolderPathAsync(channel.Channel.Id, ownerUserId: null, requestedFolderId, ct);
+            if (!pathResult.Succeeded)
+            {
+                return AppResult<ItemListResponse>.Fail(pathResult.Code!, pathResult.Message!);
+            }
+
+            path = pathResult.Value;
+        }
 
         var folders = await db.Folders.AsNoTracking()
             .Where(f => f.ChannelId == channel.Channel.Id)
@@ -182,7 +194,7 @@ public sealed class FileService(
             next = EncodeCursor(last.UpdatedAt, last.Id);
         }
 
-        return AppResult<ItemListResponse>.Ok(new ItemListResponse(page, next));
+        return AppResult<ItemListResponse>.Ok(new ItemListResponse(page, next, path));
     }
 
     public async Task<AppResult<FileItemDto>> GetItemAsync(
@@ -1110,6 +1122,49 @@ public sealed class FileService(
                  && f.Id != excludeFolderId
                  && f.Name.ToLower() == normalized,
             ct);
+    }
+
+    /// <summary>Walk ParentId to root; returns root → current. Missing/trashed/wrong-scope → NotFound.</summary>
+    private async Task<AppResult<IReadOnlyList<FolderPathSegmentDto>>> BuildFolderPathAsync(
+        Guid? channelId,
+        Guid? ownerUserId,
+        Guid folderId,
+        CancellationToken ct)
+    {
+        var segments = new List<FolderPathSegmentDto>();
+        Guid? current = folderId;
+        var guard = 0;
+        while (current is not null)
+        {
+            if (++guard > FolderRules.MaxDepth + 1)
+            {
+                return AppResult<IReadOnlyList<FolderPathSegmentDto>>.Fail(ErrorCodes.NotFound, "Folder not found.");
+            }
+
+            var query = db.Folders.AsNoTracking().Where(f => f.Id == current && f.DeletedAt == null);
+            if (channelId is Guid cid)
+            {
+                query = query.Where(f => f.ChannelId == cid);
+            }
+            else if (ownerUserId is Guid oid)
+            {
+                query = query.Where(f => f.OwnerUserId == oid);
+            }
+
+            var folder = await query
+                .Select(f => new { f.Id, f.Name, f.ParentId })
+                .FirstOrDefaultAsync(ct);
+            if (folder is null)
+            {
+                return AppResult<IReadOnlyList<FolderPathSegmentDto>>.Fail(ErrorCodes.NotFound, "Folder not found.");
+            }
+
+            segments.Add(new FolderPathSegmentDto(folder.Id, folder.Name));
+            current = folder.ParentId;
+        }
+
+        segments.Reverse();
+        return AppResult<IReadOnlyList<FolderPathSegmentDto>>.Ok(segments);
     }
 
     private async Task<(string Code, string Message)?> EnsureFolderDepthAsync(Guid channelId, Guid? folderId, CancellationToken ct)

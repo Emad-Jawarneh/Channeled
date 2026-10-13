@@ -44,7 +44,13 @@ export type FileItem = {
   starred?: boolean;
 };
 
-export type ItemList = { items: FileItem[]; nextCursor?: string | null };
+export type FolderPathSegment = { id: string; name: string };
+
+export type ItemList = {
+  items: FileItem[];
+  nextCursor?: string | null;
+  path?: FolderPathSegment[] | null;
+};
 
 export type TeamMember = {
   userId: string;
@@ -388,6 +394,10 @@ export const filesApi = {
     const qs = q.toString();
     return api<ItemList>(`/api/v1/teams/${slug}/channels/${channel}/items${qs ? `?${qs}` : ""}`);
   },
+  contentUrl: (slug: string, channel: string, id: string, opts?: { download?: boolean }) => {
+    const base = `/api/v1/teams/${slug}/channels/${channel}/items/${id}/content`;
+    return opts?.download ? `${base}?download=1` : base;
+  },
   rename: (slug: string, channel: string, id: string, name: string) =>
     api<FileItem>(`/api/v1/teams/${slug}/channels/${channel}/items/${id}`, {
       method: "PATCH",
@@ -429,19 +439,45 @@ export const filesApi = {
       { method: "POST", json: body },
     ),
   putPart: async (uploadId: string, partNumber: number, blob: Blob, csrf: string) => {
-    const response = await fetch(`/api/v1/uploads/${uploadId}/parts/${partNumber}`, {
-      method: "PUT",
-      credentials: "same-origin",
-      headers: {
-        "Content-Type": "application/octet-stream",
-        "X-CSRF-TOKEN": csrf,
-      },
-      body: blob,
-    });
-    if (!response.ok) {
-      throw new Error(`Part upload failed (${response.status})`);
+    const maxAttempts = 5;
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const response = await fetch(`/api/v1/uploads/${uploadId}/parts/${partNumber}`, {
+          method: "PUT",
+          credentials: "same-origin",
+          headers: {
+            "Content-Type": "application/octet-stream",
+            "X-CSRF-TOKEN": csrf,
+          },
+          body: blob,
+        });
+        if (response.ok) {
+          return response.json() as Promise<{ partNumber: number; eTag: string; sizeBytes: number }>;
+        }
+        const err = new Error(`Part upload failed (${response.status})`);
+        // Retry transient gateway / server errors; other 4xx are permanent.
+        if (response.status < 500 && response.status !== 408 && response.status !== 429) {
+          throw err;
+        }
+        lastError = err;
+      } catch (err) {
+        lastError = err;
+        const msg = err instanceof Error ? err.message : "";
+        const retryable =
+          err instanceof TypeError ||
+          /failed to fetch|networkerror|load failed|Part upload failed \(5\d\d\)|Part upload failed \(408\)|Part upload failed \(429\)/i.test(
+            msg,
+          );
+        if (!retryable) {
+          throw err;
+        }
+      }
+      if (attempt < maxAttempts) {
+        await new Promise((r) => setTimeout(r, Math.min(8_000, 400 * 2 ** (attempt - 1))));
+      }
     }
-    return response.json() as Promise<{ partNumber: number; eTag: string; sizeBytes: number }>;
+    throw lastError instanceof Error ? lastError : new Error("Part upload failed");
   },
   complete: (uploadId: string, expectedSha256Hex?: string) =>
     api<FileItem>(`/api/v1/uploads/${uploadId}/complete`, {
@@ -457,6 +493,10 @@ export const personalApi = {
     if (opts.trash) q.set("trash", "true");
     const qs = q.toString();
     return api<ItemList>(`/api/v1/me/files/items${qs ? `?${qs}` : ""}`);
+  },
+  contentUrl: (id: string, opts?: { download?: boolean }) => {
+    const base = `/api/v1/me/files/items/${id}/content`;
+    return opts?.download ? `${base}?download=1` : base;
   },
   recent: () => api<ItemList>("/api/v1/me/files/recent"),
   starred: () => api<ItemList>("/api/v1/me/files/starred"),

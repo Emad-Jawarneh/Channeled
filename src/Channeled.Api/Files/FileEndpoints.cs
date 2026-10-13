@@ -153,6 +153,7 @@ public static class FileEndpoints
             string slug,
             string channelName,
             Guid itemId,
+            bool? download,
             IFileService files,
             ClaimsPrincipal principal,
             HttpContext http,
@@ -181,7 +182,9 @@ public static class FileEndpoints
             }
 
             var d = result.Value;
-            var disposition = ContentTypeDetector.AllowInline(d.ContentType) ? "inline" : "attachment";
+            var disposition = download == true || !ContentTypeDetector.AllowInline(d.ContentType)
+                ? "attachment"
+                : "inline";
             http.Response.Headers.Append("X-Content-Type-Options", "nosniff");
             http.Response.Headers.ContentDisposition = $"{disposition}; filename=\"{d.FileName.Replace("\"", "")}\"";
 

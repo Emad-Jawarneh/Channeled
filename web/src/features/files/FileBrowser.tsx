@@ -1,15 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { filesApi, ItemKind, teamsApi, type FileItem } from "../../api/channeled";
+import { AppShell } from "../../components/AppShell";
+import { formatBytes } from "../../lib/formatBytes";
 import { useChannelFilesChanged } from "../../realtime/useChannelHub";
 import { useUploads } from "../../uploads/UploadContext";
 import { Button } from "../../ui/Button";
-import { AppShell } from "../../components/AppShell";
 import { ChannelSidebar } from "../teams/ChannelSidebar";
 import { CreateFolderDialog } from "./CreateFolderDialog";
-import { UploadButton } from "./UploadButton";
 import { ShareLinkDialog } from "./ShareLinkDialog";
+import { UploadButton } from "./UploadButton";
 import styles from "./FileBrowser.module.css";
+
+type MenuState = { id: string; top: number; left: number };
 
 type Props = {
   teamSlug: string;
@@ -32,7 +36,42 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [typeFilter, setTypeFilter] = useState<"all" | "files" | "folders">("all");
   const [nameQuery, setNameQuery] = useState("");
-  const [menuId, setMenuId] = useState<string | null>(null);
+  const [menu, setMenu] = useState<MenuState | null>(null);
+  const menuRef = useRef<HTMLUListElement | null>(null);
+
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as Node;
+      if (menuRef.current?.contains(target)) return;
+      if ((target as Element).closest?.(`[data-menu-trigger="${menu.id}"]`)) return;
+      close();
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [menu]);
+
+  function openMenu(itemId: string, trigger: HTMLElement) {
+    if (menu?.id === itemId) {
+      setMenu(null);
+      return;
+    }
+    const rect = trigger.getBoundingClientRect();
+    const width = 160;
+    const left = Math.min(Math.max(8, rect.right - width), window.innerWidth - width - 8);
+    setMenu({ id: itemId, top: rect.bottom + 4, left });
+  }
+
+  function closeMenu() {
+    setMenu(null);
+  }
   const [error, setError] = useState<string | null>(null);
   const [createFolderOpen, setCreateFolderOpen] = useState(false);
   const [createFolderError, setCreateFolderError] = useState<string | null>(null);
@@ -108,7 +147,7 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
     <div data-testid="details-panel">
       <h2 style={{ margin: 0 }}>{selected.name}</h2>
       <p className={styles.lede}>Kind: {selected.kind === ItemKind.Folder ? "Folder" : "File"}</p>
-      {selected.sizeBytes != null && <p className={styles.lede}>Size: {selected.sizeBytes} bytes</p>}
+      {selected.sizeBytes != null && <p className={styles.lede}>Size: {formatBytes(selected.sizeBytes)}</p>}
       <p className={styles.lede}>Updated: {new Date(selected.updatedAt).toLocaleString()}</p>
     </div>
   ) : (
@@ -137,6 +176,8 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
     );
     await move.mutateAsync({ id: item.id, targetFolderId: target ? target.trim() : null });
   }
+
+  const menuItem = menu ? visibleItems.find((i) => i.id === menu.id) ?? null : null;
 
   return (
     <AppShell
@@ -345,77 +386,30 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
                       <span className={styles.linkish}>{item.name}</span>
                     )}
                   </td>
-                  <td>{item.sizeBytes ?? "—"}</td>
+                  <td>{item.kind === ItemKind.Folder ? "—" : formatBytes(item.sizeBytes)}</td>
                   <td>{new Date(item.updatedAt).toLocaleString()}</td>
                   <td>
                     <div className={styles.actionWrap}>
                       <button
                         type="button"
+                        className={styles.moreBtn}
+                        aria-label={`Actions for ${item.name}`}
                         aria-haspopup="menu"
-                        aria-expanded={menuId === item.id}
+                        aria-expanded={menu?.id === item.id}
+                        data-open={menu?.id === item.id ? "true" : undefined}
+                        data-menu-trigger={item.id}
                         data-testid={`actions-${item.name}`}
                         onClick={(e) => {
                           e.stopPropagation();
-                          setMenuId(menuId === item.id ? null : item.id);
+                          openMenu(item.id, e.currentTarget);
                         }}
                       >
-                        ⋯
+                        <span className={styles.moreDots} aria-hidden="true">
+                          <span />
+                          <span />
+                          <span />
+                        </span>
                       </button>
-                      {menuId === item.id && (
-                        <ul className={styles.menu} role="menu">
-                          {!trash && (
-                            <>
-                              <li>
-                                <button type="button" role="menuitem" onClick={() => void onRename(item)}>
-                                  Rename
-                                </button>
-                              </li>
-                              <li>
-                                <button type="button" role="menuitem" onClick={() => void onMove(item)}>
-                                  Move
-                                </button>
-                              </li>
-                              {item.kind === ItemKind.File && (
-                                <li>
-                                  <button
-                                    type="button"
-                                    role="menuitem"
-                                    data-testid={`share-${item.name}`}
-                                    onClick={() => {
-                                      setMenuId(null);
-                                      setShareItem(item);
-                                    }}
-                                  >
-                                    Public link…
-                                  </button>
-                                </li>
-                              )}
-                              <li>
-                                <button
-                                  type="button"
-                                  role="menuitem"
-                                  data-testid={`trash-${item.name}`}
-                                  onClick={() => void trashMut.mutateAsync(item.id)}
-                                >
-                                  Move to trash
-                                </button>
-                              </li>
-                            </>
-                          )}
-                          {trash && (
-                            <li>
-                              <button
-                                type="button"
-                                role="menuitem"
-                                data-testid={`restore-${item.name}`}
-                                onClick={() => void restore.mutateAsync(item.id)}
-                              >
-                                Restore
-                              </button>
-                            </li>
-                          )}
-                        </ul>
-                      )}
                     </div>
                   </td>
                 </tr>
@@ -458,6 +452,89 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
           }
         }}
       />
+      {menuItem &&
+        createPortal(
+          <ul
+            ref={menuRef}
+            className={styles.menu}
+            role="menu"
+            style={{ top: menu!.top, left: menu!.left }}
+            data-testid={`actions-menu-${menuItem.name}`}
+          >
+            {!trash && (
+              <>
+                <li>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      closeMenu();
+                      void onRename(menuItem);
+                    }}
+                  >
+                    Rename
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      closeMenu();
+                      void onMove(menuItem);
+                    }}
+                  >
+                    Move
+                  </button>
+                </li>
+                {menuItem.kind === ItemKind.File && (
+                  <li>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      data-testid={`share-${menuItem.name}`}
+                      onClick={() => {
+                        closeMenu();
+                        setShareItem(menuItem);
+                      }}
+                    >
+                      Public link…
+                    </button>
+                  </li>
+                )}
+                <li>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    data-testid={`trash-${menuItem.name}`}
+                    onClick={() => {
+                      closeMenu();
+                      void trashMut.mutateAsync(menuItem.id);
+                    }}
+                  >
+                    Move to trash
+                  </button>
+                </li>
+              </>
+            )}
+            {trash && (
+              <li>
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-testid={`restore-${menuItem.name}`}
+                  onClick={() => {
+                    closeMenu();
+                    void restore.mutateAsync(menuItem.id);
+                  }}
+                >
+                  Restore
+                </button>
+              </li>
+            )}
+          </ul>,
+          document.body,
+        )}
     </AppShell>
   );
 }

@@ -1,3 +1,4 @@
+import { formatBytes } from "../lib/formatBytes";
 import { useUploads } from "./UploadContext";
 import styles from "./UploadTray.module.css";
 
@@ -16,7 +17,7 @@ export function UploadTray() {
             <div>
               <strong>{job.fileName}</strong>
               <span className={styles.meta}>
-                {job.status} · {job.progress}%
+                {job.status} · {formatBytes(job.sizeBytes)} · {job.progress}%
               </span>
               {job.error && <span className={styles.error}>{job.error}</span>}
             </div>

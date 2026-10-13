@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { ItemKind, personalApi, teamsApi, type FileItem } from "../../api/channeled";
 import { AppShell } from "../../components/AppShell";
+import { formatBytes } from "../../lib/formatBytes";
 import { useUploads } from "../../uploads/UploadContext";
 import { Button } from "../../ui/Button";
 import { UploadButton } from "../files/UploadButton";
@@ -94,7 +95,7 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
                 {item.kind === ItemKind.Folder ? "📁 " : ""}
                 {item.name}
               </td>
-              <td>{item.sizeBytes ?? "—"}</td>
+              <td>{item.kind === ItemKind.Folder ? "—" : formatBytes(item.sizeBytes)}</td>
               <td>
                 {!trash && (
                   <>

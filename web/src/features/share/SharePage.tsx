@@ -2,22 +2,11 @@ import { useQuery } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { publicShareApi } from "../../api/channeled";
+import { formatBytes } from "../../lib/formatBytes";
 import { ThemeToggle } from "../../theme/ThemeToggle";
 import { Button } from "../../ui/Button";
 import login from "../login/LoginPage.module.css";
 import styles from "./SharePage.module.css";
-
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} bytes`;
-  const units = ["KB", "MB", "GB", "TB"];
-  let v = n / 1024;
-  let i = 0;
-  while (v >= 1024 && i < units.length - 1) {
-    v /= 1024;
-    i += 1;
-  }
-  return `${v.toFixed(1)} ${units[i]}`;
-}
 
 /**
  * Public, anonymous download page for /s/:token. No session or CSRF is involved. Clicking "Download" claims

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { adminApi } from "../../api/channeled";
 import { AppShell } from "../../components/AppShell";
+import { formatBytes } from "../../lib/formatBytes";
 import styles from "../files/FileBrowser.module.css";
 import local from "./AdminPages.module.css";
 
@@ -87,7 +88,7 @@ export function AdminTeamsPage() {
       <ul data-testid="admin-teams" className={local.plainList}>
         {(teams.data ?? []).map((t) => (
           <li key={t.id}>
-            <strong>{t.name}</strong> ({t.slug}) · usage {t.usageBytes}/{t.quotaBytes}
+            <strong>{t.name}</strong> ({t.slug}) · usage {formatBytes(t.usageBytes)} / {formatBytes(t.quotaBytes)}
           </li>
         ))}
       </ul>
@@ -142,8 +143,8 @@ export function AdminStoragePage() {
     <AppShell title="Admin · Storage" sidebar={<AdminNav />}>
       <dl className={local.stats} data-testid="admin-storage">
         <div className={local.stat}>
-          <dt>Total file bytes</dt>
-          <dd>{dash.data?.totalFileBytes ?? "…"}</dd>
+          <dt>Total file size</dt>
+          <dd>{dash.data ? formatBytes(dash.data.totalFileBytes) : "…"}</dd>
         </div>
       </dl>
     </AppShell>

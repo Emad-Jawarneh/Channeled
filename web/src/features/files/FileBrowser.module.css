@@ -218,7 +218,8 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-card);
-  overflow: hidden;
+  /* visible so row action menus are not clipped */
+  overflow: visible;
 }
 
 .table {
@@ -271,20 +272,84 @@
 
 .actionWrap {
   position: relative;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.moreBtn {
+  box-sizing: border-box;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.table tbody tr:hover .moreBtn,
+.table tr[data-selected="true"] .moreBtn {
+  color: var(--color-text);
+  border-color: var(--color-border);
+  background: color-mix(in srgb, var(--color-surface) 70%, var(--color-soft));
+}
+
+.moreBtn:hover,
+.moreBtn:focus-visible,
+.moreBtn[data-open="true"] {
+  color: var(--color-text);
+  border-color: var(--color-border);
+  background: var(--color-soft);
+}
+
+.moreBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.moreBtn[data-open="true"] {
+  border-color: color-mix(in srgb, var(--color-focus) 45%, var(--color-border));
+  background: color-mix(in srgb, var(--color-soft) 80%, var(--color-focus));
+}
+
+.moreDots {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+}
+
+.moreDots span {
+  display: block;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .menu {
-  position: absolute;
-  right: 0;
-  top: 100%;
+  position: fixed;
   list-style: none;
   margin: 0;
-  padding: var(--space-1);
+  padding: 6px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  z-index: 5;
-  min-width: 10rem;
+  z-index: 1000;
+  min-width: 11.5rem;
   box-shadow: var(--shadow-card);
 }
 
@@ -293,14 +358,18 @@
   text-align: left;
   border: 0;
   background: transparent;
-  padding: var(--space-2);
+  padding: 0.55rem 0.7rem;
   font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
   color: var(--color-text);
   border-radius: 8px;
   cursor: pointer;
 }
 
-.menu button:hover {
+.menu button:hover,
+.menu button:focus-visible {
+  outline: none;
   background: var(--color-soft);
 }
 

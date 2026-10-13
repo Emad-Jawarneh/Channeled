@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChannelKind, ItemKind, personalApi, teamsApi, type FileItem } from "../../api/channeled";
 import { AppShell } from "../../components/AppShell";
+import { describeFileKind } from "../../lib/describeFileKind";
 import { formatBytes } from "../../lib/formatBytes";
 import { ModifiedAt } from "../../lib/formatModified";
 import { DropOverlay } from "../../uploads/DropOverlay";
@@ -12,6 +13,7 @@ import { Button } from "../../ui/Button";
 import { BulkBar } from "../files/BulkBar";
 import { CreateFolderDialog } from "../files/CreateFolderDialog";
 import { PickListDialog } from "../files/PickListDialog";
+import { SelectionControls } from "../files/SelectionControls";
 import { UploadButton } from "../files/UploadButton";
 import styles from "../files/FileBrowser.module.css";
 import { PersonalSidebar } from "./PersonalSidebar";
@@ -230,6 +232,29 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
     });
   }
 
+  function selectAllVisible() {
+    setChecked((prev) => {
+      const next = new Set(prev);
+      for (const item of visibleItems) next.add(item.id);
+      return next;
+    });
+  }
+
+  function selectNone() {
+    setChecked(new Set());
+  }
+
+  function invertVisible() {
+    setChecked((prev) => {
+      const next = new Set(prev);
+      for (const item of visibleItems) {
+        if (next.has(item.id)) next.delete(item.id);
+        else next.add(item.id);
+      }
+      return next;
+    });
+  }
+
   async function moveIds(ids: string[], targetFolderId: string | null) {
     for (const id of ids) {
       await personalApi.move(id, targetFolderId);
@@ -285,7 +310,7 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
   const details = selected ? (
     <div data-testid="details-panel">
       <h2 style={{ margin: 0 }}>{selected.name}</h2>
-      <p className={styles.lede}>Kind: {selected.kind === ItemKind.Folder ? "Folder" : "File"}</p>
+      <p className={styles.lede}>Kind: {describeFileKind(selected)}</p>
       {selected.sizeBytes != null && selected.kind !== ItemKind.Folder && (
         <p className={styles.lede}>Size: {formatBytes(selected.sizeBytes)}</p>
       )}
@@ -333,26 +358,6 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
         </div>
       </div>
 
-      {canBulk && (
-        <BulkBar
-          count={checked.size}
-          busy={bulkBusy || creatingFolder}
-          onClear={() => setChecked(new Set())}
-          onNewFolder={() => {
-            setCreateFolderError(null);
-            setCreateFolderOpen(true);
-          }}
-          onMoveTo={() => {
-            setBulkError(null);
-            setMoveOpen(true);
-          }}
-          onSendToChannel={() => {
-            setBulkError(null);
-            setSendOpen(true);
-          }}
-        />
-      )}
-
       <div className={styles.controls}>
         <label className={styles.search}>
           <span className={styles.searchIcon} aria-hidden="true">
@@ -373,6 +378,15 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
         </label>
 
         <div className={styles.controlsMeta}>
+          {canBulk && (
+            <SelectionControls
+              hasItems={visibleItems.length > 0}
+              disabled={bulkBusy || creatingFolder}
+              onSelectAll={selectAllVisible}
+              onSelectNone={selectNone}
+              onInvert={invertVisible}
+            />
+          )}
           <div className={styles.controlBlock}>
             <span className={styles.controlLabel} id="personal-type-filter-label">
               Type
@@ -446,6 +460,26 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
           </div>
         </div>
       </div>
+
+      {canBulk && (
+        <BulkBar
+          count={checked.size}
+          busy={bulkBusy || creatingFolder}
+          onClear={selectNone}
+          onNewFolder={() => {
+            setCreateFolderError(null);
+            setCreateFolderOpen(true);
+          }}
+          onMoveTo={() => {
+            setBulkError(null);
+            setMoveOpen(true);
+          }}
+          onSendToChannel={() => {
+            setBulkError(null);
+            setSendOpen(true);
+          }}
+        />
+      )}
 
       {error && (
         <p className={styles.error} role="alert">

@@ -31,6 +31,7 @@ type UploadApi = {
   pause: (id: string) => void;
   resume: (id: string) => void;
   retry: (id: string) => void;
+  clearFinished: () => void;
   clearChannel: (teamSlug: string, channelName: string) => void;
 };
 
@@ -205,6 +206,13 @@ export function UploadProvider({ children }: { children: ReactNode }) {
         queue.current.push(id);
         update(id, { status: "queued", error: undefined, progress: 0 });
         pump();
+      },
+      clearFinished: () => {
+        setJobs((prev) => {
+          const next = prev.filter((j) => j.status !== "done" && j.status !== "error");
+          jobsRef.current = next;
+          return next;
+        });
       },
       clearChannel: (teamSlug, channelName) => {
         setJobs((prev) => {

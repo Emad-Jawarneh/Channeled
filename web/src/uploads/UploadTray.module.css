@@ -11,11 +11,50 @@
   z-index: 40;
 }
 
-.title {
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
   margin: 0 0 var(--space-2);
+}
+
+.title {
+  margin: 0;
   font-size: var(--text-sm);
   font-weight: 800;
   letter-spacing: -0.01em;
+}
+
+.close {
+  appearance: none;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  width: 1.75rem;
+  height: 1.75rem;
+  margin: 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font: 700 1.25rem/1 var(--font-sans);
+  cursor: pointer;
+}
+
+.close:hover,
+.close:focus-visible {
+  color: var(--color-text);
+  border-color: var(--color-border);
+  background: var(--color-soft);
+  outline: none;
+}
+
+.close:focus-visible {
+  box-shadow: var(--shadow-focus);
 }
 
 .list {

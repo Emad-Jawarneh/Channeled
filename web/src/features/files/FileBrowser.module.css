@@ -315,6 +315,11 @@
   gap: var(--space-2);
 }
 
+.segmentBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .table th {
   height: 40px;
   background: var(--color-table-head);

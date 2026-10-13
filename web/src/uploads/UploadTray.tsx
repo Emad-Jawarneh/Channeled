@@ -1,16 +1,45 @@
+import { useEffect, useRef, useState } from "react";
 import { formatBytes } from "../lib/formatBytes";
 import { useUploads } from "./UploadContext";
 import styles from "./UploadTray.module.css";
 
 export function UploadTray() {
-  const { jobs, pause, resume, retry } = useUploads();
-  if (jobs.length === 0) {
+  const { jobs, pause, resume, retry, clearFinished } = useUploads();
+  const [dismissed, setDismissed] = useState(false);
+  const knownIds = useRef(new Set<string>());
+
+  useEffect(() => {
+    let added = false;
+    for (const job of jobs) {
+      if (!knownIds.current.has(job.id)) {
+        knownIds.current.add(job.id);
+        added = true;
+      }
+    }
+    if (added) setDismissed(false);
+  }, [jobs]);
+
+  if (jobs.length === 0 || dismissed) {
     return null;
   }
 
   return (
     <section className={styles.tray} aria-label="Upload queue">
-      <h2 className={styles.title}>Uploads</h2>
+      <div className={styles.header}>
+        <h2 className={styles.title}>Uploads</h2>
+        <button
+          type="button"
+          className={styles.close}
+          aria-label="Close uploads"
+          data-testid="upload-tray-close"
+          onClick={() => {
+            clearFinished();
+            setDismissed(true);
+          }}
+        >
+          <span aria-hidden="true">×</span>
+        </button>
+      </div>
       <ul className={styles.list}>
         {jobs.slice(0, 8).map((job) => (
           <li key={job.id} className={styles.item}>

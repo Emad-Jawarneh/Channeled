@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChannelKind, filesApi, ItemKind, teamsApi, type FileItem } from "../../api/channeled";
 import { AppShell } from "../../components/AppShell";
+import { describeFileKind } from "../../lib/describeFileKind";
 import { formatBytes } from "../../lib/formatBytes";
 import { ModifiedAt } from "../../lib/formatModified";
 import { useChannelFilesChanged } from "../../realtime/useChannelHub";
@@ -14,6 +15,7 @@ import { ChannelSidebar } from "../teams/ChannelSidebar";
 import { BulkBar } from "./BulkBar";
 import { CreateFolderDialog } from "./CreateFolderDialog";
 import { PickListDialog } from "./PickListDialog";
+import { SelectionControls } from "./SelectionControls";
 import { ShareLinkDialog } from "./ShareLinkDialog";
 import { UploadButton } from "./UploadButton";
 import styles from "./FileBrowser.module.css";
@@ -206,6 +208,29 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
     });
   }
 
+  function selectAllVisible() {
+    setChecked((prev) => {
+      const next = new Set(prev);
+      for (const item of visibleItems) next.add(item.id);
+      return next;
+    });
+  }
+
+  function selectNone() {
+    setChecked(new Set());
+  }
+
+  function invertVisible() {
+    setChecked((prev) => {
+      const next = new Set(prev);
+      for (const item of visibleItems) {
+        if (next.has(item.id)) next.delete(item.id);
+        else next.add(item.id);
+      }
+      return next;
+    });
+  }
+
   async function moveIds(ids: string[], targetFolderId: string | null, targetChannelName?: string | null) {
     for (const id of ids) {
       await filesApi.move(teamSlug, channelName, id, targetFolderId, targetChannelName);
@@ -215,7 +240,7 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
   const details = selected ? (
     <div data-testid="details-panel">
       <h2 style={{ margin: 0 }}>{selected.name}</h2>
-      <p className={styles.lede}>Kind: {selected.kind === ItemKind.Folder ? "Folder" : "File"}</p>
+      <p className={styles.lede}>Kind: {describeFileKind(selected)}</p>
       {selected.sizeBytes != null && <p className={styles.lede}>Size: {formatBytes(selected.sizeBytes)}</p>}
       <p className={styles.lede}>Updated: {new Date(selected.updatedAt).toLocaleString()}</p>
     </div>
@@ -297,26 +322,6 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
         </div>
       </div>
 
-      {!trash && (
-        <BulkBar
-          count={checked.size}
-          busy={bulkBusy || creatingFolder}
-          onClear={() => setChecked(new Set())}
-          onNewFolder={() => {
-            setCreateFolderError(null);
-            setCreateFolderOpen(true);
-          }}
-          onMoveTo={() => {
-            setBulkError(null);
-            setMoveOpen(true);
-          }}
-          onSendToChannel={() => {
-            setBulkError(null);
-            setSendOpen(true);
-          }}
-        />
-      )}
-
       <div className={styles.controls}>
         <label className={styles.search}>
           <span className={styles.searchIcon} aria-hidden="true">
@@ -337,6 +342,15 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
         </label>
 
         <div className={styles.controlsMeta}>
+          {!trash && (
+            <SelectionControls
+              hasItems={visibleItems.length > 0}
+              disabled={bulkBusy || creatingFolder}
+              onSelectAll={selectAllVisible}
+              onSelectNone={selectNone}
+              onInvert={invertVisible}
+            />
+          )}
           <div className={styles.controlBlock}>
             <span className={styles.controlLabel} id="type-filter-label">
               Type
@@ -419,6 +433,26 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
           </div>
         </div>
       </div>
+
+      {!trash && (
+        <BulkBar
+          count={checked.size}
+          busy={bulkBusy || creatingFolder}
+          onClear={selectNone}
+          onNewFolder={() => {
+            setCreateFolderError(null);
+            setCreateFolderOpen(true);
+          }}
+          onMoveTo={() => {
+            setBulkError(null);
+            setMoveOpen(true);
+          }}
+          onSendToChannel={() => {
+            setBulkError(null);
+            setSendOpen(true);
+          }}
+        />
+      )}
 
       {error && <p className={styles.error}>{error}</p>}
       {list.isLoading && <p>Loading…</p>}

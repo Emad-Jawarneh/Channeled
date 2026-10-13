@@ -1,10 +1,8 @@
-using System.Data;
 using System.Data.Common;
 using Channeled.Application.Abstractions.Results;
 using Channeled.Domain.Errors;
 using Channeled.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 
 namespace Channeled.Infrastructure.Teams;
@@ -80,23 +78,24 @@ public sealed class ChannelWriteGuard(ApplicationDbContext db)
 
     private async Task<bool> ExecuteLockAsync(Guid channelId, bool forUpdate, CancellationToken ct)
     {
-        var conn = db.Database.GetDbConnection();
-        if (conn.State != ConnectionState.Open)
+        // Use EF SqlQuery so Guid parameters and the ambient transaction are handled correctly.
+        // Raw ADO.NET commands can miss the EF transaction or mis-bind uuid params → empty result → false 404.
+        List<Guid> rows;
+        if (forUpdate)
         {
-            await db.Database.OpenConnectionAsync(ct).ConfigureAwait(false);
+            rows = await db.Database
+                .SqlQuery<Guid>($"""SELECT "Id" AS "Value" FROM channels WHERE "Id" = {channelId} FOR UPDATE""")
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+        }
+        else
+        {
+            rows = await db.Database
+                .SqlQuery<Guid>($"""SELECT "Id" AS "Value" FROM channels WHERE "Id" = {channelId} FOR SHARE""")
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
         }
 
-        await using var cmd = conn.CreateCommand();
-        cmd.Transaction = db.Database.CurrentTransaction?.GetDbTransaction();
-        cmd.CommandText = forUpdate
-            ? """SELECT 1 FROM channels WHERE "Id" = @id FOR UPDATE"""
-            : """SELECT 1 FROM channels WHERE "Id" = @id FOR SHARE""";
-        var p = cmd.CreateParameter();
-        p.ParameterName = "id";
-        p.Value = channelId;
-        cmd.Parameters.Add(p);
-
-        var result = await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false);
-        return result is not null && result is not DBNull;
+        return rows.Count > 0;
     }
 }

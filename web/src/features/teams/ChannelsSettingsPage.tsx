@@ -190,7 +190,7 @@ export function ChannelsSettingsPage({ teamSlug }: { teamSlug: string }) {
   }
 
   async function runDelete(disposition: DeleteChannelDisposition) {
-    if (!deleting) return;
+    if (!deleting || deleteBusy) return;
     setDeleteBusy(true);
     setDeleteError(null);
     const ch = deleting;
@@ -214,12 +214,23 @@ export function ChannelsSettingsPage({ teamSlug }: { teamSlug: string }) {
         void navigate(next ? `/t/${teamSlug}/c/${next.name}` : `/t/${teamSlug}/settings/channels`);
       }
     } catch (e) {
-      if (e instanceof ApiError && (e.status === 403 || e.status === 404)) {
-        setDeleteError("Channel is no longer available. Refreshing…");
-        void qc.invalidateQueries({ queryKey: ["channels", teamSlug] });
-      } else {
-        setDeleteError(e instanceof Error ? e.message : "Could not delete channel.");
+      // 404 after a concurrent delete: treat as success if the channel is already gone.
+      if (e instanceof ApiError && e.status === 404) {
+        await qc.invalidateQueries({ queryKey: ["channels", teamSlug] });
+        const list = qc.getQueryData<Channel[]>(["channels", teamSlug]);
+        if (list && !list.some((c) => c.id === ch.id)) {
+          uploads.clearChannel(teamSlug, ch.name);
+          setDeleting(null);
+          if (params.channel === ch.name) {
+            const next = list[0];
+            void navigate(next ? `/t/${teamSlug}/c/${next.name}` : `/t/${teamSlug}/settings/channels`);
+          }
+          return;
+        }
+        setDeleteError(e.message || "Channel is no longer available. Refreshing…");
+        return;
       }
+      setDeleteError(e instanceof Error ? e.message : "Could not delete channel.");
     } finally {
       setDeleteBusy(false);
     }

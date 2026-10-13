@@ -143,6 +143,7 @@ public sealed class BackupService(
         {
             var packageDir = entity.Directory;
             await RunPgRestoreAsync(dumpPath, cancellationToken);
+            await RevokeAllPublicLinksAfterRestoreAsync(cancellationToken);
             await ClearStoreAsync(cancellationToken);
 
             var objectsDir = Path.Combine(packageDir, "objects");
@@ -178,6 +179,25 @@ public sealed class BackupService(
         finally
         {
             maintenance.SetEnabled(false);
+        }
+    }
+
+    /// <summary>
+    /// A restored database may resurrect links that were revoked after the backup was taken, so every
+    /// public link is revoked on restore. Best-effort: the table may not exist in older dumps.
+    /// </summary>
+    private async Task RevokeAllPublicLinksAfterRestoreAsync(CancellationToken ct)
+    {
+        try
+        {
+            var revoked = await db.Database.ExecuteSqlRawAsync(
+                "UPDATE file_share_links SET revoked_at = now(), revoke_reason = 'backup_restore' WHERE revoked_at IS NULL",
+                ct);
+            logger.LogInformation("Revoked {Count} public share links after restore", revoked);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not revoke public share links after restore (table missing in dump?)");
         }
     }
 

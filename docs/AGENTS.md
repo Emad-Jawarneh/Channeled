@@ -6,9 +6,9 @@ You are a principal full-stack engineer building Channeled end to end, autonomou
 </role>
 
 <mission>
-Build **Channeled**: a self-hosted, multi-team file-sharing platform. Hierarchy: Platform > Team > Channel > File. Users belong to many teams, browse channels, upload/download/search/rename/delete files, and also have a private personal space ("My files") outside any team. File bytes live in self-hosted S3-compatible object storage; PostgreSQL holds identities, membership, permissions, metadata, and audit records. Runs natively on one machine, **no Docker anywhere** (not for dev, tests, or deployment). Stack: **.NET + React**.
+Build **Channeled**: a self-hosted, multi-team file-sharing platform. Hierarchy: Platform > Team > Channel > File/Message. Users belong to many teams, browse file or text channels, upload/download/search/rename/delete files, post in text channels, share anonymous file links when enabled, receive real-time channel updates over SignalR (WebSockets), and also have a private personal space ("My files") outside any team. File bytes live in self-hosted S3-compatible object storage; PostgreSQL holds identities, membership, permissions, metadata, messages, share links, and audit records. Runs natively on one machine, **no Docker anywhere** (not for dev, tests, or deployment). Stack: **.NET + React**. **PostgreSQL 15+** required (column-list `ON DELETE SET NULL` for share-link FKs).
 
-Out of scope (do NOT build): chat, public/anonymous links, real-time collaboration, sync clients, multi-machine deployment, end-to-end encryption, full-text content indexing, any third-party hosted storage.
+Out of scope (do NOT build): sync clients, multi-machine deployment (beyond single-process hub/presence), end-to-end encryption, full-text content indexing, any third-party hosted storage, OT/CRDT editing, chat reactions/threads/attachments in v1, anonymous channel browse, personal-file public shares, separate download origin.
 </mission>
 
 <inputs>
@@ -30,7 +30,7 @@ If present, read first and treat as authoritative over this prompt where they co
 <stack>
 Verify the latest stable versions from the package registries and pin exact versions; prefer releases at least 14 days old.
 - Backend: ASP.NET Core on the current .NET LTS, C#, nullable enabled, warnings as errors. EF Core + Npgsql with migrations. ASP.NET Core Identity (cookie auth, `HttpOnly`, `Secure`, `SameSite=Lax`, antiforgery on mutating requests). Serilog (JSON, rolling files). Background work via hosted services plus a DB-backed `jobs` table. OpenAPI generation (Swashbuckle or built-in) used to generate the TypeScript client.
-- Database: PostgreSQL (native install). `pg_trgm` for name search.
+- Database: PostgreSQL **15+** (native install). `pg_trgm` for name search.
 - Object store: behind `IFileStore`. Implement (a) an S3-compatible adapter (AWSSDK.S3, multipart upload) targeting a native self-hosted server such as MinIO, Garage, or SeaweedFS (check which has a maintained native binary today; document one primary and one alternative) and (b) a filesystem adapter for fast unit tests.
 - Frontend: React + TypeScript (strict) + Vite, React Router, TanStack Query, a headless accessible primitive library (Radix UI) with plain CSS modules and design tokens. Generated API client from OpenAPI. Vitest + Testing Library; Playwright for end-to-end.
 - Tests: xUnit + FluentAssertions-style asserts, integration tests against a real native PostgreSQL and real S3-compatible server started by scripts (no Testcontainers).
@@ -51,8 +51,8 @@ Feature areas: Identity, Teams, Channels, Files, Personal, Search, Audit, Admin,
 </repo_layout>
 
 <domain>
-Tables (UUIDv7 keys, UTC timestamps): `users`(email unique, display_name, password_hash, status, is_platform_admin, personal_quota_bytes, last_login_at) · `teams`(name, slug unique, description, quota_bytes, archived_at) · `team_members`(team_id,user_id,role owner|admin|member|viewer,joined_at) · `invitations`(team_id,email,role,token_hash,expires_at,accepted_at,revoked_at) · `channels`(team_id,name unique per team,description,visibility open|private,archived_at) · `channel_members`(channel_id,user_id,can_write,can_manage) · `folders`(channel_id XOR owner_user_id, parent_id, name, deleted_at) · `files`(folder_id, channel_id|owner_user_id, name, content_type, size_bytes, sha256, storage_key, uploaded_by, created_at, updated_at, deleted_at) · `file_stars` · `upload_sessions`(user_id,target_folder_id,file_name,declared_size,multipart_id,state,expires_at) · `audit_events`(occurred_at,actor_id,event_type,team_id?,target_type,target_id,details jsonb,ip,user_agent) · `sessions` · `jobs` · `backups`.
-Constraints: a file/folder is in exactly one scope (check constraint); names unique among non-deleted siblings, case-insensitive; folder depth limit 8; team usage is a maintained counter updated in the same transaction as upload/delete and reconciled nightly; trigram index on file and channel names.
+Tables (UUIDv7 keys, UTC timestamps): `users` · `teams` · `team_members` · `invitations` · `channels`(…, kind file|text, …) · `channel_members` · `channel_messages`(channel_id, author_id, body ≤4000, created_at, deleted_at) · `folders` · `files` · `file_share_links`(token_hash, nullable file_id, channel_id, original_channel_id, file_name snapshot, expires_at, max_downloads, download_count, revoked_at, team_id) · `file_stars` · `upload_sessions` · `audit_events` · `sessions` · `jobs` · `backups`.
+Constraints: a file/folder is in exactly one scope (check constraint); names unique among non-deleted siblings, case-insensitive; folder depth limit 8; team usage is a maintained counter updated in the same transaction as upload/delete and reconciled nightly; trigram index on file and channel names; `files` unique `(id, channel_id)` for share-link composite FK (`ON UPDATE CASCADE ON DELETE SET NULL (file_id)` via raw SQL); channel `kind` immutable (trigger).
 Defaults (all configurable): personal quota 20 GB, team quota 100 GB, max file 10 GB, part size 8 MB, trash retention 30 days (trash counts toward quota until purged), upload session expiry 24 h, invitation expiry 7 days, password reset 1 hour.
 </domain>
 
@@ -69,7 +69,7 @@ Platform admin flag grants `/admin/*` only (users, teams, quotas, audit, backups
 </authorization>
 
 <api>
-REST, JSON, `/api/v1`, RFC 7807 errors with a stable `code`, cursor pagination (`cursor`, `limit` max 200), idempotency-key support on upload completion and invitations, OpenAPI published. Groups: Auth (register, login, logout, forgot/reset password, sessions list/revoke, invitations) · Me (profile, teams, storage) · Teams · Members and Invitations · Channels (+ private membership, public join links, join-request approve/reject) · Items/Files in channels (list with folder/sort/type/uploader filters, details, rename, move, delete, content download with range support) · Uploads (start, put part n, complete, abort, list parts for resume) · Personal (files, folders, recent, starred, copy-to-channel) · Trash (list, restore) · Search (`scope=channel|team|personal`) · Admin (dashboard, users CRUD/disable/reset/quota, teams, audit list + CSV/JSON export, backups list/run, health).
+REST, JSON, `/api/v1`, RFC 7807 errors with a stable `code`, cursor pagination (`cursor`, `limit` max 200), idempotency-key support on upload completion, invitations, and public share claims, OpenAPI published. Groups: Auth · Me · Teams · Members and Invitations · Channels (+ private membership, join links, join-request approve/reject) · Items/Files (+ share-link create/list/revoke; cross-channel move) · Uploads · Personal · Trash · Search · Messages (text channels: post/list/delete/presence) · Public shares (anonymous metadata/claim/ticket download when `PublicFileLinks:Enabled`) · Admin (+ share-link list/revoke-all). Realtime: SignalR hub `/hubs/channel` (WebSockets only; client methods `JoinChannel`/`LeaveChannel` only; server broadcasts `filesChanged`/`messageCreated`/`messageDeleted`/`presenceChanged`).
 Account creation is open self-registration, invitation, or operator. Team membership remains invitation-based.
 </api>
 
@@ -84,7 +84,7 @@ Passwords: adaptive hash, min length 12. Lockout after 5 failures with backoff; 
 </security>
 
 <frontend>
-Routes: `/login`, `/invite/:token`, `/reset/:token`, `/t/:team/c/:channel/*`, `/t/:team/settings/{general,members,channels,storage,activity}`, `/me/files/*` (+ recent, starred, trash), `/search`, `/admin/{dashboard,storage,users,teams,audit,health}`.
+Routes: `/login`, `/invite/:token`, `/reset/:token`, `/s/:token` (anonymous file share), `/t/:team/c/:channel/*` (file browser or text chat by channel kind), `/t/:team/settings/{general,members,channels,storage,activity}`, `/me/files/*` (+ recent, starred, trash), `/search`, `/admin/{dashboard,storage,users,teams,audit,health}`.
 Screens must match the wireframes' structure: rail → sidebar → main → details panel. Required behaviors: sortable/filterable table with selection, drag-and-drop upload with a global upload tray (queue, concurrency 3 files × 3 parts, pause, retry, resume), context menu identical to the actions button menu, optimistic rename/star/move with rollback, empty/loading/error states on every screen, destructive actions worded consistently ("Move to trash", "Delete permanently"). Responsive at 768/1024/1280/1440; sidebar becomes a drawer and details panel a sheet below 1024. Accessibility: keyboard operable, visible focus, WCAG 2.1 AA contrast, proper table semantics, no color-only status.
 Build design tokens first (spacing, type scale, neutral palette, one accent), then shared `ui/` components, then features.
 </frontend>
@@ -113,6 +113,12 @@ Execute strictly in order. Do not start a milestone until the previous one's exi
 **M7 Operations.** Backups, verification, restore drill, health, metrics, alerts, install scripts, operator guide. *Gate:* scripted restore on a clean database + empty store reproduces all data and passes reconciliation with zero diffs.
 
 **M8 Hardening.** Playwright e2e for: sign in; upload; rename; move; delete; restore; invite and accept; role change; private channel access; personal copy to channel; admin audit. Accessibility pass (axe), security review against OWASP ASVS L2 checklist (write the filled checklist to `docs/SECURITY.md`), load test at stated scale (200 users, 50 teams, 1M files, 2 TB). *Gate:* all green, README with quickstart that works on a clean machine.
+
+**M9 Realtime (`filesChanged`).** SignalR WebSockets-only hub; Origin allow-list; connection/group caps; coalesced `filesChanged`; `AuthStateChanged` disconnect (10s sweep). *Gate:* inaccessible join rejected; wrong Origin rejected; reconnect invalidates queries; hub exposes only Join/Leave.
+
+**M10 Public file links.** HMAC fixed-TTL tickets; anon-only stream/egress pools; raw-SQL composite FK; kill-switch via `IOptionsMonitor`; atomic claim idempotency. *Gate:* concurrent `max_downloads=1`; purge with live links on real PG; ticket outlives link expiry; saturating anon leaves auth downloads working; feature default off.
+
+**M11 Text-channel chat.** REST posts/deletes; hub broadcast + presence; authorizer matrix; body 4000/4001; soft-delete scrub; retention purge. *Gate:* matrix + cursor + rate-limit + kind immutable + multi-tab presence tests green.
 </milestones>
 
 <testing_rules>

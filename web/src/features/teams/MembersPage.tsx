@@ -55,48 +55,50 @@ export function MembersPage({ teamSlug }: { teamSlug: string }) {
         </Button>
       </form>
       {inviteToken && (
-        <p data-testid="invite-token">
+        <p className={styles.lede} data-testid="invite-token">
           Invite token: <code>{inviteToken}</code> — open /invite/{inviteToken}
         </p>
       )}
 
-      <table className={styles.table} data-testid="members-table">
-        <thead>
-          <tr>
-            <th scope="col">Member</th>
-            <th scope="col">Role</th>
-            <th scope="col">Change role</th>
-          </tr>
-        </thead>
-        <tbody>
-          {(members.data ?? []).map((m) => (
-            <tr key={m.userId} data-testid={`member-${m.email}`}>
-              <td>
-                {m.displayName} ({m.email})
-              </td>
-              <td>{roleLabel[m.role] ?? m.role}</td>
-              <td>
-                {m.role !== MemberRole.Owner && (
-                  <select
-                    data-testid={`role-${m.email}`}
-                    value={m.role}
-                    onChange={(e) =>
-                      void changeRole.mutateAsync({
-                        userId: m.userId,
-                        role: Number(e.target.value),
-                      })
-                    }
-                  >
-                    <option value={MemberRole.Viewer}>Viewer</option>
-                    <option value={MemberRole.Member}>Member</option>
-                    <option value={MemberRole.Admin}>Admin</option>
-                  </select>
-                )}
-              </td>
+      <div className={styles.tableWrap}>
+        <table className={styles.table} data-testid="members-table">
+          <thead>
+            <tr>
+              <th scope="col">Member</th>
+              <th scope="col">Role</th>
+              <th scope="col">Change role</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {(members.data ?? []).map((m) => (
+              <tr key={m.userId} data-testid={`member-${m.email}`}>
+                <td>
+                  {m.displayName} ({m.email})
+                </td>
+                <td>{roleLabel[m.role] ?? m.role}</td>
+                <td>
+                  {m.role !== MemberRole.Owner && (
+                    <select
+                      data-testid={`role-${m.email}`}
+                      value={m.role}
+                      onChange={(e) =>
+                        void changeRole.mutateAsync({
+                          userId: m.userId,
+                          role: Number(e.target.value),
+                        })
+                      }
+                    >
+                      <option value={MemberRole.Viewer}>Viewer</option>
+                      <option value={MemberRole.Member}>Member</option>
+                      <option value={MemberRole.Admin}>Admin</option>
+                    </select>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </AppShell>
   );
 }

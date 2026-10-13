@@ -19,9 +19,20 @@
   cursor: not-allowed;
 }
 
+.button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--color-accent) 40%, var(--color-border));
+  background: color-mix(in srgb, var(--color-soft) 55%, var(--color-surface));
+}
+
 .primary {
   background: var(--gradient-teal);
   border-color: transparent;
   color: var(--color-accent-contrast);
   box-shadow: var(--shadow-btn);
+}
+
+.primary:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--gradient-teal);
+  filter: brightness(1.05);
 }

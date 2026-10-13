@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using Channeled.Application.Abstractions.Realtime;
 using Channeled.Application.Abstractions.Results;
 using Channeled.Application.Abstractions.Storage;
 using Channeled.Application.Abstractions.Time;
@@ -14,6 +15,7 @@ using Channeled.Domain.Identity;
 using Channeled.Domain.Storage;
 using Channeled.Domain.Teams;
 using Channeled.Infrastructure.Persistence;
+using Channeled.Infrastructure.PublicLinks;
 using Channeled.Infrastructure.Teams;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -25,7 +27,8 @@ public sealed class FileService(
     IAuthorizer authorizer,
     IFileStore store,
     IClock clock,
-    IOptions<UploadLimitsOptions> limitsOptions) : IFileService
+    IOptions<UploadLimitsOptions> limitsOptions,
+    IChannelNotifier channelNotifier) : IFileService
 {
     private readonly UploadLimitsOptions _limits = limitsOptions.Value;
 
@@ -46,6 +49,11 @@ public sealed class FileService(
         if (!Allow(userId, AuthAction.UploadFile, channel))
         {
             return NotFoundChannel<FileItemDto>();
+        }
+
+        if (channel.Channel.Kind == ChannelKind.Text)
+        {
+            return AppResult<FileItemDto>.Fail(ErrorCodes.Validation, "Text channels do not store files.");
         }
 
         var name = request.Name?.Trim() ?? "";
@@ -78,6 +86,7 @@ public sealed class FileService(
         db.Folders.Add(folder);
         await WriteAuditAsync(userId, AuditEventType.FolderCreate, "folder", folder.Id.ToString(), channel.Team.Id, context, ct);
         await db.SaveChangesAsync(ct);
+        channelNotifier.NotifyFilesChanged(channel.Channel.Id);
         return AppResult<FileItemDto>.Ok(ToFolderDto(folder));
     }
 
@@ -239,6 +248,7 @@ public sealed class FileService(
             file.UpdatedAt = clock.UtcNow;
             await WriteAuditAsync(userId, AuditEventType.FileRename, "file", file.Id.ToString(), channel.Team.Id, context, ct);
             await db.SaveChangesAsync(ct);
+            channelNotifier.NotifyFilesChanged(channel.Channel.Id);
             return AppResult<FileItemDto>.Ok(ToFileDto(file));
         }
 
@@ -262,6 +272,7 @@ public sealed class FileService(
         folder.UpdatedAt = clock.UtcNow;
         await WriteAuditAsync(userId, AuditEventType.FolderRename, "folder", folder.Id.ToString(), channel.Team.Id, context, ct);
         await db.SaveChangesAsync(ct);
+        channelNotifier.NotifyFilesChanged(channel.Channel.Id);
         return AppResult<FileItemDto>.Ok(ToFolderDto(folder));
     }
 
@@ -278,6 +289,18 @@ public sealed class FileService(
         if (channel is null)
         {
             return NotFoundChannel<FileItemDto>();
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.TargetChannelName)
+            && !string.Equals(request.TargetChannelName.Trim(), channel.Channel.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            return await MoveFileAcrossChannelsAsync(
+                userId,
+                channel,
+                itemId,
+                request with { TargetChannelName = request.TargetChannelName.Trim() },
+                context,
+                ct);
         }
 
         var depthResult = await EnsureFolderDepthAsync(channel.Channel.Id, request.TargetFolderId, ct);
@@ -303,6 +326,7 @@ public sealed class FileService(
             file.UpdatedAt = clock.UtcNow;
             await WriteAuditAsync(userId, AuditEventType.FileMove, "file", file.Id.ToString(), channel.Team.Id, context, ct);
             await db.SaveChangesAsync(ct);
+            channelNotifier.NotifyFilesChanged(channel.Channel.Id);
             return AppResult<FileItemDto>.Ok(ToFileDto(file));
         }
 
@@ -331,6 +355,7 @@ public sealed class FileService(
         folder.UpdatedAt = clock.UtcNow;
         await WriteAuditAsync(userId, AuditEventType.FolderMove, "folder", folder.Id.ToString(), channel.Team.Id, context, ct);
         await db.SaveChangesAsync(ct);
+        channelNotifier.NotifyFilesChanged(channel.Channel.Id);
         return AppResult<FileItemDto>.Ok(ToFolderDto(folder));
     }
 
@@ -359,8 +384,12 @@ public sealed class FileService(
 
             file.DeletedAt = now;
             file.UpdatedAt = now;
+            var trashedFileId = file.Id;
+            await ShareLinkRevoker.RevokeAsync(
+                db, clock, l => l.FileId == trashedFileId, ShareLinkRevoker.ReasonTrash, userId, context, ct);
             await WriteAuditAsync(userId, AuditEventType.FileDelete, "file", file.Id.ToString(), channel.Team.Id, context, ct);
             await db.SaveChangesAsync(ct);
+            channelNotifier.NotifyFilesChanged(channel.Channel.Id);
             return AppResult.Ok();
         }
 
@@ -377,8 +406,28 @@ public sealed class FileService(
 
         folder.DeletedAt = now;
         folder.UpdatedAt = now;
+
+        // Public links to any file nested under the trashed folder must die with it (same SaveChanges).
+        var nestedFolderIds = await CollectDescendantFolderIdsAsync(folder.Id, ct);
+        var nestedFileIds = await db.Files.AsNoTracking()
+            .Where(f => f.ChannelId == channel.Channel.Id && f.FolderId != null && nestedFolderIds.Contains(f.FolderId.Value))
+            .Select(f => f.Id)
+            .ToListAsync(ct);
+        if (nestedFileIds.Count > 0)
+        {
+            await ShareLinkRevoker.RevokeAsync(
+                db,
+                clock,
+                l => l.FileId != null && nestedFileIds.Contains(l.FileId.Value),
+                ShareLinkRevoker.ReasonFolderTrash,
+                userId,
+                context,
+                ct);
+        }
+
         await WriteAuditAsync(userId, AuditEventType.FolderDelete, "folder", folder.Id.ToString(), channel.Team.Id, context, ct);
         await db.SaveChangesAsync(ct);
+        channelNotifier.NotifyFilesChanged(channel.Channel.Id);
         return AppResult.Ok();
     }
 
@@ -413,6 +462,7 @@ public sealed class FileService(
             file.UpdatedAt = clock.UtcNow;
             await WriteAuditAsync(userId, AuditEventType.FileRestore, "file", file.Id.ToString(), channel.Team.Id, context, ct);
             await db.SaveChangesAsync(ct);
+            channelNotifier.NotifyFilesChanged(channel.Channel.Id);
             return AppResult<FileItemDto>.Ok(ToFileDto(file));
         }
 
@@ -436,6 +486,7 @@ public sealed class FileService(
         folder.UpdatedAt = clock.UtcNow;
         await WriteAuditAsync(userId, AuditEventType.FolderRestore, "folder", folder.Id.ToString(), channel.Team.Id, context, ct);
         await db.SaveChangesAsync(ct);
+        channelNotifier.NotifyFilesChanged(channel.Channel.Id);
         return AppResult<FileItemDto>.Ok(ToFolderDto(folder));
     }
 
@@ -832,6 +883,11 @@ public sealed class FileService(
             throw;
         }
 
+        if (session.ChannelId is Guid uploadChannelId)
+        {
+            channelNotifier.NotifyFilesChanged(uploadChannelId);
+        }
+
         return AppResult<FileItemDto>.Ok(ToFileDto(file));
     }
 
@@ -1034,6 +1090,93 @@ public sealed class FileService(
         }
 
         return null;
+    }
+
+    /// <summary>The folder itself plus all nested folders (any depth), including already-trashed ones.</summary>
+    private async Task<List<Guid>> CollectDescendantFolderIdsAsync(Guid rootFolderId, CancellationToken ct)
+    {
+        var all = new List<Guid> { rootFolderId };
+        var frontier = new List<Guid> { rootFolderId };
+        var guard = 0;
+        while (frontier.Count > 0 && guard++ < 256)
+        {
+            var current = frontier;
+            var children = await db.Folders.AsNoTracking()
+                .Where(f => f.ParentId != null && current.Contains(f.ParentId.Value))
+                .Select(f => f.Id)
+                .ToListAsync(ct);
+            frontier = children.Where(id => !all.Contains(id)).ToList();
+            all.AddRange(frontier);
+        }
+
+        return all;
+    }
+
+    private async Task<AppResult<FileItemDto>> MoveFileAcrossChannelsAsync(
+        Guid userId,
+        ChannelAccess source,
+        Guid itemId,
+        MoveItemRequest request,
+        RequestContext context,
+        CancellationToken ct)
+    {
+        var file = await db.Files.FirstOrDefaultAsync(
+            f => f.Id == itemId && f.ChannelId == source.Channel.Id && f.DeletedAt == null, ct);
+        if (file is null)
+        {
+            var isFolder = await db.Folders.AnyAsync(
+                f => f.Id == itemId && f.ChannelId == source.Channel.Id && f.DeletedAt == null, ct);
+            return isFolder
+                ? AppResult<FileItemDto>.Fail(ErrorCodes.Validation, "Only files can be moved to another channel.")
+                : AppResult<FileItemDto>.Fail(ErrorCodes.NotFound, "Item not found.");
+        }
+
+        if (!AllowFileWrite(userId, source, file.UploadedBy))
+        {
+            return NotFoundChannel<FileItemDto>();
+        }
+
+        var target = await LoadChannelAsync(userId, source.Team.Slug, request.TargetChannelName!, ct);
+        if (target is null || !Allow(userId, AuthAction.UploadFile, target))
+        {
+            return NotFoundChannel<FileItemDto>();
+        }
+
+        if (target.Channel.Kind == ChannelKind.Text)
+        {
+            return AppResult<FileItemDto>.Fail(ErrorCodes.Validation, "Text channels do not store files.");
+        }
+
+        if (target.Channel.ArchivedAt is not null)
+        {
+            return AppResult<FileItemDto>.Fail(ErrorCodes.Validation, "Target channel is archived.");
+        }
+
+        var depthResult = await EnsureFolderDepthAsync(target.Channel.Id, request.TargetFolderId, ct);
+        if (depthResult is not null)
+        {
+            return AppResult<FileItemDto>.Fail(depthResult.Value.Code, depthResult.Value.Message);
+        }
+
+        if (await HasSiblingConflictAsync(target.Channel.Id, request.TargetFolderId, file.Name, file.Id, null, ct))
+        {
+            return AppResult<FileItemDto>.Fail(ErrorCodes.NameConflict, "An item with that name already exists.");
+        }
+
+        // Public links never follow a file into another channel: revoke in the SAME SaveChanges (one txn)
+        // as the move. The FK's ON UPDATE CASCADE then carries channel_id; original_channel_id is kept.
+        var movedFileId = file.Id;
+        await ShareLinkRevoker.RevokeAsync(
+            db, clock, l => l.FileId == movedFileId, ShareLinkRevoker.ReasonMove, userId, context, ct);
+
+        file.ChannelId = target.Channel.Id;
+        file.FolderId = request.TargetFolderId;
+        file.UpdatedAt = clock.UtcNow;
+        await WriteAuditAsync(userId, AuditEventType.FileMove, "file", file.Id.ToString(), source.Team.Id, context, ct);
+        await db.SaveChangesAsync(ct);
+        channelNotifier.NotifyFilesChanged(source.Channel.Id);
+        channelNotifier.NotifyFilesChanged(target.Channel.Id);
+        return AppResult<FileItemDto>.Ok(ToFileDto(file));
     }
 
     private async Task<bool> IsDescendantFolderAsync(Guid ancestorId, Guid? candidateId, CancellationToken ct)

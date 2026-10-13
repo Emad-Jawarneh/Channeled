@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Channeled.Application.Abstractions.Email;
+using Channeled.Application.Abstractions.Realtime;
 using Channeled.Application.Abstractions.Results;
 using Channeled.Application.Abstractions.Time;
 using Channeled.Application.Identity;
@@ -11,6 +12,7 @@ using Channeled.Domain.Identity;
 using Channeled.Domain.Teams;
 using Channeled.Infrastructure.Identity;
 using Channeled.Infrastructure.Persistence;
+using Channeled.Infrastructure.PublicLinks;
 using Channeled.Infrastructure.Security;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -22,7 +24,8 @@ public sealed partial class TeamService(
     UserManager<AppUser> userManager,
     IAuthorizer authorizer,
     IClock clock,
-    IEmailSender emailSender) : ITeamService
+    IEmailSender emailSender,
+    IAuthStateChanged authStateChanged) : ITeamService
 {
     private static readonly TimeSpan InvitationLifetime = TimeSpan.FromDays(7);
 
@@ -133,6 +136,9 @@ public sealed partial class TeamService(
         }
 
         loaded.Team.ArchivedAt ??= clock.UtcNow;
+        var archivedTeamId = loaded.Team.Id;
+        await ShareLinkRevoker.RevokeAsync(
+            db, clock, l => l.TeamId == archivedTeamId, ShareLinkRevoker.ReasonTeamArchive, userId, context, ct);
         await WriteAuditAsync(userId, AuditEventType.TeamArchive, "team", loaded.Team.Id.ToString(), loaded.Team.Id, context, ct);
         await db.SaveChangesAsync(ct);
         return AppResult.Ok();
@@ -152,6 +158,9 @@ public sealed partial class TeamService(
             return NotFoundTeam();
         }
 
+        var deletedTeamId = loaded.Team.Id;
+        await ShareLinkRevoker.RevokeAsync(
+            db, clock, l => l.TeamId == deletedTeamId, ShareLinkRevoker.ReasonTeamDelete, userId, context, ct);
         db.Teams.Remove(loaded.Team);
         await WriteAuditAsync(userId, AuditEventType.TeamDelete, "team", loaded.Team.Id.ToString(), loaded.Team.Id, context, ct);
         await db.SaveChangesAsync(ct);
@@ -253,6 +262,7 @@ public sealed partial class TeamService(
         member.Role = request.Role;
         await WriteAuditAsync(userId, AuditEventType.RoleChange, "user", memberUserId.ToString(), loaded.Team.Id, context, ct);
         await db.SaveChangesAsync(ct);
+        authStateChanged.NotifyUser(memberUserId);
         return AppResult.Ok();
     }
 
@@ -283,6 +293,7 @@ public sealed partial class TeamService(
         db.TeamMembers.Remove(member);
         await WriteAuditAsync(userId, AuditEventType.MemberRemove, "user", memberUserId.ToString(), loaded.Team.Id, context, ct);
         await db.SaveChangesAsync(ct);
+        authStateChanged.NotifyUser(memberUserId);
         return AppResult.Ok();
     }
 
@@ -424,9 +435,12 @@ public sealed partial class TeamService(
             return AppResult<ChannelDto>.Fail(ErrorCodes.Conflict, "Channel name already exists.");
         }
 
-        var kind = request.Kind is ChannelKind.File or ChannelKind.Text
-            ? request.Kind
-            : ChannelKind.File;
+        if (request.Kind is not (ChannelKind.File or ChannelKind.Text))
+        {
+            return AppResult<ChannelDto>.Fail(ErrorCodes.Validation, "Channel kind is required (file or text).");
+        }
+
+        var kind = request.Kind.Value;
         var channel = new ChannelEntity
         {
             Id = UuidV7.NewGuid(),
@@ -569,8 +583,12 @@ public sealed partial class TeamService(
         }
 
         loaded.Channel.ArchivedAt ??= clock.UtcNow;
+        var archivedChannelId = loaded.Channel.Id;
+        await ShareLinkRevoker.RevokeAsync(
+            db, clock, l => l.ChannelId == archivedChannelId, ShareLinkRevoker.ReasonChannelArchive, userId, context, ct);
         await WriteAuditAsync(userId, AuditEventType.ChannelArchive, "channel", loaded.Channel.Id.ToString(), loaded.TeamMembership.Team.Id, context, ct);
         await db.SaveChangesAsync(ct);
+        authStateChanged.NotifyChannel(loaded.Channel.Id);
         return AppResult.Ok();
     }
 
@@ -588,6 +606,9 @@ public sealed partial class TeamService(
             return NotFoundChannel();
         }
 
+        var deletedChannelId = loaded.Channel.Id;
+        await ShareLinkRevoker.RevokeAsync(
+            db, clock, l => l.ChannelId == deletedChannelId, ShareLinkRevoker.ReasonChannelDelete, userId, context, ct);
         db.Channels.Remove(loaded.Channel);
         await WriteAuditAsync(userId, AuditEventType.ChannelDelete, "channel", loaded.Channel.Id.ToString(), loaded.TeamMembership.Team.Id, context, ct);
         await db.SaveChangesAsync(ct);
@@ -693,6 +714,7 @@ public sealed partial class TeamService(
         db.ChannelMembers.Remove(row);
         await WriteAuditAsync(userId, AuditEventType.ChannelMembershipRemove, "channel", loaded.Channel.Id.ToString(), loaded.TeamMembership.Team.Id, context, ct);
         await db.SaveChangesAsync(ct);
+        authStateChanged.NotifyUser(memberUserId);
         return AppResult.Ok();
     }
 

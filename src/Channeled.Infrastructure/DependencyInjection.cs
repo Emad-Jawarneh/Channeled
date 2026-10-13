@@ -1,22 +1,28 @@
 using Channeled.Application.Abstractions.Email;
 using Channeled.Application.Abstractions.Operations;
+using Channeled.Application.Abstractions.Realtime;
 using Channeled.Application.Abstractions.Storage;
 using Channeled.Application.Abstractions.Time;
 using Channeled.Application.Admin;
+using Channeled.Application.Chat;
 using Channeled.Application.Files;
 using Channeled.Application.Identity;
 using Channeled.Application.Personal;
+using Channeled.Application.PublicLinks;
 using Channeled.Application.Search;
 using Channeled.Application.Teams;
 using Channeled.Domain.Authorization;
 using Channeled.Domain.Identity;
 using Channeled.Infrastructure.Admin;
+using Channeled.Infrastructure.Chat;
 using Channeled.Infrastructure.Email;
 using Channeled.Infrastructure.Files;
 using Channeled.Infrastructure.Identity;
 using Channeled.Infrastructure.Operations;
 using Channeled.Infrastructure.Persistence;
 using Channeled.Infrastructure.Personal;
+using Channeled.Infrastructure.PublicLinks;
+using Channeled.Infrastructure.Realtime;
 using Channeled.Infrastructure.Search;
 using Channeled.Infrastructure.Storage;
 using Channeled.Infrastructure.Teams;
@@ -44,6 +50,9 @@ public static class DependencyInjection
         services.Configure<BackupOptions>(configuration.GetSection(BackupOptions.SectionName));
         services.Configure<MaintenanceOptions>(configuration.GetSection(MaintenanceOptions.SectionName));
         services.Configure<OperationsOptions>(configuration.GetSection(OperationsOptions.SectionName));
+        services.Configure<RealtimeOptions>(configuration.GetSection(RealtimeOptions.SectionName));
+        services.Configure<PublicFileLinksOptions>(configuration.GetSection(PublicFileLinksOptions.SectionName));
+        services.Configure<ChatOptions>(configuration.GetSection(ChatOptions.SectionName));
 
         var connectionString = configuration.GetConnectionString("Postgres")
             ?? throw new InvalidOperationException("Connection string 'Postgres' is required.");
@@ -90,6 +99,12 @@ public static class DependencyInjection
         services.AddSingleton<IClock, SystemClock>();
         services.AddSingleton<IEmailSender, LoggingEmailSender>();
         services.AddSingleton<IAuthorizer, Authorizer>();
+        services.AddSingleton<HubConnectionRegistry>();
+        services.AddSingleton<PresenceTracker>();
+        services.AddScoped<IChatService, ChatService>();
+        services.AddScoped<IChatPurgeService, ChatPurgeService>();
+        services.AddSingleton<IChannelNotifier, NullChannelNotifier>();
+        services.AddSingleton<IAuthStateChanged, NullAuthStateChanged>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<ITeamService, TeamService>();
         services.AddScoped<IFileService, FileService>();
@@ -98,6 +113,12 @@ public static class DependencyInjection
         services.AddScoped<IUsageService, UsageService>();
         services.AddScoped<IQuotaReconciliationService, QuotaReconciliationService>();
         services.AddScoped<IAdminService, AdminService>();
+        services.AddSingleton<HmacTicketSigner>();
+        services.AddSingleton<ClaimIdempotencyStore>();
+        services.AddSingleton<TicketUsageTracker>();
+        services.AddSingleton<IAnonDownloadLimiter, AnonDownloadLimiter>();
+        services.AddScoped<ShareLinkService>();
+        services.AddScoped<IShareLinkService>(sp => sp.GetRequiredService<ShareLinkService>());
         services.AddSingleton<IMaintenanceMode, MaintenanceMode>();
         services.AddSingleton<IOperatorAlertService, OperatorAlertService>();
         services.AddScoped<IStoreReconciliationService, StoreReconciliationService>();
@@ -118,6 +139,7 @@ public static class DependencyInjection
         {
             services.AddHostedService<QuotaReconciliationHostedService>();
             services.AddHostedService<BackupHostedService>();
+            services.AddHostedService<ChatPurgeHostedService>();
         }
 
         return services;

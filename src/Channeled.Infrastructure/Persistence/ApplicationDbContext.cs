@@ -1,8 +1,10 @@
 using Channeled.Domain.Audit;
+using Channeled.Infrastructure.Chat;
 using Channeled.Infrastructure.Files;
 using Channeled.Infrastructure.Identity;
 using Channeled.Infrastructure.Jobs;
 using Channeled.Infrastructure.Operations;
+using Channeled.Infrastructure.PublicLinks;
 using Channeled.Infrastructure.Teams;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -33,6 +35,8 @@ public sealed class ApplicationDbContext : IdentityDbContext<AppUser, AppRole, G
     public DbSet<FileStarEntity> FileStars => Set<FileStarEntity>();
     public DbSet<JobEntity> Jobs => Set<JobEntity>();
     public DbSet<BackupEntity> Backups => Set<BackupEntity>();
+    public DbSet<FileShareLinkEntity> FileShareLinks => Set<FileShareLinkEntity>();
+    public DbSet<ChannelMessageEntity> ChannelMessages => Set<ChannelMessageEntity>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -140,6 +144,24 @@ public sealed class ApplicationDbContext : IdentityDbContext<AppUser, AppRole, G
             entity.HasOne(x => x.Team).WithMany().HasForeignKey(x => x.TeamId).OnDelete(DeleteBehavior.Cascade);
         });
 
+        builder.Entity<ChannelMessageEntity>(entity =>
+        {
+            entity.ToTable("channel_messages");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Body).IsRequired();
+            entity.HasOne<ChannelEntity>().WithMany().HasForeignKey(x => x.ChannelId).OnDelete(DeleteBehavior.Cascade);
+            // Keyset pagination order: (created_at, id) newest first.
+            entity.HasIndex(x => new { x.ChannelId, x.CreatedAt, x.Id }).HasDatabaseName("ix_channel_messages_channel_created_id");
+            entity.HasIndex(x => x.DeletedAt).HasFilter("\"DeletedAt\" IS NOT NULL").HasDatabaseName("ix_channel_messages_deleted_at");
+            entity.ToTable(t =>
+            {
+                // char_length counts code points (not bytes/UTF-16 units); the API validates identically.
+                t.HasCheckConstraint("ck_channel_messages_body_length", "char_length(\"Body\") <= 4000");
+                // Soft-delete must scrub the body in the same write.
+                t.HasCheckConstraint("ck_channel_messages_deleted_scrubbed", "\"DeletedAt\" IS NULL OR \"Body\" = ''");
+            });
+        });
+
         builder.Entity<FolderEntity>(entity =>
         {
             entity.ToTable("folders");
@@ -165,6 +187,8 @@ public sealed class ApplicationDbContext : IdentityDbContext<AppUser, AppRole, G
             entity.HasIndex(x => new { x.ChannelId, x.FolderId, x.Name });
             entity.HasIndex(x => new { x.OwnerUserId, x.FolderId, x.Name });
             entity.HasIndex(x => x.UploadedBy);
+            // Target of the raw-SQL composite FK from file_share_links (file_id, channel_id).
+            entity.HasIndex(x => new { x.Id, x.ChannelId }).IsUnique().HasDatabaseName("ux_files_id_channel_id");
             entity.ToTable(t => t.HasCheckConstraint(
                 "ck_files_scope",
                 "((\"ChannelId\" IS NOT NULL AND \"OwnerUserId\" IS NULL) OR (\"ChannelId\" IS NULL AND \"OwnerUserId\" IS NOT NULL))"));
@@ -220,6 +244,33 @@ public sealed class ApplicationDbContext : IdentityDbContext<AppUser, AppRole, G
             entity.Property(x => x.Error).HasMaxLength(2000);
             entity.HasIndex(x => x.CreatedAt);
             entity.HasIndex(x => x.Kind);
+        });
+
+        builder.Entity<FileShareLinkEntity>(entity =>
+        {
+            entity.ToTable("file_share_links");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Id).HasColumnName("id");
+            entity.Property(x => x.TokenHash).HasColumnName("token_hash").HasMaxLength(64).IsRequired();
+            entity.Property(x => x.FileId).HasColumnName("file_id");
+            entity.Property(x => x.ChannelId).HasColumnName("channel_id").IsRequired();
+            entity.Property(x => x.OriginalChannelId).HasColumnName("original_channel_id").IsRequired();
+            entity.Property(x => x.TeamId).HasColumnName("team_id").IsRequired();
+            entity.Property(x => x.FileName).HasColumnName("file_name").HasMaxLength(200).IsRequired();
+            entity.Property(x => x.CreatedBy).HasColumnName("created_by");
+            entity.Property(x => x.CreatedAt).HasColumnName("created_at");
+            entity.Property(x => x.ExpiresAt).HasColumnName("expires_at");
+            entity.Property(x => x.MaxDownloads).HasColumnName("max_downloads");
+            entity.Property(x => x.DownloadCount).HasColumnName("download_count").HasDefaultValue(0);
+            entity.Property(x => x.RevokedAt).HasColumnName("revoked_at");
+            entity.Property(x => x.RevokedBy).HasColumnName("revoked_by");
+            entity.Property(x => x.RevokeReason).HasColumnName("revoke_reason").HasMaxLength(64);
+            entity.HasIndex(x => x.TokenHash).IsUnique().HasDatabaseName("ux_file_share_links_token_hash");
+            entity.HasIndex(x => x.FileId).HasDatabaseName("ix_file_share_links_file_id");
+            entity.HasIndex(x => x.ChannelId).HasDatabaseName("ix_file_share_links_channel_id");
+            entity.HasIndex(x => new { x.TeamId, x.RevokedAt }).HasDatabaseName("ix_file_share_links_team_revoked");
+            // No HasOne/HasMany to FileEntity on purpose: composite FK + ON DELETE SET NULL (file_id)
+            // is created via raw SQL in the AddFileShareLinks migration.
         });
     }
 }

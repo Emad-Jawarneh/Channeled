@@ -12,6 +12,7 @@ using Channeled.Domain.Identity;
 using Channeled.Infrastructure.Files;
 using Channeled.Infrastructure.Identity;
 using Channeled.Infrastructure.Persistence;
+using Channeled.Infrastructure.PublicLinks;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -450,6 +451,11 @@ public sealed class AdminService(
             // continue row purge
         }
 
+        // Links are revoked here; the composite FK (ON DELETE SET NULL (file_id)) then nulls file_id when the
+        // file row is deleted, so purge never fails on live links and link rows survive for history/audit.
+        var purgedFileId = file.Id;
+        await ShareLinkRevoker.RevokeAsync(
+            db, clock, l => l.FileId == purgedFileId, ShareLinkRevoker.ReasonPurge, actorId, context, ct);
         db.Files.Remove(file);
         await WriteAuditAsync(actorId, AuditEventType.FilePurge, "file", fileId.ToString(), null, context, ct);
         await db.SaveChangesAsync(ct);

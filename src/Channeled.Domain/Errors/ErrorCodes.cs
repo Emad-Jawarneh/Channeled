@@ -19,4 +19,10 @@ public static class ErrorCodes
     public const string UploadExpired = "upload_expired";
     public const string UploadInvalidState = "upload_invalid_state";
     public const string ChecksumMismatch = "checksum_mismatch";
+    public const string ShareLinkLimit = "share_link_limit";
+    public const string ShareTicketInvalid = "share_ticket_invalid";
+    public const string RangeNotSatisfiable = "range_not_satisfiable";
+    public const string MessageTooLong = "message_too_long";
+    public const string WrongChannelKind = "wrong_channel_kind";
+    public const string ChannelArchived = "channel_archived";
 }

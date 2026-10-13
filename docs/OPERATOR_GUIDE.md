@@ -5,7 +5,7 @@ Native install only — **no Docker**.
 ## Prerequisites
 
 - .NET 10 runtime (SDK for builds)
-- PostgreSQL 16+ (`pg_dump` / `pg_restore` on `PATH`)
+- PostgreSQL **15+** required (**16+** recommended); `pg_dump` / `pg_restore` on `PATH`. Share-link FKs use `ON DELETE SET NULL (file_id)` (PG 15+).
 - Optional: MinIO native binary, Caddy or nginx, Node 20+ (SPA build)
 
 ## Configuration
@@ -21,6 +21,11 @@ One settings file plus environment overrides. Start from [`ops/channeled.env.exa
 | `Backup__AlertEmail` | Operator alerts |
 | `MigrateOnStartup` | Apply EF migrations on boot |
 | `Maintenance__Enabled` | Global read-only maintenance (503) |
+| `Operations__PublicUrl` | Public origin used in share URLs |
+| `Realtime__AllowedOrigins` | Hub `Origin` allow-list (SPA origins) |
+| `PublicFileLinks__Enabled` | Kill-switch for anonymous file links (default **false**; `IOptionsMonitor`) |
+| `PublicFileLinks__HmacKey` / `PreviousHmacKey` | Ticket HMAC secrets (**not** in DB backups — store/restore separately) |
+| `Chat__PostsPerMinutePerUser` | Text-channel post rate limit (default 30) |
 
 ## Linux (systemd)
 
@@ -35,6 +40,18 @@ sudo systemctl daemon-reload && sudo systemctl enable --now channeled-api
 ```
 
 TLS: use [`ops/caddy/Caddyfile`](../ops/caddy/Caddyfile) or [`ops/nginx/channeled.conf`](../ops/nginx/channeled.conf).
+
+### Reverse proxy (WebSockets + forwarded headers)
+
+- Proxy `/hubs/` with WebSocket upgrade (Caddy/`nginx` samples must pass `Upgrade`/`Connection`).
+- Configure trusted proxies so `ForwardedHeaders` yields real client IPs (anon share rate limits and stream caps key on IP).
+- SPA and API same origin in production; add the public SPA origin to `Realtime__AllowedOrigins`.
+
+### Public file links
+
+1. Set a long random `PublicFileLinks__HmacKey` (and rotate via `PreviousHmacKey` during ticket lifetime).
+2. Set `PublicFileLinks__Enabled=true` only when ready.
+3. Backup the HMAC key **separately** from PostgreSQL dumps if outstanding tickets must survive machine migration; a restore without the key invalidates tickets (re-claim required). DB restore also revokes all link rows.
 
 ## Windows
 

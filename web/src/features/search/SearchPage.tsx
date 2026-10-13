@@ -40,12 +40,15 @@ export function SearchPage() {
           Search
         </Button>
       </form>
-      {results.isLoading && <p>Searching…</p>}
-      <ul data-testid="search-results">
+      {results.isLoading && <p className={styles.lede}>Searching…</p>}
+      <ul data-testid="search-results" className={styles.resultList}>
         {(results.data?.items ?? []).map((item) => (
           <li key={item.id}>{item.name}</li>
         ))}
       </ul>
+      {submitted && !results.isLoading && (results.data?.items?.length ?? 0) === 0 && (
+        <p className={styles.lede}>No matches.</p>
+      )}
     </AppShell>
   );
 }

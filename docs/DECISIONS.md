@@ -67,8 +67,8 @@
 
 ## 2026-10-13 — File vs text channels
 
-**Decision:** Channels have `Kind` (`File` | `Text`). Sidebar lists them in separate sections. File channels keep uploads/folders; text channels are labeled context spaces only (no messaging product — chat remains out of scope). File APIs reject text-channel targets.
-**Reason:** Clear separation of file workspaces from organizational labels without building chat.
+**Decision:** Channels have `Kind` (`File` | `Text`), immutable after create (API + DB trigger). Sidebar lists them in separate sections. File channels hold uploads/folders; text channels hold messages (REST) and presence. File APIs reject text-channel targets; message APIs reject file channels.
+**Reason:** Clear separation of file workspaces from chat without mixing models.
 
 ## 2026-10-12 — Identity keys
 
@@ -139,6 +139,36 @@
 
 **Decision:** Full SPA (rail/sidebar/main/details) ships in M8 alongside Playwright e2e, because earlier milestones delivered API-first surfaces and AGENTS places Playwright in M8.
 **Reason:** Wireframe routes and e2e flows require UI; M7 was operations-only.
+
+## 2026-10-13 — Text-channel chat (M3 slice)
+
+**Decision:** Messages live in `channel_messages` (UUIDv7 id; keyset cursor on `(CreatedAt, Id)` newest-first; `CreatedAt` truncated to microseconds). Body ≤ 4000 **code points**, enforced by the API and by DB check `char_length("Body") <= 4000`; a second check forbids a soft-deleted row that still has a body (delete scrubs to `''` in the same UPDATE). Posts/deletes are REST-only; the hub keeps only `JoinChannel`/`LeaveChannel` and broadcasts `messageCreated`/`messageDeleted`/`presenceChanged` after `SaveChanges`.
+**Reason:** Stable pagination under identical timestamps, immediate scrub of deleted content, and a hub with no mutation surface.
+
+## 2026-10-13 — Chat authorization, audit, rate limit, purge
+
+**Decision:** New `AuthAction`s `PostChannelMessage` (Member+, private needs `can_write`, denied when channel/team archived), `DeleteOwnChannelMessage` (Member+ with write access + author), `DeleteAnyChannelMessage` (Admin+). Hidden channel → 404; visible-but-not-permitted → 403; archived → 409. Only `ChannelMessageDelete` is audited (no body in details); posts are not. Posting is limited per user (`Chat:PostsPerMinutePerUser`, default 30, fixed window) — `UseRateLimiter` now runs after `UseAuthentication` so policies can key on the user id. Soft-deleted rows are hard-deleted by a daily job after `Chat:DeletedRetentionDays` (30); live messages are never purged.
+**Reason:** Mirrors the file write rules, keeps the audit trail free of content, and keeps retention consistent with trash.
+
+## 2026-10-13 — Presence and channel-kind immutability
+
+**Decision:** Presence is in-memory (`PresenceTracker`), text channels only, keyed by connection; a user goes offline only when their last connection leaves/disconnects (multi-tab safe). `channels."Kind"` is immutable at the DB level (trigger) in addition to the API having no way to change it. The SPA refetches the latest page (50) and presence on every (re)join and reconciles (events received mid-fetch are replayed).
+**Reason:** Single-node deployment makes in-memory presence sufficient; the trigger prevents orphaned files/messages even if app code regresses.
+
+## 2026-10-13 — SignalR client in API tests
+
+**Decision:** `Microsoft.AspNetCore.SignalR.Client` 10.0.12 added to `Channeled.Tests.Api` only.
+**Reason:** Hub tests must exercise real WebSocket joins, broadcasts, and presence; no mocking of the hub.
+
+## 2026-10-13 — Realtime hub surface (M9)
+
+**Decision:** Hub client methods are only `JoinChannel` and `LeaveChannel`. Mutations stay on REST. Transport is WebSockets only. Cookie-authenticated connections require an `Origin` on the configured allow-list. `filesChanged` is coalesced (quiet + max-wait). Auth loss aborts connections via in-process registry + 10s sweep. Single-process; scale-out needs a backplane.
+**Reason:** One authz/audit path for writes; DoS bounds on hub; Origin stops cross-site cookie abuse.
+
+## 2026-10-13 — Public file share links (M10)
+
+**Decision:** Anonymous downloads use HMAC tickets with fixed 2h TTL after atomic claim (count not refunded). Claim idempotency is in-memory (`ConcurrentDictionary` + lazy `Task`, 60s, first-writer-wins); a process restart inside the window can double-count (accepted for single-process v1). Claimed tickets outlive link `expires_at`; revoke/trash/archive/kill-switch/file-gone/ticket-TTL/byte-cap still abort. Kill-switch `PublicFileLinks:Enabled` uses `IOptionsMonitor` (default false). Anon stream/egress limits are separate from authenticated downloads. Composite FK uses raw SQL `ON UPDATE CASCADE ON DELETE SET NULL (file_id)` (PG 15+); `original_channel_id` + `file_name` snapshots preserve audit after cascade/purge. Backup restore revokes all links. HMAC keys are not in DB dumps — backup separately if tickets must survive migration.
+**Reason:** Harden anonymous egress without starving signed-in users; keep purge/move compatible with FK; avoid EF emitting SET NULL on both columns.
 
 ## 2026-10-12 — Load test profiles
 

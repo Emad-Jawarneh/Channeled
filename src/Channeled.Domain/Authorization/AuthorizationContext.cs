@@ -24,6 +24,9 @@ public sealed class AuthorizationContext
 
     public bool IsFileOwner { get; init; }
 
+    /// <summary>True when the acting user authored the channel message under evaluation.</summary>
+    public bool IsMessageAuthor { get; init; }
+
     /// <summary>True when the acting user owns the personal-space resource under evaluation.</summary>
     public bool IsPersonalOwner { get; init; }
 

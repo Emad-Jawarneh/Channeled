@@ -73,6 +73,48 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                     b.ToTable("audit_events", (string)null);
                 });
 
+            modelBuilder.Entity("Channeled.Infrastructure.Chat.ChannelMessageEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AuthorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("ChannelId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DeletedAt")
+                        .HasDatabaseName("ix_channel_messages_deleted_at")
+                        .HasFilter("\"DeletedAt\" IS NOT NULL");
+
+                    b.HasIndex("ChannelId", "CreatedAt", "Id")
+                        .HasDatabaseName("ix_channel_messages_channel_created_id");
+
+                    b.ToTable("channel_messages", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_channel_messages_body_length", "char_length(\"Body\") <= 4000");
+
+                            t.HasCheckConstraint("ck_channel_messages_deleted_scrubbed", "\"DeletedAt\" IS NULL OR \"Body\" = ''");
+                        });
+                });
+
             modelBuilder.Entity("Channeled.Infrastructure.Files.FileEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -128,6 +170,10 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                     b.HasIndex("FolderId");
 
                     b.HasIndex("UploadedBy");
+
+                    b.HasIndex("Id", "ChannelId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_files_id_channel_id");
 
                     b.HasIndex("ChannelId", "FolderId", "Name");
 
@@ -601,6 +647,94 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                     b.ToTable("backups", (string)null);
                 });
 
+            modelBuilder.Entity("Channeled.Infrastructure.PublicLinks.FileShareLinkEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ChannelId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("channel_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<int>("DownloadCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("download_count");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<Guid?>("FileId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("file_id");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("file_name");
+
+                    b.Property<int?>("MaxDownloads")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_downloads");
+
+                    b.Property<Guid>("OriginalChannelId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("original_channel_id");
+
+                    b.Property<string>("RevokeReason")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("revoke_reason");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at");
+
+                    b.Property<Guid?>("RevokedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("revoked_by");
+
+                    b.Property<Guid>("TeamId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("team_id");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("token_hash");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChannelId")
+                        .HasDatabaseName("ix_file_share_links_channel_id");
+
+                    b.HasIndex("FileId")
+                        .HasDatabaseName("ix_file_share_links_file_id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("ux_file_share_links_token_hash");
+
+                    b.HasIndex("TeamId", "RevokedAt")
+                        .HasDatabaseName("ix_file_share_links_team_revoked");
+
+                    b.ToTable("file_share_links", (string)null);
+                });
+
             modelBuilder.Entity("Channeled.Infrastructure.Teams.ChannelEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -900,6 +1034,15 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                     b.HasKey("UserId", "LoginProvider", "Name");
 
                     b.ToTable("AspNetUserTokens", (string)null);
+                });
+
+            modelBuilder.Entity("Channeled.Infrastructure.Chat.ChannelMessageEntity", b =>
+                {
+                    b.HasOne("Channeled.Infrastructure.Teams.ChannelEntity", null)
+                        .WithMany()
+                        .HasForeignKey("ChannelId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Channeled.Infrastructure.Files.FileEntity", b =>

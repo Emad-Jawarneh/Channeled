@@ -22,8 +22,8 @@ export function CreateChannelDialog({ open, busy = false, error = null, onClose,
   const inputRef = useRef<HTMLInputElement>(null);
   const titleId = useId();
   const [name, setName] = useState("");
-  const [visibility, setVisibility] = useState(ChannelVisibility.Open);
-  const [kind, setKind] = useState(ChannelKind.File);
+  const [visibility, setVisibility] = useState<number>(ChannelVisibility.Open);
+  const [kind, setKind] = useState<number>(ChannelKind.File);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -67,7 +67,7 @@ export function CreateChannelDialog({ open, busy = false, error = null, onClose,
           New channel
         </h2>
         <p className={styles.hint}>
-          File channels hold uploads and folders. Text channels are labeled spaces for context — not a chat product.
+          File channels hold uploads and folders. Text channels hold messages. The type cannot be changed later.
         </p>
         <label className={styles.label}>
           Channel name
@@ -97,8 +97,8 @@ export function CreateChannelDialog({ open, busy = false, error = null, onClose,
             onChange={(e) => setKind(Number(e.target.value))}
             disabled={busy}
           >
-            <option value={ChannelKind.File}>File channel</option>
-            <option value={ChannelKind.Text}>Text channel</option>
+            <option value={String(ChannelKind.File)}>File channel</option>
+            <option value={String(ChannelKind.Text)}>Text channel</option>
           </select>
         </label>
         <label className={styles.label}>

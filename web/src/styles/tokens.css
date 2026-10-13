@@ -38,7 +38,7 @@
 
   --font-sans: "Manrope", "Segoe UI", sans-serif;
   --font-display: "Manrope", "Segoe UI", sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --font-mono: ui-monospace, "Cascadia Code", "Segoe UI Mono", Menlo, monospace;
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;
   --text-md: 0.875rem;
@@ -51,6 +51,7 @@
   --shadow-card: 0 1px 2px rgba(55, 63, 81, 0.05), 0 8px 24px rgba(55, 63, 81, 0.05);
   --shadow-btn: 0 4px 12px rgba(102, 172, 183, 0.45);
   --shadow-focus: 0 0 0 3px color-mix(in srgb, var(--color-focus) 35%, transparent);
+  --color-backdrop: rgb(17 21 28 / 0.55);
 }
 
 html[data-theme="dark"] {
@@ -83,6 +84,7 @@ html[data-theme="dark"] {
   --color-on-accent: #ffffff;
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35), 0 12px 32px rgba(0, 0, 0, 0.28);
   --shadow-btn: 0 4px 14px rgba(64, 180, 196, 0.35);
+  --color-backdrop: rgb(0 0 0 / 0.65);
 }
 
 *,
@@ -104,6 +106,15 @@ body {
   font-weight: 500;
   color: var(--color-text);
   background: var(--color-bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.loading-session {
+  margin: 0;
+  padding: var(--space-6);
+  color: var(--color-text-muted);
+  font-weight: 700;
 }
 
 :focus-visible {
@@ -113,4 +124,42 @@ body {
 
 a {
   color: var(--color-text);
+}
+
+/* Native controls inherit theme (esp. dark-mode selects / date UIs). */
+input,
+select,
+textarea,
+button {
+  color: inherit;
+  font: inherit;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]),
+select,
+textarea {
+  background: var(--color-bg);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+}
+
+select {
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--color-text-muted) 50%),
+    linear-gradient(135deg, var(--color-text-muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 1.1rem) calc(50% - 0.15rem),
+    calc(100% - 0.75rem) calc(50% - 0.15rem);
+  background-size: 0.35rem 0.35rem, 0.35rem 0.35rem;
+  background-repeat: no-repeat;
+  padding-right: 2rem;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--color-focus);
+  box-shadow: var(--shadow-focus);
 }

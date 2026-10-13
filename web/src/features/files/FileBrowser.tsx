@@ -1,12 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { filesApi, ItemKind, type FileItem } from "../../api/channeled";
+import { filesApi, ItemKind, teamsApi, type FileItem } from "../../api/channeled";
+import { useChannelFilesChanged } from "../../realtime/useChannelHub";
 import { useUploads } from "../../uploads/UploadContext";
 import { Button } from "../../ui/Button";
 import { AppShell } from "../../components/AppShell";
 import { ChannelSidebar } from "../teams/ChannelSidebar";
 import { CreateFolderDialog } from "./CreateFolderDialog";
 import { UploadButton } from "./UploadButton";
+import { ShareLinkDialog } from "./ShareLinkDialog";
 import styles from "./FileBrowser.module.css";
 
 type Props = {
@@ -18,6 +20,12 @@ type Props = {
 export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
   const qc = useQueryClient();
   const uploads = useUploads();
+  const channels = useQuery({
+    queryKey: ["channels", teamSlug],
+    queryFn: () => teamsApi.channels(teamSlug),
+  });
+  const channelId = (channels.data ?? []).find((c) => c.name === channelName)?.id;
+  useChannelFilesChanged(channelId, teamSlug, channelName);
   const [selected, setSelected] = useState<FileItem | null>(null);
   const [folderId, setFolderId] = useState<string | undefined>();
   const [sort, setSort] = useState<"name" | "updated" | "size">("name");
@@ -29,6 +37,7 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
   const [createFolderOpen, setCreateFolderOpen] = useState(false);
   const [createFolderError, setCreateFolderError] = useState<string | null>(null);
   const [creatingFolder, setCreatingFolder] = useState(false);
+  const [shareItem, setShareItem] = useState<FileItem | null>(null);
 
   const sortParam = `${sort}_${sortDir}`;
   const listKey = ["items", teamSlug, channelName, folderId, trash, sortParam];
@@ -366,6 +375,21 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
                                   Move
                                 </button>
                               </li>
+                              {item.kind === ItemKind.File && (
+                                <li>
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    data-testid={`share-${item.name}`}
+                                    onClick={() => {
+                                      setMenuId(null);
+                                      setShareItem(item);
+                                    }}
+                                  >
+                                    Public link…
+                                  </button>
+                                </li>
+                              )}
                               <li>
                                 <button
                                   type="button"
@@ -401,6 +425,15 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
         </div>
         {!trash && <div className={styles.dropHint}>Drop files here to upload to # {channelName}</div>}
       </div>
+
+      <ShareLinkDialog
+        open={shareItem !== null}
+        teamSlug={teamSlug}
+        channelName={channelName}
+        fileId={shareItem?.id ?? null}
+        fileName={shareItem?.name ?? ""}
+        onClose={() => setShareItem(null)}
+      />
 
       <CreateFolderDialog
         open={createFolderOpen}

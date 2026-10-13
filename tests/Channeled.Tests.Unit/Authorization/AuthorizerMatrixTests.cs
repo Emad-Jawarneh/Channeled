@@ -40,6 +40,7 @@ public class AuthorizerMatrixTests
             ChannelCanWrite = role >= MemberRole.Member,
             ChannelCanManage = role >= MemberRole.Member && visibility == ChannelVisibility.Private,
             IsFileOwner = true,
+            IsMessageAuthor = true,
         };
 
         // For private + viewer/member without membership, force hidden for view/browse cases
@@ -111,6 +112,9 @@ public class AuthorizerMatrixTests
         AuthAction.DeleteOwnFile or
         AuthAction.RenameAnyFile or
         AuthAction.DeleteAnyFile or
+        AuthAction.PostChannelMessage or
+        AuthAction.DeleteOwnChannelMessage or
+        AuthAction.DeleteAnyChannelMessage or
         AuthAction.ManageChannelMembership or
         AuthAction.ArchiveChannel or
         AuthAction.DeleteChannel;
@@ -146,6 +150,9 @@ public class AuthorizerMatrixTests
             AuthAction.DeleteOwnFile => role >= MemberRole.Member && channelVisible,
             AuthAction.RenameAnyFile => role >= MemberRole.Admin && channelVisible,
             AuthAction.DeleteAnyFile => role >= MemberRole.Admin && channelVisible,
+            AuthAction.PostChannelMessage => role >= MemberRole.Member && channelVisible,
+            AuthAction.DeleteOwnChannelMessage => role >= MemberRole.Member && channelVisible,
+            AuthAction.DeleteAnyChannelMessage => role >= MemberRole.Admin && channelVisible,
             // Personal actions are owner-scoped; team matrix always expects deny (IsPersonalOwner unset).
             AuthAction.AccessPersonal => false,
             AuthAction.WritePersonal => false,

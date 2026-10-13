@@ -87,7 +87,13 @@ export function ChannelsSettingsPage({ teamSlug }: { teamSlug: string }) {
   });
 
   const create = useMutation({
-    mutationFn: () => teamsApi.createChannel(teamSlug, name, visibility, null, kind),
+    mutationFn: () =>
+      teamsApi.createChannel(teamSlug, {
+        name,
+        visibility,
+        kind,
+        description: null,
+      }),
     onSuccess: () => {
       setName("");
       setKind(ChannelKind.File);
@@ -122,8 +128,8 @@ export function ChannelsSettingsPage({ teamSlug }: { teamSlug: string }) {
         <label>
           Type
           <select data-testid="channel-kind" value={kind} onChange={(e) => setKind(Number(e.target.value))}>
-            <option value={ChannelKind.File}>File</option>
-            <option value={ChannelKind.Text}>Text</option>
+            <option value={String(ChannelKind.File)}>File</option>
+            <option value={String(ChannelKind.Text)}>Text</option>
           </select>
         </label>
         <label>
@@ -147,8 +153,10 @@ export function ChannelsSettingsPage({ teamSlug }: { teamSlug: string }) {
           <li key={ch.id} data-testid={`settings-channel-${ch.name}`} className={local.item}>
             <div className={local.itemHead}>
               <strong>#{ch.name}</strong>
-              <span>
-                {(ch.kind ?? ChannelKind.File) === ChannelKind.Text ? "text" : "file"} ·{" "}
+              <span className={local.kindPill}>
+                {(ch.kind ?? ChannelKind.File) === ChannelKind.Text ? "text" : "file"}
+              </span>
+              <span className={local.muted}>
                 {ch.visibility === ChannelVisibility.Private ? "private" : "open"}
               </span>
             </div>

@@ -647,6 +647,11 @@ public sealed class PersonalService(
             return AppResult<FileItemDto>.Fail(ErrorCodes.NotFound, "Channel not found.");
         }
 
+        if (channel.Channel.Kind == Channeled.Domain.Teams.ChannelKind.Text)
+        {
+            return AppResult<FileItemDto>.Fail(ErrorCodes.Validation, "Text channels do not store files.");
+        }
+
         if (channel.Team.UsageBytes + source.SizeBytes > channel.Team.QuotaBytes)
         {
             return AppResult<FileItemDto>.Fail(ErrorCodes.TeamQuotaExceeded, "Team quota exceeded.");

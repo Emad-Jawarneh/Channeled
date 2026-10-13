@@ -89,8 +89,8 @@
 
 .railMe[aria-current="page"],
 .railMe:global(.active) {
-  background: var(--color-accent-strong);
-  color: var(--color-bg);
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
 }
 
 .railDivider {

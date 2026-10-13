@@ -7,6 +7,16 @@
   background: var(--color-surface);
 }
 
+/* Single-card flows (share, join, etc.) */
+.pageCentered {
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  background:
+    radial-gradient(ellipse 55% 45% at 10% 0%, color-mix(in srgb, var(--color-accent-bright) 28%, transparent), transparent 55%),
+    var(--color-bg);
+}
+
 .heroTop {
   display: flex;
   align-items: center;
@@ -147,7 +157,8 @@
 }
 
 .form h1,
-.form h2 {
+.form h2,
+.formHeading {
   margin: 0;
   font-size: var(--text-xl);
   font-weight: 700;
@@ -174,7 +185,7 @@
   padding: 0 12px;
   border: 1px solid var(--color-border);
   border-radius: 12px;
-  background: var(--color-surface);
+  background: var(--color-bg);
   color: var(--color-text);
 }
 

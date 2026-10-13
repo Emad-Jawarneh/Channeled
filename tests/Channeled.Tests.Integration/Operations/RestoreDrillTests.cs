@@ -181,6 +181,7 @@ public class RestoreDrillTests
     {
         await db.Database.ExecuteSqlRawAsync("""
             TRUNCATE TABLE
+              "file_share_links",
               "backups",
               "jobs",
               "file_stars",

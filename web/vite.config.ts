@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 
 const proxy = {
   "/api": "http://127.0.0.1:5048",
+  "/hubs": { target: "http://127.0.0.1:5048", ws: true },
   "/health": "http://127.0.0.1:5048",
   "/openapi": "http://127.0.0.1:5048",
   "/metrics": "http://127.0.0.1:5048",

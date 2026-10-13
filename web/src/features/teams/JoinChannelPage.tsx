@@ -23,18 +23,20 @@ export function JoinChannelPage() {
 
   if (info.isLoading) {
     return (
-      <main className={styles.page}>
-        <p>Loading…</p>
+      <main className={`${styles.page} ${styles.pageCentered}`}>
+        <div className={styles.form}>
+          <p className={styles.hint}>Loading…</p>
+        </div>
       </main>
     );
   }
 
   if (info.isError || !info.data) {
     return (
-      <main className={styles.page}>
+      <main className={`${styles.page} ${styles.pageCentered}`}>
         <div className={styles.form}>
           <div className={styles.heroTop}>
-            <h1 style={{ margin: 0 }}>Join channel</h1>
+            <h1 className={styles.formHeading}>Join channel</h1>
             <ThemeToggle compact />
           </div>
           <p className={styles.error}>This join link is invalid or you are not a member of the team.</p>
@@ -48,10 +50,10 @@ export function JoinChannelPage() {
 
   if (data.hasAccess) {
     return (
-      <main className={styles.page}>
+      <main className={`${styles.page} ${styles.pageCentered}`}>
         <div className={styles.form} data-testid="join-already-member">
           <div className={styles.heroTop}>
-            <h1 style={{ margin: 0 }}>#{data.channelName}</h1>
+            <h1 className={styles.formHeading}>#{data.channelName}</h1>
             <ThemeToggle compact />
           </div>
           <p className={styles.hint}>You already have access to this channel.</p>
@@ -65,10 +67,10 @@ export function JoinChannelPage() {
 
   if (data.visibility !== ChannelVisibility.Private) {
     return (
-      <main className={styles.page}>
+      <main className={`${styles.page} ${styles.pageCentered}`}>
         <div className={styles.form}>
           <div className={styles.heroTop}>
-            <h1 style={{ margin: 0 }}>#{data.channelName}</h1>
+            <h1 className={styles.formHeading}>#{data.channelName}</h1>
             <ThemeToggle compact />
           </div>
           <p className={styles.hint}>Open channels are available to all team members.</p>
@@ -83,17 +85,19 @@ export function JoinChannelPage() {
   const pending = !!data.pendingRequestId;
 
   return (
-    <main className={styles.page}>
+    <main className={`${styles.page} ${styles.pageCentered}`}>
       <div className={styles.form} data-testid="join-channel-page">
         <div className={styles.heroTop}>
-          <h1 style={{ margin: 0 }}>Request access</h1>
+          <h1 className={styles.formHeading}>Request access</h1>
           <ThemeToggle compact />
         </div>
         <p className={styles.hint}>
           #{data.channelName} is private. A channel admin will approve or reject your request.
         </p>
         {pending ? (
-          <p data-testid="join-pending">Your request is pending approval.</p>
+          <p className={styles.hint} data-testid="join-pending">
+            Your request is pending approval.
+          </p>
         ) : (
           <Button
             type="button"

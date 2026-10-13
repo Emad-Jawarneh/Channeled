@@ -145,6 +145,17 @@ public class AdminCatalogAndImmutabilityTests : IClassFixture<AuthApiFactory>, I
 
         (await _admin.DeleteAsync($"/api/v1/teams/{slug}/members/{memberUser}")).EnsureSuccessStatusCode();
 
+        // --- Chat: only the delete is audited (ChannelMessageDelete); posts are not ---
+        (await _admin.PostAsJsonAsync(
+            $"/api/v1/teams/{slug}/channels",
+            new CreateChannelRequest("chat", null, ChannelVisibility.Open, ChannelKind.Text))).EnsureSuccessStatusCode();
+        var chatPost = await _admin.PostAsJsonAsync(
+            $"/api/v1/teams/{slug}/channels/chat/messages",
+            new Channeled.Application.Chat.PostMessageRequest("audit me"));
+        chatPost.EnsureSuccessStatusCode();
+        var chatMessage = await chatPost.Content.ReadFromJsonAsync<Channeled.Application.Chat.ChannelMessageDto>();
+        (await _admin.DeleteAsync($"/api/v1/teams/{slug}/channels/chat/messages/{chatMessage!.Id}")).EnsureSuccessStatusCode();
+
         // --- Files / folders / personal ---
         var fileId = await UploadChannelAsync(_admin, slug, "general", "doc.txt", "payload");
         (await _admin.PostAsJsonAsync(
@@ -163,6 +174,15 @@ public class AdminCatalogAndImmutabilityTests : IClassFixture<AuthApiFactory>, I
             new RenameItemRequest("doc2.txt"))).EnsureSuccessStatusCode();
         (await _admin.DeleteAsync($"/api/v1/teams/{slug}/channels/general/items/{fileId}")).EnsureSuccessStatusCode();
         (await _admin.PostAsync($"/api/v1/teams/{slug}/channels/general/items/{fileId}/restore", null)).EnsureSuccessStatusCode();
+
+        // --- Public share links (FileShareCreate / FileShareRevoke) ---
+        var shareResp = await _admin.PostAsJsonAsync(
+            $"/api/v1/teams/{slug}/channels/general/items/{fileId}/share-links",
+            new Channeled.Application.PublicLinks.CreateShareLinkRequest(null, null));
+        shareResp.EnsureSuccessStatusCode();
+        var share = await shareResp.Content.ReadFromJsonAsync<Channeled.Application.PublicLinks.ShareLinkCreatedDto>();
+        (await _admin.DeleteAsync($"/api/v1/teams/{slug}/share-links/{share!.Id}")).EnsureSuccessStatusCode();
+
         (await _admin.DeleteAsync($"/api/v1/teams/{slug}/channels/general/items/{folderId}")).EnsureSuccessStatusCode();
         (await _admin.PostAsync($"/api/v1/teams/{slug}/channels/general/items/{folderId}/restore", null)).EnsureSuccessStatusCode();
 

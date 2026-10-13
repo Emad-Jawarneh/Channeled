@@ -115,7 +115,19 @@ export function ChannelSidebar({ teamSlug, channelName, trash = false }: Props) 
           setCreating(true);
           setCreateError(null);
           try {
-            const channel = await teamsApi.createChannel(teamSlug, name, visibility, null, kind);
+            const channel = await teamsApi.createChannel(teamSlug, {
+              name,
+              visibility,
+              kind,
+              description: null,
+            });
+            qc.setQueryData<Channel[]>(["channels", teamSlug], (prev) => {
+              const list = prev ?? [];
+              if (list.some((c) => c.id === channel.id)) {
+                return list.map((c) => (c.id === channel.id ? channel : c));
+              }
+              return [...list, channel];
+            });
             await qc.invalidateQueries({ queryKey: ["channels", teamSlug] });
             setCreateOpen(false);
             navigate(`/t/${teamSlug}/c/${channel.name}`);

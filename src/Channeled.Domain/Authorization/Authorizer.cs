@@ -52,6 +52,9 @@ public sealed class Authorizer : IAuthorizer
             AuthAction.DeleteOwnFile => AuthorizeOwnFileWrite(context),
             AuthAction.RenameAnyFile => AuthorizeAnyFileWrite(context),
             AuthAction.DeleteAnyFile => AuthorizeAnyFileWrite(context),
+            AuthAction.PostChannelMessage => AuthorizePostMessage(context),
+            AuthAction.DeleteOwnChannelMessage => AuthorizeDeleteOwnMessage(context),
+            AuthAction.DeleteAnyChannelMessage => AuthorizeAnyFileWrite(context),
             _ => AuthorizationDecision.Deny("unknown_action"),
         };
     }
@@ -157,6 +160,35 @@ public sealed class Authorizer : IAuthorizer
         return context.IsFileOwner
             ? AuthorizationDecision.Allow()
             : AuthorizationDecision.Deny("not_file_owner");
+    }
+
+    private static AuthorizationDecision AuthorizePostMessage(AuthorizationContext context)
+    {
+        // Archived channels/teams are read-only; moderation deletes stay allowed (see DeleteAnyChannelMessage).
+        if (context.ChannelArchived || context.TeamArchived)
+        {
+            return AuthorizationDecision.Deny("channel_archived");
+        }
+
+        return AuthorizeChannelWrite(context, minRole: MemberRole.Member);
+    }
+
+    private static AuthorizationDecision AuthorizeDeleteOwnMessage(AuthorizationContext context)
+    {
+        if (context.TeamRole!.Value < MemberRole.Member)
+        {
+            return AuthorizationDecision.Deny("role_insufficient");
+        }
+
+        var channel = AuthorizeChannelAccess(context, writeRequired: true);
+        if (!channel.Allowed)
+        {
+            return channel;
+        }
+
+        return context.IsMessageAuthor
+            ? AuthorizationDecision.Allow()
+            : AuthorizationDecision.Deny("not_message_author");
     }
 
     private static AuthorizationDecision AuthorizeAnyFileWrite(AuthorizationContext context)

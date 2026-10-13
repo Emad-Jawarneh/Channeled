@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Channeled.Application.Abstractions.Email;
+using Channeled.Application.Abstractions.Realtime;
 using Channeled.Application.Abstractions.Results;
 using Channeled.Application.Abstractions.Time;
 using Channeled.Application.Identity;
@@ -18,7 +19,8 @@ public sealed class AuthService(
     SignInManager<AppUser> signInManager,
     ApplicationDbContext db,
     IClock clock,
-    IEmailSender emailSender) : IAuthService
+    IEmailSender emailSender,
+    IAuthStateChanged authStateChanged) : IAuthService
 {
     private static readonly TimeSpan InvitationLifetime = TimeSpan.FromDays(7);
     private static readonly TimeSpan PasswordResetLifetime = TimeSpan.FromHours(1);
@@ -150,6 +152,7 @@ public sealed class AuthService(
             session.RevokedAt = clock.UtcNow;
             await WriteAuditAsync(userId, AuditEventType.SessionRevoke, "session", sessionId.ToString(), context, ct);
             await db.SaveChangesAsync(ct);
+            authStateChanged.NotifyUser(userId);
         }
 
         return AppResult.Ok();

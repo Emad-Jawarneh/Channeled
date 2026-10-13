@@ -8,11 +8,13 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Channeled.Tests.Api;
 
-public sealed class AuthApiFactory : WebApplicationFactory<Program>
+public class AuthApiFactory : WebApplicationFactory<Program>
 {
     public static string ConnectionString { get; } =
         Environment.GetEnvironmentVariable("ConnectionStrings__PostgresTest")
         ?? "Host=127.0.0.1;Port=5432;Database=channeled_test;Username=channeled;Password=channeled_dev";
+
+    public const string TestHmacKey = "test-only-hmac-key-0123456789abcdef0123456789abcdef";
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -29,6 +31,12 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
                 ["Backup:RootPath"] = Path.Combine(Path.GetTempPath(), "channeled-api-backups-" + Guid.NewGuid().ToString("N")),
                 ["Backup:RestoreViaAdmin"] = "false",
                 ["DisableBackgroundJobs"] = "true",
+                ["PublicFileLinks:Enabled"] = "true",
+                ["PublicFileLinks:HmacKey"] = TestHmacKey,
+                ["PublicFileLinks:PreviousHmacKey"] = "",
+                ["PublicFileLinks:AnonRequestsPerMinutePerIp"] = "100000",
+                // High default so functional chat tests never trip the limiter; the rate-limit test lowers it.
+                ["Chat:PostsPerMinutePerUser"] = "100000",
             });
         });
 
@@ -48,6 +56,8 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
 
         await db.Database.ExecuteSqlRawAsync("""
             TRUNCATE TABLE
+              "file_share_links",
+              "channel_messages",
               "backups",
               "jobs",
               "file_stars",

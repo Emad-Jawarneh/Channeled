@@ -2,6 +2,7 @@ import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import { LoginPage } from "./features/login/LoginPage";
 import { InvitePage } from "./features/invite/InvitePage";
 import { ResetPage } from "./features/reset/ResetPage";
+import { SharePage } from "./features/share/SharePage";
 import { FileBrowser } from "./features/files/FileBrowser";
 import { PersonalFilesPage } from "./features/personal/PersonalFilesPage";
 import { SearchPage } from "./features/search/SearchPage";
@@ -96,6 +97,7 @@ export function App() {
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/invite/:token" element={<InvitePage />} />
       <Route path="/reset/:token" element={<ResetPage />} />
+      <Route path="/s/:token" element={<SharePage />} />
       <Route
         path="/join/:team/:channel"
         element={

@@ -120,18 +120,20 @@ export const teamsApi = {
   channels: (slug: string) => api<Channel[]>(`/api/v1/teams/${slug}/channels`),
   createChannel: (
     slug: string,
-    name: string,
-    visibility: number,
-    description?: string | null,
-    kind: number = ChannelKind.File,
+    input: {
+      name: string;
+      visibility: number;
+      kind: number;
+      description?: string | null;
+    },
   ) =>
     api<Channel>(`/api/v1/teams/${slug}/channels`, {
       method: "POST",
       json: {
-        name,
-        description: description ?? null,
-        visibility,
-        kind: kind ?? ChannelKind.File,
+        name: input.name,
+        description: input.description ?? null,
+        visibility: input.visibility,
+        kind: input.kind,
       },
     }),
   members: (slug: string) => api<TeamMember[]>(`/api/v1/teams/${slug}/members`),
@@ -166,6 +168,127 @@ export const teamsApi = {
   rejectChannelJoin: (slug: string, channel: string, requestId: string) =>
     api<void>(`/api/v1/teams/${slug}/channels/${channel}/join-requests/${requestId}/reject`, {
       method: "POST",
+    }),
+};
+
+export type ChannelMessage = {
+  id: string;
+  channelId: string;
+  authorId: string;
+  authorDisplayName: string;
+  body: string;
+  createdAt: string;
+};
+
+/** Newest-first page; `nextCursor` pages toward older messages. */
+export type MessageList = { items: ChannelMessage[]; nextCursor?: string | null };
+
+export type PresenceUser = { userId: string; displayName: string };
+export type PresenceList = { channelId: string; users: PresenceUser[] };
+
+/** Hub `messageDeleted` payload. */
+export type MessageDeletedEvent = { channelId: string; messageId: string };
+
+/** Hub `presenceChanged` payload. */
+export type PresenceChangedEvent = {
+  channelId: string;
+  userId: string;
+  displayName: string;
+  online: boolean;
+};
+
+export const MESSAGE_MAX_LENGTH = 4000;
+export const MESSAGE_PAGE_SIZE = 50;
+
+/** Text-channel chat. Posts and deletes are REST only; the hub just pushes the committed result. */
+export const messagesApi = {
+  list: (slug: string, channel: string, opts: { cursor?: string | null; limit?: number } = {}) => {
+    const q = new URLSearchParams();
+    q.set("limit", String(opts.limit ?? MESSAGE_PAGE_SIZE));
+    if (opts.cursor) q.set("cursor", opts.cursor);
+    return api<MessageList>(
+      `/api/v1/teams/${encodeURIComponent(slug)}/channels/${encodeURIComponent(channel)}/messages?${q}`,
+    );
+  },
+  post: (slug: string, channel: string, body: string) =>
+    api<ChannelMessage>(
+      `/api/v1/teams/${encodeURIComponent(slug)}/channels/${encodeURIComponent(channel)}/messages`,
+      { method: "POST", json: { body } },
+    ),
+  remove: (slug: string, channel: string, messageId: string) =>
+    api<void>(
+      `/api/v1/teams/${encodeURIComponent(slug)}/channels/${encodeURIComponent(channel)}/messages/${messageId}`,
+      { method: "DELETE" },
+    ),
+  presence: (slug: string, channel: string) =>
+    api<PresenceList>(
+      `/api/v1/teams/${encodeURIComponent(slug)}/channels/${encodeURIComponent(channel)}/presence`,
+    ),
+};
+
+export type ShareLinkCreated = {
+  id: string;
+  token: string;
+  path: string;
+  fileId?: string | null;
+  fileName: string;
+  createdAt: string;
+  expiresAt: string;
+  maxDownloads?: number | null;
+};
+
+export type ShareLink = {
+  id: string;
+  fileId?: string | null;
+  fileName: string;
+  createdBy: string;
+  createdAt: string;
+  expiresAt: string;
+  maxDownloads?: number | null;
+  downloadCount: number;
+  revokedAt?: string | null;
+  revokeReason?: string | null;
+  status: "active" | "revoked" | "expired" | "exhausted";
+};
+
+export type PublicShareInfo = {
+  fileName: string;
+  sizeBytes: number;
+  contentType: string;
+  expiresAt: string;
+  remainingDownloads?: number | null;
+};
+
+export type ShareClaim = {
+  ticket: string;
+  ticketExpiresAt: string;
+  downloadPath: string;
+  fileName: string;
+  sizeBytes: number;
+};
+
+/** Authenticated share-link management. The raw token is only ever returned by `create`. */
+export const shareLinksApi = {
+  create: (slug: string, channel: string, fileId: string, body: { expiresInDays?: number; maxDownloads?: number }) =>
+    api<ShareLinkCreated>(`/api/v1/teams/${slug}/channels/${channel}/items/${fileId}/share-links`, {
+      method: "POST",
+      json: body,
+    }),
+  list: (slug: string, channel: string, fileId?: string) =>
+    api<ShareLink[]>(
+      `/api/v1/teams/${slug}/channels/${channel}/share-links${fileId ? `?fileId=${encodeURIComponent(fileId)}` : ""}`,
+    ),
+  revoke: (slug: string, linkId: string) =>
+    api<void>(`/api/v1/teams/${slug}/share-links/${linkId}`, { method: "DELETE" }),
+};
+
+/** Anonymous endpoints used by the /s/:token page (no session, no CSRF). */
+export const publicShareApi = {
+  info: (token: string) => api<PublicShareInfo>(`/api/v1/public/shares/${encodeURIComponent(token)}`),
+  claim: (token: string, idempotencyKey: string) =>
+    api<ShareClaim>(`/api/v1/public/shares/${encodeURIComponent(token)}/claim`, {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
     }),
 };
 

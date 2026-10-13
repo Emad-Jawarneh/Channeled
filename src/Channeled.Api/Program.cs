@@ -3,21 +3,29 @@ using System.Diagnostics.Metrics;
 using System.Threading.RateLimiting;
 using Channeled.Api.Admin;
 using Channeled.Api.Auth;
+using Channeled.Api.Chat;
 using Channeled.Api.Files;
 using Channeled.Api.Personal;
+using Channeled.Api.PublicLinks;
+using Channeled.Api.Realtime;
 using Channeled.Api.Search;
 using Channeled.Api.Teams;
 using Channeled.Application.Abstractions.Operations;
+using Channeled.Application.Abstractions.Realtime;
 using Channeled.Application.Identity;
 using Channeled.Domain.Identity;
 using Channeled.Infrastructure;
 using Channeled.Infrastructure.Identity;
 using Channeled.Infrastructure.Persistence;
+using Channeled.Infrastructure.Realtime;
 using Channeled.Infrastructure.Search;
+using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -41,9 +49,58 @@ builder.Services.AddRateLimiter(options =>
         limiter.Window = TimeSpan.FromMinutes(1);
         limiter.QueueLimit = 0;
     });
+
+    // Anonymous public share endpoints: per-IP budget (read lazily so IOptionsMonitor/test config applies).
+    options.AddPolicy(ShareLinkEndpoints.AnonRateLimitPolicy, httpContext =>
+    {
+        var ip = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        var permit = httpContext.RequestServices
+            .GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<Channeled.Application.PublicLinks.PublicFileLinksOptions>>()
+            .CurrentValue.AnonRequestsPerMinutePerIp;
+        return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = Math.Max(1, permit),
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+        });
+    });
+
+    // Chat posts: per-user budget. Requires authentication to run BEFORE the limiter (see pipeline order below).
+    options.AddPolicy(ChatEndpoints.PostRateLimitPolicy, httpContext =>
+    {
+        var userKey = httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                      ?? httpContext.Connection.RemoteIpAddress?.ToString()
+                      ?? "unknown";
+        var permit = httpContext.RequestServices
+            .GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<Channeled.Application.Chat.ChatOptions>>()
+            .CurrentValue.PostsPerMinutePerUser;
+        return RateLimitPartition.GetFixedWindowLimiter(userKey, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = Math.Max(1, permit),
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+        });
+    });
 });
 
 builder.Services.AddAuthorization();
+
+var realtimeOpts = builder.Configuration.GetSection(RealtimeOptions.SectionName).Get<RealtimeOptions>()
+    ?? new RealtimeOptions();
+builder.Services.AddSignalR(options =>
+{
+    options.MaximumReceiveMessageSize = realtimeOpts.MaxInboundMessageBytes;
+    options.EnableDetailedErrors = builder.Environment.IsDevelopment();
+}).AddHubOptions<ChannelHub>(options =>
+{
+    options.AddFilter<OriginHubFilter>();
+});
+builder.Services.RemoveAll<IChannelNotifier>();
+builder.Services.AddSingleton<IChannelNotifier, CoalescingChannelNotifier>();
+builder.Services.RemoveAll<IAuthStateChanged>();
+builder.Services.AddSingleton<AuthStateChangedService>();
+builder.Services.AddSingleton<IAuthStateChanged>(sp => sp.GetRequiredService<AuthStateChangedService>());
+builder.Services.AddHostedService(sp => sp.GetRequiredService<AuthStateChangedService>());
 
 var app = builder.Build();
 
@@ -276,8 +333,9 @@ app.Use(async (context, next) =>
     await next();
 });
 
-app.UseRateLimiter();
+// Authentication runs before the limiter so per-user policies (chat posts) can partition by user id.
 app.UseAuthentication();
+app.UseRateLimiter();
 app.UseAuthorization();
 
 app.Use(async (context, next) =>
@@ -294,7 +352,9 @@ app.Use(async (context, next) =>
                      || path.StartsWith("/api/v1/auth/invitations/accept", StringComparison.OrdinalIgnoreCase)
                      || path.StartsWith("/api/v1/auth/forgot-password", StringComparison.OrdinalIgnoreCase)
                      || path.StartsWith("/api/v1/auth/reset-password", StringComparison.OrdinalIgnoreCase)
-                     || path.StartsWith("/api/v1/auth/csrf", StringComparison.OrdinalIgnoreCase);
+                     || path.StartsWith("/api/v1/auth/csrf", StringComparison.OrdinalIgnoreCase)
+                     // Anonymous public share claim: no cookie session, so there is no CSRF surface.
+                     || path.StartsWith("/api/v1/public/", StringComparison.OrdinalIgnoreCase);
 
         if (!exempt)
         {
@@ -369,9 +429,15 @@ app.MapGet("/metrics", async Task<IResult> (ISystemHealthService healthSvc, Canc
 app.MapAuthEndpoints();
 app.MapTeamEndpoints();
 app.MapFileEndpoints();
+app.MapChatEndpoints();
+app.MapShareLinkEndpoints();
 app.MapPersonalEndpoints();
 app.MapSearchEndpoints();
 app.MapAdminEndpoints();
+app.MapHub<ChannelHub>("/hubs/channel", options =>
+{
+    options.Transports = HttpTransportType.WebSockets;
+});
 
 app.Run();
 return 0;

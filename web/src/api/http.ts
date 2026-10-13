@@ -45,7 +45,9 @@ export async function api<T>(
     path.includes("/auth/csrf") ||
     path.includes("/auth/invitations/accept") ||
     path.includes("/auth/forgot-password") ||
-    path.includes("/auth/reset-password");
+    path.includes("/auth/reset-password") ||
+    // Anonymous public share endpoints have no session cookie, so no CSRF token.
+    path.includes("/api/v1/public/");
   if (mutating && !csrfExempt) {
     headers.set("X-CSRF-TOKEN", await ensureCsrf());
   }

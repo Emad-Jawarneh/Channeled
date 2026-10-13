@@ -26,4 +26,10 @@ public enum AuthAction
     AccessPersonal,
     /// <summary>Upload/rename/move/delete/copy-from personal space. Owner only.</summary>
     WritePersonal,
+    /// <summary>Post a message in a text channel. Same write rules as uploads (Member+, private needs can_write).</summary>
+    PostChannelMessage,
+    /// <summary>Soft-delete a message the acting user authored (Member+ with channel write access).</summary>
+    DeleteOwnChannelMessage,
+    /// <summary>Moderate: soft-delete anyone's message (Admin+).</summary>
+    DeleteAnyChannelMessage,
 }

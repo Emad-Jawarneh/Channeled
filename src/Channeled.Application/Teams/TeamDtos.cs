@@ -7,7 +7,8 @@ public sealed record UpdateTeamRequest(string Name, string? Description);
 public sealed record TeamDto(Guid Id, string Name, string Slug, string? Description, long QuotaBytes, DateTimeOffset? ArchivedAt, MemberRole? MyRole);
 public sealed record TeamMemberDto(Guid UserId, string Email, string DisplayName, MemberRole Role, DateTimeOffset JoinedAt);
 public sealed record ChangeMemberRoleRequest(MemberRole Role);
-public sealed record CreateChannelRequest(string Name, string? Description, ChannelVisibility Visibility, ChannelKind Kind);
+/// <summary>Kind is required in JSON; missing/null is rejected (do not default to File).</summary>
+public sealed record CreateChannelRequest(string Name, string? Description, ChannelVisibility Visibility, ChannelKind? Kind);
 public sealed record UpdateChannelRequest(string? Name, string? Description);
 public sealed record ChannelDto(Guid Id, Guid TeamId, string Name, string? Description, ChannelVisibility Visibility, ChannelKind Kind, DateTimeOffset? ArchivedAt);
 public sealed record ChannelMemberDto(Guid UserId, string Email, string DisplayName, bool CanWrite, bool CanManage);

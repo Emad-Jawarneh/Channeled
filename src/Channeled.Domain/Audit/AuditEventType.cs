@@ -25,6 +25,8 @@ public enum AuditEventType
     ChannelMembershipAdd = 22,
     ChannelMembershipRemove = 23,
     ChannelChange = 24,
+    /// <summary>Audited on soft-delete only; posts are intentionally not audited.</summary>
+    ChannelMessageDelete = 25,
     FileUpload = 30,
     FileRename = 31,
     FileMove = 32,
@@ -40,6 +42,8 @@ public enum AuditEventType
     FileStar = 42,
     FileUnstar = 43,
     FileDownload = 44,
+    FileShareCreate = 45,
+    FileShareRevoke = 46,
     QuotaChange = 50,
     BackupRun = 60,
     BackupRestore = 61,

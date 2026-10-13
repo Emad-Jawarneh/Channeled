@@ -16,19 +16,21 @@ beforeEach(() => {
 describe("CreateChannelDialog", () => {
   it("offers Everyone / Restricted and defaults to Everyone", () => {
     render(<CreateChannelDialog open onClose={() => {}} onCreate={() => {}} />);
-    const select = screen.getByTestId("create-channel-visibility") as HTMLSelectElement;
-    expect(select.value).toBe(String(ChannelVisibility.Everyone));
-    const labels = Array.from(select.options).map((o) => o.textContent);
-    expect(labels).toEqual(["Everyone", "Restricted"]);
+    const group = screen.getByTestId("create-channel-visibility");
+    const everyone = screen.getByTestId("create-channel-visibility-everyone");
+    const restricted = screen.getByTestId("create-channel-visibility-restricted");
+    expect(group).toBeTruthy();
+    expect(everyone.getAttribute("aria-checked")).toBe("true");
+    expect(restricted.getAttribute("aria-checked")).toBe("false");
+    expect(everyone.textContent).toContain("Everyone");
+    expect(restricted.textContent).toContain("Restricted");
   });
 
   it("submits the chosen visibility", () => {
     const onCreate = vi.fn();
     render(<CreateChannelDialog open onClose={() => {}} onCreate={onCreate} />);
     fireEvent.change(screen.getByTestId("create-channel-name"), { target: { value: "ops" } });
-    fireEvent.change(screen.getByTestId("create-channel-visibility"), {
-      target: { value: String(ChannelVisibility.Restricted) },
-    });
+    fireEvent.click(screen.getByTestId("create-channel-visibility-restricted"));
     fireEvent.click(screen.getByTestId("create-channel-submit"));
     expect(onCreate).toHaveBeenCalledWith({
       name: "ops",

@@ -6,6 +6,7 @@ import { useAuth } from "../../auth/AuthContext";
 import { AppShell } from "../../components/AppShell";
 import { Button } from "../../ui/Button";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { RoleSelect } from "./RoleSelect";
 import styles from "./MembersPage.module.css";
 
 const roleLabel = ["Viewer", "Member", "Admin", "Owner"];
@@ -102,24 +103,20 @@ export function MembersPage({ teamSlug }: { teamSlug: string }) {
                   {roleLabel[m.role] ?? m.role}
                 </td>
                 {isOwner && (
-                  <td data-label="Change role">
+                  <td className={styles.roleCell} data-label="Change role">
                     {m.role !== MemberRole.Owner && m.userId !== user?.id && (
-                      <select
-                        data-testid={`role-${m.email}`}
+                      <RoleSelect
+                        testId={`role-${m.email}`}
                         aria-label={`Role for ${m.email}`}
                         value={m.role}
                         disabled={changeRole.isPending}
-                        onChange={(e) =>
+                        onChange={(role) =>
                           void changeRole.mutateAsync({
                             userId: m.userId,
-                            role: Number(e.target.value),
+                            role,
                           })
                         }
-                      >
-                        <option value={MemberRole.Viewer}>Viewer</option>
-                        <option value={MemberRole.Member}>Member</option>
-                        <option value={MemberRole.Admin}>Admin</option>
-                      </select>
+                      />
                     )}
                   </td>
                 )}

@@ -21,11 +21,56 @@
   box-shadow: 0 16px 48px rgb(0 0 0 / 0.28);
 }
 
+.panelCreate {
+  width: min(28rem, 100%);
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+  background:
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--color-accent) 10%, transparent) 0%,
+      transparent 42%
+    ),
+    var(--color-surface);
+}
+
+.header {
+  display: grid;
+  gap: 0;
+  padding: var(--space-5);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 85%, transparent);
+}
+
+.body {
+  display: grid;
+  gap: var(--space-5);
+  padding: var(--space-5);
+}
+
+.eyebrow {
+  margin: 0 0 var(--space-2);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1;
+  color: color-mix(in srgb, var(--color-accent) 75%, var(--color-text-muted));
+}
+
 .title {
   margin: 0;
   font-size: var(--text-lg);
   font-weight: 800;
   letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.lede {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.45;
 }
 
 .hint {
@@ -35,11 +80,76 @@
   line-height: 1.45;
 }
 
+/* Shared by ConfirmDialog / DeleteChannelDialog */
 .label {
   display: grid;
   gap: var(--space-2);
   font-size: var(--text-sm);
   font-weight: 700;
+}
+
+.field {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  min-inline-size: 0;
+}
+
+.fieldLabel {
+  margin: 0;
+  padding: 0;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.nameField {
+  display: flex;
+  align-items: stretch;
+  min-height: 2.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-bg);
+  overflow: hidden;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.nameField:focus-within {
+  border-color: var(--color-focus);
+  box-shadow: var(--shadow-focus);
+}
+
+.hash {
+  display: grid;
+  place-items: center;
+  min-width: 2.4rem;
+  padding-inline: 0.65rem;
+  color: var(--color-text-muted);
+  font-weight: 700;
+  background: color-mix(in srgb, var(--color-soft) 55%, var(--color-bg));
+  border-right: 1px solid var(--color-border);
+  user-select: none;
+}
+
+.nameInput {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-weight: 500;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  padding: 0 var(--space-3);
+}
+
+.nameInput:focus {
+  outline: none;
+}
+
+.nameInput::placeholder {
+  color: color-mix(in srgb, var(--color-text-muted) 80%, transparent);
 }
 
 .input {
@@ -51,12 +161,101 @@
   border-radius: 12px;
   background: var(--color-bg);
   color: var(--color-text);
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .input:focus {
   outline: none;
   box-shadow: var(--shadow-focus);
   border-color: var(--color-focus);
+}
+
+.choiceGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+
+.choice {
+  appearance: none;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: var(--space-2);
+  text-align: left;
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--color-bg) 70%, var(--color-surface));
+  color: var(--color-text);
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.choice:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-border));
+  background: color-mix(in srgb, var(--color-soft) 45%, var(--color-surface));
+}
+
+.choice:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+  border-color: var(--color-focus);
+}
+
+.choice[data-selected="true"] {
+  border-color: color-mix(in srgb, var(--color-accent) 55%, var(--color-border));
+  background: color-mix(in srgb, var(--color-accent) 14%, var(--color-surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 28%, transparent);
+}
+
+.choice:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.choiceIcon {
+  width: 1.15rem;
+  height: 1.15rem;
+  margin-top: 0.1rem;
+  color: color-mix(in srgb, var(--color-accent) 70%, var(--color-text-muted));
+  flex-shrink: 0;
+}
+
+.choice[data-selected="true"] .choiceIcon {
+  color: var(--color-accent);
+}
+
+.choiceCopy {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.choiceLabel {
+  font-size: 0.875rem;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+.choiceDetail {
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--color-text-muted);
+}
+
+.caption {
+  margin: calc(var(--space-1) * -1) 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  line-height: 1.4;
 }
 
 .error {
@@ -69,4 +268,17 @@
   display: flex;
   justify-content: flex-end;
   gap: var(--space-3);
+}
+
+.actionsCreate {
+  margin: 0;
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid color-mix(in srgb, var(--color-border) 85%, transparent);
+  background: color-mix(in srgb, var(--color-soft) 35%, var(--color-surface));
+}
+
+@media (max-width: 28rem) {
+  .choiceGrid {
+    grid-template-columns: 1fr;
+  }
 }

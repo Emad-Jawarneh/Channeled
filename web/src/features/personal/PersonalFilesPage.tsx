@@ -925,6 +925,7 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
         title={`Send files to channel`}
         testId="send-channel-dialog"
         options={sendChannelOptions}
+        description="Choose a team file channel. A copy of each selected file is sent there."
         emptyLabel={primaryTeam ? "No file channels in your team" : "Create a team first"}
         busy={bulkBusy}
         error={bulkError}

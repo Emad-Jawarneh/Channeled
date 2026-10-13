@@ -117,11 +117,13 @@ test("sign in, upload, rename, move, trash, restore, join link, role, restricted
   // --- Role change (Owner only) ---
   await uiLogin(page, E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD);
   await page.goto(`/t/${teamSlug}/settings/members`);
-  await page.getByTestId(`role-${inviteEmail}`).selectOption({ label: "Admin" });
-  await expect(page.getByTestId(`role-${inviteEmail}`)).toHaveValue("2");
+  await page.getByTestId(`role-${inviteEmail}`).click();
+  await page.getByTestId(`role-${inviteEmail}-option-Admin`).click();
+  await expect(page.getByTestId(`role-${inviteEmail}`)).toHaveAttribute("data-value", "2");
   // Admins see every channel, so go back to Member before testing Restricted access.
-  await page.getByTestId(`role-${inviteEmail}`).selectOption({ label: "Member" });
-  await expect(page.getByTestId(`role-${inviteEmail}`)).toHaveValue("1");
+  await page.getByTestId(`role-${inviteEmail}`).click();
+  await page.getByTestId(`role-${inviteEmail}-option-Member`).click();
+  await expect(page.getByTestId(`role-${inviteEmail}`)).toHaveAttribute("data-value", "1");
 
   // --- Restricted channel access ---
   await page.goto(`/t/${teamSlug}/settings/channels`);
@@ -138,6 +140,7 @@ test("sign in, upload, rename, move, trash, restore, join link, role, restricted
   // Grant access then visible
   await uiLogin(page, E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD);
   await page.goto(`/t/${teamSlug}/settings/channels`);
+  await page.getByTestId("grant-manage-secret").click();
   await page.getByTestId(`grant-pick-secret-${inviteEmail}`).check();
   await page.getByTestId("grant-add-submit-secret").click();
   await expect(page.getByTestId(`grant-row-secret-${inviteEmail}`)).toBeVisible();

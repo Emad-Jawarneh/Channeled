@@ -74,8 +74,9 @@
   width: 1%;
 }
 
-.table select {
-  max-width: 10rem;
+.roleCell {
+  width: 1%;
+  white-space: nowrap;
 }
 
 .leaveWrap {
@@ -159,8 +160,4 @@
     width: auto;
   }
 
-  .table select {
-    max-width: none;
-    flex: 1 1 auto;
-  }
 }

@@ -1,0 +1,225 @@
+.dialog {
+  border: 0;
+  padding: 0;
+  margin: auto;
+  width: min(92vw, 42rem);
+  height: min(88vh, 40rem);
+  max-width: none;
+  max-height: none;
+  background: transparent;
+  overflow: hidden;
+}
+
+.dialog::backdrop {
+  background: color-mix(in srgb, var(--color-backdrop) 88%, #000);
+}
+
+.panel {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: calc(var(--radius-md) + 4px);
+  box-shadow: 0 24px 64px rgb(0 0 0 / 0.4);
+  background:
+    linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--color-accent) 12%, transparent) 0%,
+      transparent 28%
+    ),
+    var(--color-surface);
+}
+
+.header {
+  flex: 0 0 auto;
+  padding: var(--space-5) var(--space-6) var(--space-4);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 85%, transparent);
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(1.2rem, 1.05rem + 0.5vw, 1.5rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.lede {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.toolbar {
+  flex: 0 0 auto;
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-6) var(--space-3);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
+  background: color-mix(in srgb, var(--color-bg) 35%, var(--color-surface));
+}
+
+.searchLabel {
+  display: grid;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.search {
+  box-sizing: border-box;
+  width: 100%;
+  height: 3rem;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 500;
+}
+
+.search:focus {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+  border-color: var(--color-focus);
+}
+
+.listMeta {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.listPane {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--color-bg);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.listEmpty {
+  padding: var(--space-8) var(--space-5);
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  margin: 0;
+  padding: 0.95rem 1.35rem;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 75%, transparent);
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.row:hover,
+.row:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--color-soft) 50%, transparent);
+}
+
+.row[data-selected="true"] {
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+}
+
+.rowLabel {
+  font-size: 0.95rem;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.check {
+  width: 0.55rem;
+  height: 0.9rem;
+  margin-right: 0.15rem;
+  border-right: 2px solid var(--color-accent);
+  border-bottom: 2px solid var(--color-accent);
+  transform: rotate(45deg);
+  opacity: 0;
+}
+
+.row[data-selected="true"] .check {
+  opacity: 1;
+}
+
+.footer {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-6);
+  border-top: 1px solid color-mix(in srgb, var(--color-border) 85%, transparent);
+  background: color-mix(in srgb, var(--color-soft) 30%, var(--color-surface));
+}
+
+.error {
+  margin: 0;
+  margin-right: auto;
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+/* Keeps Playwright selectOption working without showing a tiny dropdown. */
+.srSelect {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 600px) {
+  .dialog {
+    width: min(100vw - 1rem, 42rem);
+    height: min(94vh, 40rem);
+  }
+
+  .header,
+  .toolbar,
+  .footer {
+    padding-inline: var(--space-4);
+  }
+}

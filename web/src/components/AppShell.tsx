@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, NavLink, useNavigate, useParams } from "react-router-dom";
+import { Link, NavLink, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useState, type ReactNode } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { teamsApi } from "../api/channeled";
@@ -20,9 +20,14 @@ type AppShellProps = {
   topbarExtra?: ReactNode;
 };
 
+function pathUnder(pathname: string, prefix: string): boolean {
+  return pathname === prefix || pathname.startsWith(`${prefix}/`);
+}
+
 export function AppShell({ children, sidebar, details, title, topbarExtra }: AppShellProps) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const params = useParams();
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
@@ -56,21 +61,41 @@ export function AppShell({ children, sidebar, details, title, topbarExtra }: App
           C
         </Link>
         <nav className={styles.railNav} aria-label="Teams">
-          <NavLink to="/me/files" className={`${styles.railItem} ${styles.railMe}`} title="My files" data-testid="rail-me">
+          <NavLink
+            to="/me/files"
+            className={() =>
+              [
+                styles.railItem,
+                styles.railMe,
+                pathUnder(location.pathname, "/me") ? styles.railItemActive : "",
+              ]
+                .filter(Boolean)
+                .join(" ")
+            }
+            aria-current={pathUnder(location.pathname, "/me") ? "page" : undefined}
+            title="My files"
+            data-testid="rail-me"
+          >
             Me
           </NavLink>
           <div className={styles.railDivider} aria-hidden="true" />
-          {(teams.data ?? []).map((team) => (
-            <NavLink
-              key={team.id}
-              to={`/t/${team.slug}/c/general`}
-              className={styles.railItem}
-              title={team.name}
-              data-testid={`rail-team-${team.slug}`}
-            >
-              {team.name.slice(0, 2).toUpperCase()}
-            </NavLink>
-          ))}
+          {(teams.data ?? []).map((team) => {
+            const active = pathUnder(location.pathname, `/t/${team.slug}`);
+            return (
+              <NavLink
+                key={team.id}
+                to={`/t/${team.slug}/c/general`}
+                className={() =>
+                  [styles.railItem, active ? styles.railItemActive : ""].filter(Boolean).join(" ")
+                }
+                aria-current={active ? "page" : undefined}
+                title={team.name}
+                data-testid={`rail-team-${team.slug}`}
+              >
+                {team.name.slice(0, 2).toUpperCase()}
+              </NavLink>
+            );
+          })}
           <button
             type="button"
             className={`${styles.railItem} ${styles.railAdd}`}
@@ -86,11 +111,33 @@ export function AppShell({ children, sidebar, details, title, topbarExtra }: App
           </button>
         </nav>
         <div className={styles.railFooter}>
-          <NavLink to="/search" className={styles.railItem} title="Search">
+          <NavLink
+            to="/search"
+            className={() =>
+              [styles.railItem, pathUnder(location.pathname, "/search") ? styles.railItemActive : ""]
+                .filter(Boolean)
+                .join(" ")
+            }
+            aria-current={pathUnder(location.pathname, "/search") ? "page" : undefined}
+            title="Search"
+          >
             ⌕
           </NavLink>
           {user?.isPlatformAdmin && (
-            <NavLink to="/admin/dashboard" className={styles.railItem} title="Admin" data-testid="rail-admin">
+            <NavLink
+              to="/admin/dashboard"
+              className={() =>
+                [
+                  styles.railItem,
+                  pathUnder(location.pathname, "/admin") ? styles.railItemActive : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")
+              }
+              aria-current={pathUnder(location.pathname, "/admin") ? "page" : undefined}
+              title="Admin"
+              data-testid="rail-admin"
+            >
               Ad
             </NavLink>
           )}

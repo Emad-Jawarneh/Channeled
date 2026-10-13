@@ -979,6 +979,7 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
         title={`Send ${checkedItems.filter((i) => i.kind === ItemKind.File).length || checked.size} file${checked.size === 1 ? "" : "s"} to channel`}
         testId="send-channel-dialog"
         options={sendChannelOptions}
+        description="Pick another file channel in this team. Folders stay put — only files are sent."
         emptyLabel="No other file channels in this team"
         busy={bulkBusy}
         error={bulkError}

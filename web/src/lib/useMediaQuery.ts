@@ -18,5 +18,8 @@ export function useMediaQuery(query: string): boolean {
   return matches;
 }
 
-/** Matches AppShell / file-browser tablet layout. */
-export const TABLET_MQ = "(max-width: 900px)";
+/**
+ * File browser “compact” layout: preview auto-closes and search collapses to an icon.
+ * AppShell still stacks columns at 900px.
+ */
+export const TABLET_MQ = "(max-width: 1450px)";

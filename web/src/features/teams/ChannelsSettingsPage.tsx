@@ -18,8 +18,9 @@ import local from "./ChannelsSettingsPage.module.css";
 import { useUploads } from "../../uploads/UploadContext";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { DeleteChannelDialog, type DeleteChannelDisposition } from "./DeleteChannelDialog";
+import { ManageChannelMembersDialog } from "./ManageChannelMembersDialog";
 
-/** Grants for a Restricted channel: per-member ReadOnly toggle, remove, and bulk add. */
+/** Grants for a Restricted channel: compact list + Manage members dialog for adds. */
 function RestrictedGrants({
   teamSlug,
   channel,
@@ -32,8 +33,8 @@ function RestrictedGrants({
   onError: (message: string | null) => void;
 }) {
   const qc = useQueryClient();
-  const [picked, setPicked] = useState<Set<string>>(new Set());
-  const [bulkReadOnly, setBulkReadOnly] = useState(false);
+  const [manageOpen, setManageOpen] = useState(false);
+  const [dialogError, setDialogError] = useState<string | null>(null);
   const key = ["channel-members", teamSlug, channel.name] as const;
 
   const grants = useQuery({
@@ -58,17 +59,20 @@ function RestrictedGrants({
     onSettled: refresh,
   });
   const bulkAdd = useMutation({
-    mutationFn: () =>
+    mutationFn: (input: { userIds: string[]; readOnly: boolean }) =>
       teamsApi.bulkUpsertChannelMembers(
         teamSlug,
         channel.name,
-        [...picked].map((userId) => ({ userId, readOnly: bulkReadOnly })),
+        input.userIds.map((userId) => ({ userId, readOnly: input.readOnly })),
       ),
     onSuccess: () => {
-      setPicked(new Set());
+      setDialogError(null);
       onError(null);
+      setManageOpen(false);
     },
-    onError: fail,
+    onError: (e) => {
+      setDialogError(e instanceof Error ? e.message : "Could not update access.");
+    },
     onSettled: refresh,
   });
 
@@ -76,90 +80,83 @@ function RestrictedGrants({
   const grantedIds = new Set(granted.map((g) => g.userId));
   // Admins and owners always see every channel, so they never need a grant.
   const candidates = teamMembers.filter((m) => !grantedIds.has(m.userId) && m.role < MemberRole.Admin);
-  const busy = setReadOnly.isPending || revoke.isPending || bulkAdd.isPending;
+  const busy = setReadOnly.isPending || revoke.isPending;
 
   return (
-    <div className={local.joinBlock} data-testid={`grants-${channel.name}`}>
-      <p className={local.label}>Who can access this channel</p>
-      {grants.isLoading && <p className={local.muted}>Loading…</p>}
-      {grants.isSuccess && granted.length === 0 && (
-        <p className={local.muted}>No members granted yet. Team admins always have access.</p>
-      )}
-      <ul className={local.requestList}>
-        {granted.map((g) => (
-          <li key={g.userId} data-testid={`grant-row-${channel.name}-${g.email}`}>
-            <span>
-              {g.displayName} ({g.email})
-            </span>
-            <span className={local.requestActions}>
-              <label>
-                <input
-                  type="checkbox"
-                  data-testid={`grant-readonly-${channel.name}-${g.email}`}
-                  checked={g.readOnly}
-                  disabled={busy}
-                  onChange={(e) =>
-                    void setReadOnly.mutateAsync({ userId: g.userId, readOnly: e.target.checked })
-                  }
-                />{" "}
-                Read-only
-              </label>
-              <Button
-                type="button"
-                data-testid={`grant-remove-${channel.name}-${g.email}`}
-                disabled={busy}
-                onClick={() => void revoke.mutateAsync(g.userId)}
-              >
-                Remove
-              </Button>
-            </span>
-          </li>
-        ))}
-      </ul>
+    <div className={local.accessPanel} data-testid={`grants-${channel.name}`}>
+      <div className={local.accessHead}>
+        <div className={local.accessTitles}>
+          <p className={local.accessTitle}>Channel access</p>
+          <p className={local.muted}>
+            {grants.isLoading
+              ? "Loading…"
+              : granted.length === 0
+                ? "No members granted yet. Team admins always have access."
+                : `${granted.length} member${granted.length === 1 ? "" : "s"} with access · admins always included`}
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="primary"
+          data-testid={`grant-manage-${channel.name}`}
+          disabled={grants.isLoading}
+          onClick={() => {
+            setDialogError(null);
+            setManageOpen(true);
+          }}
+        >
+          Manage members
+        </Button>
+      </div>
 
-      {candidates.length > 0 && (
-        <fieldset className={local.editForm} data-testid={`grant-add-${channel.name}`}>
-          <legend className={local.label}>Add members</legend>
-          {candidates.map((m) => (
-            <label key={m.userId}>
-              <input
-                type="checkbox"
-                data-testid={`grant-pick-${channel.name}-${m.email}`}
-                checked={picked.has(m.userId)}
-                onChange={(e) =>
-                  setPicked((prev) => {
-                    const next = new Set(prev);
-                    if (e.target.checked) next.add(m.userId);
-                    else next.delete(m.userId);
-                    return next;
-                  })
-                }
-              />{" "}
-              {m.displayName} ({m.email})
-            </label>
+      {grants.isSuccess && granted.length > 0 && (
+        <ul className={local.grantList}>
+          {granted.map((g) => (
+            <li key={g.userId} className={local.grantRow} data-testid={`grant-row-${channel.name}-${g.email}`}>
+              <span className={local.grantIdentity}>
+                <span className={local.grantName}>{g.displayName}</span>
+                <span className={local.grantEmail}>{g.email}</span>
+              </span>
+              <span className={local.grantActions}>
+                <label className={local.grantReadOnly}>
+                  <input
+                    type="checkbox"
+                    data-testid={`grant-readonly-${channel.name}-${g.email}`}
+                    checked={g.readOnly}
+                    disabled={busy}
+                    onChange={(e) =>
+                      void setReadOnly.mutateAsync({ userId: g.userId, readOnly: e.target.checked })
+                    }
+                  />
+                  Read-only
+                </label>
+                <Button
+                  type="button"
+                  data-testid={`grant-remove-${channel.name}-${g.email}`}
+                  disabled={busy}
+                  onClick={() => void revoke.mutateAsync(g.userId)}
+                >
+                  Remove
+                </Button>
+              </span>
+            </li>
           ))}
-          <label>
-            <input
-              type="checkbox"
-              data-testid={`grant-bulk-readonly-${channel.name}`}
-              checked={bulkReadOnly}
-              onChange={(e) => setBulkReadOnly(e.target.checked)}
-            />{" "}
-            Read-only
-          </label>
-          <span className={local.itemActions}>
-            <Button
-              type="button"
-              variant="primary"
-              data-testid={`grant-add-submit-${channel.name}`}
-              disabled={busy || picked.size === 0}
-              onClick={() => void bulkAdd.mutateAsync()}
-            >
-              Add selected{picked.size > 0 ? ` (${picked.size})` : ""}
-            </Button>
-          </span>
-        </fieldset>
+        </ul>
       )}
+
+      <ManageChannelMembersDialog
+        open={manageOpen}
+        channelName={channel.name}
+        candidates={candidates}
+        busy={bulkAdd.isPending}
+        error={dialogError}
+        onClose={() => {
+          if (bulkAdd.isPending) return;
+          setManageOpen(false);
+          setDialogError(null);
+        }}
+        onAdd={(input) => void bulkAdd.mutateAsync(input)}
+      />
     </div>
   );
 }

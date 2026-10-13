@@ -1,6 +1,10 @@
 .shell {
   display: flex;
   min-height: 100vh;
+  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
   background: var(--color-bg);
   position: relative;
 }
@@ -18,6 +22,9 @@
   gap: 10px;
   padding: 16px 0;
   flex-shrink: 0;
+  align-self: stretch;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .brand {
@@ -44,8 +51,19 @@
   align-items: center;
 }
 
+.railNav {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
 .railFooter {
+  flex: 0 0 auto;
   margin-top: auto;
+  padding-top: 4px;
 }
 
 .railItem {
@@ -63,14 +81,12 @@
   position: relative;
 }
 
-.railItem[aria-current="page"],
-.railItem:global(.active) {
+.railItemActive {
   background: var(--color-accent);
   color: var(--color-accent-contrast);
 }
 
-.railItem[aria-current="page"]::before,
-.railItem:global(.active)::before {
+.railItemActive::before {
   content: "";
   position: absolute;
   left: -14px;
@@ -87,8 +103,7 @@
   color: var(--color-bg);
 }
 
-.railMe[aria-current="page"],
-.railMe:global(.active) {
+.railMe.railItemActive {
   background: var(--color-accent);
   color: var(--color-accent-contrast);
 }
@@ -126,11 +141,15 @@
   flex-direction: column;
   gap: 2px;
   flex-shrink: 0;
+  align-self: stretch;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .sidebar > * {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
+  max-height: 100%;
 }
 
 .sidebarTitle {
@@ -163,8 +182,10 @@
 .main {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .topbar {
@@ -213,6 +234,7 @@
   flex-direction: column;
   gap: 16px;
   overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .details {
@@ -229,9 +251,19 @@
   min-height: 0;
 }
 
+/* Preview eats the file list below this width; pages also stop passing `details`. */
+@media (max-width: 1450px) {
+  .details {
+    display: none;
+  }
+}
+
 @media (max-width: 900px) {
   .shell {
     flex-direction: column;
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
   }
 
   .rail {
@@ -239,7 +271,9 @@
     flex-direction: row;
     justify-content: flex-start;
     overflow-x: auto;
+    overflow-y: hidden;
     padding: 12px;
+    align-self: auto;
   }
 
   .railNav,
@@ -247,10 +281,12 @@
     flex-direction: row;
     margin-top: 0;
     width: auto;
+    flex: 0 0 auto;
+    overflow: visible;
+    padding-top: 0;
   }
 
-  .railItem[aria-current="page"]::before,
-  .railItem:global(.active)::before {
+  .railItemActive::before {
     display: none;
   }
 
@@ -259,6 +295,13 @@
     width: 100%;
     border: 0;
     border-bottom: 1px solid var(--color-border);
+    align-self: auto;
+    max-height: min(42vh, 22rem);
+    overflow: auto;
+  }
+
+  .main {
+    overflow: visible;
   }
 
   .topbar {

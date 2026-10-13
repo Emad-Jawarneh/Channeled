@@ -158,7 +158,9 @@ export function DeleteChannelDialog({
         )}
 
         <label className={styles.confirmLabel}>
-          Type <strong>{channel.name}</strong> to confirm
+          <span>
+            Type <strong>{channel.name}</strong> to confirm
+          </span>
           <input
             className={dialogStyles.input}
             value={confirmName}

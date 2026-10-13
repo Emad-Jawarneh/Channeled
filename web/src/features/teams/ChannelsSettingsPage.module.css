@@ -66,6 +66,97 @@
   gap: var(--space-2);
 }
 
+.accessPanel {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-1);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-bg) 55%, var(--color-surface));
+}
+
+.accessHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.accessTitles {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.accessTitle {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 750;
+  letter-spacing: -0.01em;
+}
+
+.grantList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.grantRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--color-border) 85%, transparent);
+  border-radius: 12px;
+  background: var(--color-surface);
+}
+
+.grantIdentity {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.grantName {
+  font-size: 0.875rem;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.grantEmail {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.grantActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.grantReadOnly {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .requestList {
   list-style: none;
   margin: 0;
@@ -94,6 +185,22 @@
 @media (max-width: 720px) {
   .item {
     padding: var(--space-3);
+  }
+
+  .accessPanel {
+    padding: var(--space-3);
+  }
+
+  .grantRow {
+    grid-template-columns: 1fr;
+  }
+
+  .grantActions {
+    justify-content: stretch;
+  }
+
+  .grantActions > * {
+    flex: 1 1 auto;
   }
 
   .requestList li {

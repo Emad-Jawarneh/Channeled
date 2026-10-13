@@ -36,7 +36,8 @@ function ChannelRoute({ trash = false }: { trash?: boolean }) {
     enabled: !!team,
   });
 
-  if (channels.isLoading) {
+  // Only block the first load with no cache — never flash a full-page loader on channel switches.
+  if (channels.isPending && !channels.data) {
     return <p className="loading-session">Loading…</p>;
   }
 

@@ -12,6 +12,7 @@
 
 .dialog::backdrop {
   background: color-mix(in srgb, var(--color-backdrop) 88%, #000);
+  animation: motion-backdrop-in var(--dur-fast) var(--ease-out) both;
 }
 
 .panel {
@@ -33,6 +34,7 @@
       transparent 28%
     ),
     var(--color-surface);
+  animation: motion-fade-scale-in var(--dur-base) var(--ease-out) both;
 }
 
 .header {

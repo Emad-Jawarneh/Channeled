@@ -7,6 +7,7 @@
 
 .dialog::backdrop {
   background: var(--color-backdrop);
+  animation: motion-backdrop-in var(--dur-fast) var(--ease-out) both;
 }
 
 .panel {
@@ -19,6 +20,7 @@
   display: grid;
   gap: var(--space-4);
   box-shadow: 0 16px 48px rgb(0 0 0 / 0.28);
+  animation: motion-fade-scale-in var(--dur-base) var(--ease-out) both;
 }
 
 .title {

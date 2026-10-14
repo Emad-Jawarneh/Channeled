@@ -8,9 +8,11 @@ const tokensCss = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "to
 
 describe("motion tokens", () => {
   it("defines duration and easing variables", () => {
+    expect(tokensCss).toMatch(/--dur-micro:\s*90ms/);
     expect(tokensCss).toMatch(/--dur-fast:\s*120ms/);
     expect(tokensCss).toMatch(/--dur-base:\s*200ms/);
     expect(tokensCss).toMatch(/--ease-out:\s*cubic-bezier/);
+    expect(tokensCss).toMatch(/--ease-soft:\s*cubic-bezier/);
   });
 
   it("respects prefers-reduced-motion", () => {

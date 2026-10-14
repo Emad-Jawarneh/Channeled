@@ -16,11 +16,19 @@
   color: var(--color-text);
   cursor: pointer;
   overflow: visible;
+  transition:
+    transform var(--dur-micro) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
 }
 
 .bell:hover,
 .bell[aria-expanded="true"] {
   background: var(--color-soft);
+}
+
+.bell:active {
+  transform: scale(0.96);
 }
 
 .badge {
@@ -39,6 +47,7 @@
   text-align: center;
   border: 2px solid var(--color-surface);
   box-sizing: content-box;
+  animation: motion-fade-scale-in var(--dur-fast) var(--ease-out) both;
 }
 
 .panel {
@@ -55,6 +64,8 @@
   background: var(--color-surface);
   box-shadow: var(--shadow-card);
   overflow: hidden;
+  animation: motion-fade-scale-in var(--dur-base) var(--ease-out) both;
+  transform-origin: top right;
 }
 
 .panelHead {

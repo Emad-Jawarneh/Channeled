@@ -54,6 +54,14 @@
   background: var(--color-surface);
   min-width: 0;
   box-shadow: var(--shadow-card);
+  transition:
+    box-shadow var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+
+.card:hover {
+  border-color: color-mix(in srgb, var(--color-accent) 28%, var(--color-border));
+  box-shadow: 0 2px 4px rgba(55, 63, 81, 0.05), 0 12px 28px rgba(55, 63, 81, 0.07);
 }
 
 .cardTitle {

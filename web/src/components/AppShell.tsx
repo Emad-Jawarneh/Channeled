@@ -19,13 +19,15 @@ type AppShellProps = {
   title?: string;
   /** Placed in the top bar before the theme toggle (e.g. files search). */
   topbarExtra?: ReactNode;
+  /** Remounts the main pane (triggers enter motion) e.g. on channel switches. */
+  contentKey?: string;
 };
 
 function pathUnder(pathname: string, prefix: string): boolean {
   return pathname === prefix || pathname.startsWith(`${prefix}/`);
 }
 
-export function AppShell({ children, sidebar, details, title, topbarExtra }: AppShellProps) {
+export function AppShell({ children, sidebar, details, title, topbarExtra, contentKey }: AppShellProps) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -259,7 +261,11 @@ export function AppShell({ children, sidebar, details, title, topbarExtra }: App
             <NotificationBell />
           </div>
         </header>
-        <div className={styles.content}>{children}</div>
+        <div className={styles.content}>
+          <div key={contentKey ?? "page"} className={styles.contentPane}>
+            {children}
+          </div>
+        </div>
       </main>
 
       {details && (

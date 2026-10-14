@@ -58,9 +58,11 @@
   --color-backdrop: rgb(17 21 28 / 0.55);
 
   /* Motion — animate only transform/opacity; keep interruptible */
+  --dur-micro: 90ms;
   --dur-fast: 120ms;
   --dur-base: 200ms;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-soft: cubic-bezier(0.33, 1, 0.68, 1);
 }
 
 html[data-theme="dark"] {
@@ -211,6 +213,27 @@ select {
   }
 }
 
+/* Soft page/content enter — short, no layout thrash */
+@keyframes motion-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes motion-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.35rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* Chrome enter: short slide (toasts, trays, bars, details) */
 @keyframes motion-slide-up-in {
   from {
@@ -252,6 +275,15 @@ select {
   }
 }
 
+@keyframes motion-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 .motion-overlay-in {
   animation: motion-fade-scale-in var(--dur-base) var(--ease-out) both;
 }
@@ -264,6 +296,14 @@ select {
   animation: motion-slide-in-right var(--dur-base) var(--ease-out) both;
 }
 
+.motion-page-in {
+  animation: motion-page-in var(--dur-base) var(--ease-soft) both;
+}
+
+.motion-fade-in {
+  animation: motion-fade-in var(--dur-fast) var(--ease-out) both;
+}
+
 .motion-row-exit {
   animation: motion-fade-out var(--dur-fast) var(--ease-out) both;
   pointer-events: none;
@@ -273,6 +313,22 @@ select {
   transition:
     background-color var(--dur-fast) var(--ease-out),
     outline-color var(--dur-fast) var(--ease-out);
+}
+
+/* Cheap interactive polish — transform/color only; no layout properties */
+.motion-press {
+  transition:
+    transform var(--dur-micro) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out),
+    filter var(--dur-fast) var(--ease-out);
+}
+
+.motion-press:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 /* Skeleton shimmer — transform only */

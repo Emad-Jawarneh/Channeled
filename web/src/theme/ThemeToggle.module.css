@@ -13,11 +13,20 @@
   color: var(--color-text);
   font: 700 0.8rem var(--font-sans);
   cursor: pointer;
+  transition:
+    transform var(--dur-micro) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
 }
 
 .toggle:hover {
   border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
   background: color-mix(in srgb, var(--color-soft) 70%, var(--color-surface));
+}
+
+.toggle:active {
+  transform: scale(0.97);
 }
 
 .icon {

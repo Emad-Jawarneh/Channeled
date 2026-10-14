@@ -133,6 +133,7 @@
   padding: 0.35rem var(--space-4) 0.35rem var(--space-4);
   margin: 0;
   border-radius: 0;
+  transition: background-color var(--dur-fast) var(--ease-out);
 }
 
 .message:hover,
@@ -629,13 +630,22 @@ a.fileChip:focus-visible {
   background: transparent;
   color: var(--color-text-muted);
   cursor: pointer;
+  transition:
+    transform var(--dur-micro) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
 }
 
 .plusButton:hover:not(:disabled),
 .plusButton:focus-visible:not(:disabled) {
   color: var(--color-text);
   background: var(--color-soft);
+  transform: scale(1.08);
   outline: none;
+}
+
+.plusButton:active:not(:disabled) {
+  transform: scale(0.94);
 }
 
 .plusButton:disabled {

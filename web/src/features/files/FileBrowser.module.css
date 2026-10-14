@@ -499,6 +499,10 @@
   color: var(--color-text-muted);
 }
 
+.table tbody tr {
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
 .table tbody tr:hover {
   background: var(--color-row-hover);
 }

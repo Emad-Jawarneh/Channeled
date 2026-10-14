@@ -43,6 +43,14 @@
   justify-content: center;
   text-decoration: none;
   margin-bottom: 6px;
+  transition: transform var(--dur-micro) var(--ease-out), filter var(--dur-fast) var(--ease-out);
+}
+
+.brand:hover,
+.brand:focus-visible {
+  transform: scale(1.06);
+  filter: brightness(1.05);
+  outline: none;
 }
 
 .railNav,
@@ -197,12 +205,17 @@
   font-size: var(--text-sm);
   font-weight: 700;
   text-decoration: none;
+  transition:
+    transform var(--dur-micro) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
 }
 
 .settingsBack:hover,
 .settingsBack:focus-visible {
   color: var(--color-text);
   background: var(--color-soft);
+  transform: translateX(-2px);
   outline: none;
 }
 
@@ -230,6 +243,16 @@
   border-radius: 10px;
   text-decoration: none;
   color: var(--color-text);
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    transform var(--dur-micro) var(--ease-out);
+}
+
+.sideNav a:hover,
+.sideNav a:focus-visible {
+  background: color-mix(in srgb, var(--color-soft) 70%, transparent);
+  outline: none;
 }
 
 .sideNav a[aria-current="page"],
@@ -291,15 +314,25 @@
   padding: 24px 28px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
 }
 
+/* Keyed pane so channel→channel (and route) switches can replay enter motion. */
+.contentPane {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  animation: motion-page-in var(--dur-base) var(--ease-soft) both;
+}
+
 /* Prevent flex-shrink from clipping tall pages (file tables, settings). */
-.content > * {
+.contentPane > * {
   flex-shrink: 0;
 }
 
@@ -315,6 +348,7 @@
   overflow-y: auto;
   overflow-x: hidden;
   min-height: 0;
+  animation: motion-slide-in-right var(--dur-base) var(--ease-out) both;
 }
 
 .accountMenu {
@@ -350,6 +384,8 @@
   box-shadow: var(--shadow-card);
   z-index: 40;
   overflow: hidden;
+  animation: motion-fade-scale-in var(--dur-fast) var(--ease-out) both;
+  transform-origin: bottom left;
 }
 
 .accountDropdown a,
@@ -364,6 +400,7 @@
   color: var(--color-text);
   text-decoration: none;
   cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out);
 }
 
 .accountDropdown a:hover,

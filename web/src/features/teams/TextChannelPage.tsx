@@ -533,6 +533,7 @@ export function TextChannelPage({ teamSlug, channelName }: Props) {
     <AppShell
       title={`#${channelName}`}
       sidebar={<ChannelSidebar teamSlug={teamSlug} channelName={channelName} />}
+      contentKey={`text:${teamSlug}/${channelName}`}
     >
       <section className={local.chat} aria-label={`Messages in ${channelName}`} data-testid="text-channel-home">
         <header className={local.chatHead}>

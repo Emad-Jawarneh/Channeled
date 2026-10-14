@@ -707,6 +707,7 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
       topbarExtra={
         <FilesSearchField value={nameQuery} onChange={setNameQuery} placeholder="Filter files…" />
       }
+      contentKey={`files:${teamSlug}/${channelName}${trash ? "/trash" : ""}`}
     >
       <DropOverlay active={dropActive} label={`Drop files to upload to #${channelName}`} />
       <div className={styles.headingBar} data-testid="dropzone">

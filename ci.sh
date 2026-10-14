@@ -37,6 +37,7 @@ npm run typecheck
 npm run lint
 npm run test -- --run
 npm run build
+node ../scripts/check-bundle-budget.mjs
 popd >/dev/null
 
 echo "[6/10] OpenAPI → TS client pipeline"

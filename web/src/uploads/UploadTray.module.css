@@ -9,6 +9,7 @@
   padding: var(--space-3);
   box-shadow: 0 12px 36px rgb(0 0 0 / 0.32);
   z-index: 40;
+  animation: motion-slide-up-in var(--dur-fast) var(--ease-out) both;
 }
 
 .header {

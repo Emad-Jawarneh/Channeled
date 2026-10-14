@@ -11,7 +11,17 @@ import {
 } from "./chatState";
 
 function msg(id: string, createdAt: string, body = id): ChannelMessage {
-  return { id, channelId: "c1", authorId: "u1", authorDisplayName: "Ada", body, createdAt, replyTo: null, mentions: [] };
+  return {
+    id,
+    channelId: "c1",
+    authorId: "u1",
+    authorDisplayName: "Ada",
+    body,
+    createdAt,
+    replyTo: null,
+    mentions: [],
+    fileIds: [],
+  };
 }
 
 // Server pages newest-first.

@@ -133,7 +133,9 @@ public static class DependencyInjection
         services.AddScoped<ChannelWriteGuard>();
         services.AddScoped<ITeamService, TeamService>();
         services.AddScoped<IFileService, FileService>();
+        services.AddScoped<IFileReferenceService, FileReferenceService>();
         services.AddScoped<IPersonalService, PersonalService>();
+        services.AddScoped<Channeled.Application.Clipboard.IClipboardService, Clipboard.ClipboardService>();
         services.AddScoped<ISearchService, SearchService>();
         services.AddScoped<IUsageService, UsageService>();
         services.AddScoped<IQuotaReconciliationService, QuotaReconciliationService>();

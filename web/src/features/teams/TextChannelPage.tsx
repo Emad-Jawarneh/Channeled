@@ -34,7 +34,15 @@ import {
   initialChatState,
   type ResyncBuffer,
 } from "./chatState";
+import { findFileAttachQuery, type FileAttachQuery } from "./fileAttach";
+import {
+  FileAttachPicker,
+  type FileAttachPick,
+  type FileAttachPickerHandle,
+} from "./FileAttachPicker";
 import { activeMentionIds, filterMembers, findMentionQuery, segmentBody, type MentionQuery } from "./mentions";
+import { MessageFileChips } from "./MessageFileChips";
+import { addComposerFileIds, MAX_MESSAGE_FILE_REFS } from "./messageFileRefs";
 import local from "./TextChannelPage.module.css";
 
 const REPLY_PREVIEW_LENGTH = 140;
@@ -122,6 +130,12 @@ export function TextChannelPage({ teamSlug, channelName }: Props) {
   const [trackedMentions, setTrackedMentions] = useState<MessageMention[]>([]);
   const [mentionQuery, setMentionQuery] = useState<MentionQuery | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
+  const [fileAttachQuery, setFileAttachQuery] = useState<FileAttachQuery | null>(null);
+  const [attachPickerOpen, setAttachPickerOpen] = useState(false);
+  const [composerFileIds, setComposerFileIds] = useState<string[]>([]);
+  const [composerFileLabels, setComposerFileLabels] = useState<Record<string, string>>({});
+  const [attachLimitError, setAttachLimitError] = useState<string | null>(null);
+  const attachPickerRef = useRef<FileAttachPickerHandle>(null);
 
   const members = useQuery({
     queryKey: ["members", teamSlug],
@@ -150,6 +164,11 @@ export function TextChannelPage({ teamSlug, channelName }: Props) {
     setReplyToId(null);
     setTrackedMentions([]);
     setMentionQuery(null);
+    setFileAttachQuery(null);
+    setAttachPickerOpen(false);
+    setComposerFileIds([]);
+    setComposerFileLabels({});
+    setAttachLimitError(null);
     stickToBottom.current = true;
   }, [teamSlug, channelName]);
 
@@ -255,10 +274,14 @@ export function TextChannelPage({ teamSlug, channelName }: Props) {
   );
   const mentionOpen = mentionQuery !== null && mentionCandidates.length > 0;
 
+  const fileAttachOpen = attachPickerOpen || fileAttachQuery !== null;
+  const attachFilter = fileAttachQuery?.query ?? "";
+
   const length = codePointLength(draft);
   const tooLong = length > MESSAGE_MAX_LENGTH;
   const canPost = canPostMessage(teamRole, archived);
-  const canSend = canPost && !sending && !tooLong && draft.trim().length > 0;
+  const canSend =
+    canPost && !sending && !tooLong && (draft.trim().length > 0 || composerFileIds.length > 0);
 
   async function send(event?: FormEvent) {
     event?.preventDefault();
@@ -270,6 +293,7 @@ export function TextChannelPage({ teamSlug, channelName }: Props) {
         body: draft,
         replyToMessageId: replyTarget?.id ?? null,
         mentionedUserIds: activeMentionIds(draft, trackedMentions),
+        fileIds: composerFileIds,
       });
       stickToBottom.current = true;
       dispatch({ type: "created", message });
@@ -277,6 +301,11 @@ export function TextChannelPage({ teamSlug, channelName }: Props) {
       setReplyToId(null);
       setTrackedMentions([]);
       setMentionQuery(null);
+      setFileAttachQuery(null);
+      setAttachPickerOpen(false);
+      setComposerFileIds([]);
+      setComposerFileLabels({});
+      setAttachLimitError(null);
     } catch (error) {
       setSendError(describeError(error));
     } finally {
@@ -284,17 +313,70 @@ export function TextChannelPage({ teamSlug, channelName }: Props) {
     }
   }
 
-  function updateMentionQuery(value: string, caret: number) {
-    const next = findMentionQuery(value, caret);
-    if (mentionQuery?.start !== next?.start || mentionQuery?.query !== next?.query) {
+  function closeAttachPicker() {
+    setAttachPickerOpen(false);
+    setFileAttachQuery(null);
+  }
+
+  function updateComposerQueries(value: string, caret: number) {
+    const fileNext = findFileAttachQuery(value, caret);
+    if (fileNext) {
+      setFileAttachQuery(fileNext);
+      setAttachPickerOpen(true);
+      setMentionQuery(null);
+      return;
+    }
+    // Keep button-opened picker open until dismissed; only clear # token state.
+    setFileAttachQuery(null);
+    const mentionNext = findMentionQuery(value, caret);
+    if (mentionQuery?.start !== mentionNext?.start || mentionQuery?.query !== mentionNext?.query) {
       setMentionIndex(0);
     }
-    setMentionQuery(next);
+    setMentionQuery(mentionNext);
   }
 
   function onDraftChange(event: ChangeEvent<HTMLTextAreaElement>) {
     setDraft(event.target.value);
-    updateMentionQuery(event.target.value, event.target.selectionStart);
+    updateComposerQueries(event.target.value, event.target.selectionStart);
+  }
+
+  function addComposerFile(pick: FileAttachPick) {
+    const { next, rejected } = addComposerFileIds(composerFileIds, [pick.id]);
+    setComposerFileIds(next);
+    setComposerFileLabels((current) => ({
+      ...current,
+      [pick.id]: `${pick.name} · ${pick.channelName}`,
+    }));
+    if (rejected.length > 0) {
+      setAttachLimitError(`At most ${MAX_MESSAGE_FILE_REFS} files per message.`);
+    } else {
+      setAttachLimitError(null);
+    }
+    if (fileAttachQuery) {
+      const caret = inputRef.current?.selectionStart ?? draft.length;
+      const nextDraft = draft.slice(0, fileAttachQuery.start) + draft.slice(caret);
+      pendingCaret.current = fileAttachQuery.start;
+      setDraft(nextDraft);
+    }
+    closeAttachPicker();
+  }
+
+  function removeComposerFile(id: string) {
+    setComposerFileIds((current) => current.filter((x) => x !== id));
+    setComposerFileLabels((current) => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+    setAttachLimitError(null);
+  }
+
+  function startFileAttach() {
+    if (!canPost) return;
+    setMentionQuery(null);
+    setFileAttachQuery(null);
+    setAttachPickerOpen(true);
+    inputRef.current?.focus();
   }
 
   function insertMention(member: TeamMember) {
@@ -336,6 +418,29 @@ export function TextChannelPage({ teamSlug, channelName }: Props) {
   }
 
   function onComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (fileAttachOpen && !event.nativeEvent.isComposing) {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        attachPickerRef.current?.move(1);
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        attachPickerRef.current?.move(-1);
+        return;
+      }
+      if (event.key === "Enter" || event.key === "Tab") {
+        event.preventDefault();
+        attachPickerRef.current?.activate();
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        if (attachPickerRef.current?.back()) return;
+        closeAttachPicker();
+        return;
+      }
+    }
     if (mentionOpen && !event.nativeEvent.isComposing) {
       if (event.key === "ArrowDown") {
         event.preventDefault();
@@ -509,6 +614,7 @@ export function TextChannelPage({ teamSlug, channelName }: Props) {
                     </div>
                     {/* Plain text only: React escapes it and pre-wrap keeps line breaks. */}
                     <MessageBody message={message} myId={user?.id} />
+                    <MessageFileChips teamSlug={teamSlug} fileIds={message.fileIds ?? []} />
                   </div>
                 </li>
               );
@@ -543,7 +649,46 @@ export function TextChannelPage({ teamSlug, channelName }: Props) {
               </button>
             </div>
           )}
+          {composerFileIds.length > 0 && (
+            <div className={local.composerFileChips} data-testid="composer-file-chips">
+              {composerFileIds.map((id) => (
+                <span key={id} className={local.composerFileChip}>
+                  {composerFileLabels[id] ?? "File"}
+                  <button
+                    type="button"
+                    className={local.actionButton}
+                    aria-label="Remove attachment"
+                    onClick={() => removeComposerFile(id)}
+                  >
+                    ✕
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          <div className={local.composerAttachRow}>
+            <Button type="button" onClick={startFileAttach} disabled={!canPost || sending} data-testid="chat-attach-file">
+              Attach file
+            </Button>
+            <span className={local.counter}>
+              {composerFileIds.length}/{MAX_MESSAGE_FILE_REFS} files
+            </span>
+          </div>
+          {attachLimitError && (
+            <p className={local.error} role="alert">
+              {attachLimitError}
+            </p>
+          )}
           <div className={local.inputWrap}>
+            <FileAttachPicker
+              ref={attachPickerRef}
+              open={fileAttachOpen}
+              teamSlug={teamSlug}
+              filter={attachFilter}
+              excludeIds={composerFileIds}
+              onPick={addComposerFile}
+              onClose={closeAttachPicker}
+            />
             {mentionOpen && (
               <ul id="mention-listbox" className={local.mentionList} role="listbox" aria-label="Mention a teammate" data-testid="mention-list">
                 {mentionCandidates.map((member, index) => (
@@ -572,11 +717,15 @@ export function TextChannelPage({ teamSlug, channelName }: Props) {
             className={local.input}
             value={draft}
             onChange={onDraftChange}
-            onSelect={(e) => updateMentionQuery(e.currentTarget.value, e.currentTarget.selectionStart)}
-            onBlur={() => setMentionQuery(null)}
+            onSelect={(e) => updateComposerQueries(e.currentTarget.value, e.currentTarget.selectionStart)}
+            onBlur={() => {
+              setMentionQuery(null);
+              // Keep hierarchical picker open so channel/file clicks register; dismiss via Close/Escape.
+            }}
             onKeyDown={onComposerKeyDown}
-            aria-controls={mentionOpen ? "mention-listbox" : undefined}
+            aria-controls={fileAttachOpen ? "file-attach-listbox" : mentionOpen ? "mention-listbox" : undefined}
             aria-autocomplete="list"
+            aria-expanded={fileAttachOpen || mentionOpen}
             aria-activedescendant={
               mentionOpen && mentionCandidates[mentionIndex]
                 ? `mention-option-${mentionCandidates[mentionIndex]!.userId}`
@@ -586,7 +735,7 @@ export function TextChannelPage({ teamSlug, channelName }: Props) {
               archived
                 ? "This channel is archived"
                 : canPost
-                  ? "Write a message — Enter to send, Shift+Enter for a new line"
+                  ? "Write a message — # or Attach file, Enter to send"
                   : "You have read-only access to this channel"
             }
             rows={2}

@@ -5,6 +5,7 @@
   min-height: 100%;
   margin: -24px;
   padding: 0;
+  animation: motion-slide-in-right var(--dur-base) var(--ease-out) both;
 }
 
 .panel[data-empty="true"] {

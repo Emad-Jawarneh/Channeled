@@ -1032,8 +1032,8 @@ public sealed partial class TeamService
     // ------------------------------------------------------------------ helpers: join-request notifications
 
     /// <summary>
-    /// New request: one TeamJoinRequest notification per Admin+ (MessageId = request id, ChannelId empty),
-    /// coalesced so an admin with an unread one for this team does not get another.
+    /// New request: one TeamJoinRequest notification per Admin+ for this request (MessageId = request id).
+    /// Each pending join is its own list item so the bell count matches what the panel shows.
     /// </summary>
     private async Task<IReadOnlyList<NotificationEntity>> FanOutJoinRequestNotificationsAsync(
         TeamEntity team,
@@ -1049,40 +1049,28 @@ public sealed partial class TeamService
             return [];
         }
 
-        var alreadyUnread = (await db.Notifications.AsNoTracking()
-                .Where(n => n.Type == NotificationType.TeamJoinRequest
-                            && n.TeamId == team.Id
-                            && n.ReadAt == null
-                            && adminIds.Contains(n.UserId))
-                .Select(n => n.UserId)
-                .Distinct()
-                .ToListAsync(ct))
-            .ToHashSet();
-
         var name = await db.Users.AsNoTracking()
             .Where(u => u.Id == request.UserId)
             .Select(u => u.DisplayName)
             .FirstOrDefaultAsync(ct) ?? "Someone";
 
-        var created = new List<NotificationEntity>();
-        foreach (var adminId in adminIds.Where(a => !alreadyUnread.Contains(a)))
-        {
-            created.Add(NewJoinNotification(adminId, team, request.Id, request.UserId, $"{name} requested to join {team.Name}"));
-        }
-
-        if (created.Count > 0)
-        {
-            db.Notifications.AddRange(created);
-            await db.SaveChangesAsync(ct);
-        }
-
+        var created = adminIds
+            .Select(adminId => NewJoinNotification(
+                adminId,
+                team,
+                request.Id,
+                request.UserId,
+                $"{name} requested to join {team.Name}"))
+            .ToList();
+        db.Notifications.AddRange(created);
+        await db.SaveChangesAsync(ct);
         return created;
     }
 
     /// <summary>
     /// Keeps TeamJoinRequest notifications consistent with reality (call after request status / role changes were saved):
-    /// removes notifications pointing at decided/missing requests or owned by users who are no longer Admin+,
-    /// then gives any Admin+ who has none a fresh one when requests are still pending.
+    /// removes notifications for decided/missing requests or non-admins, then ensures every Admin+ has
+    /// one notification per still-pending request.
     /// Returns the newly created notifications (for realtime push after commit).
     /// </summary>
     private async Task<IReadOnlyList<NotificationEntity>> ReconcileJoinNotificationsAsync(Guid teamId, CancellationToken ct)
@@ -1109,31 +1097,42 @@ public sealed partial class TeamService
             return [];
         }
 
-        var haveOne = (await db.Notifications.AsNoTracking()
-                .Where(n => n.Type == NotificationType.TeamJoinRequest && n.TeamId == teamId)
-                .Select(n => n.UserId)
-                .Distinct()
-                .ToListAsync(ct))
-            .ToHashSet();
-        var missing = adminIds.Where(a => !haveOne.Contains(a)).ToList();
-        if (missing.Count == 0)
+        var existing = await db.Notifications.AsNoTracking()
+            .Where(n => n.Type == NotificationType.TeamJoinRequest && n.TeamId == teamId)
+            .Select(n => new { n.UserId, n.MessageId })
+            .ToListAsync(ct);
+        var have = existing.Select(e => (e.UserId, e.MessageId)).ToHashSet();
+
+        var team = await db.Teams.AsNoTracking().FirstAsync(t => t.Id == teamId, ct);
+        var names = await db.Users.AsNoTracking()
+            .Where(u => pending.Select(p => p.UserId).Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, u => u.DisplayName, ct);
+
+        var created = new List<NotificationEntity>();
+        foreach (var adminId in adminIds)
+        {
+            foreach (var req in pending)
+            {
+                if (have.Contains((adminId, req.Id)))
+                {
+                    continue;
+                }
+
+                var name = names.GetValueOrDefault(req.UserId, "Someone");
+                created.Add(NewJoinNotification(
+                    adminId,
+                    team,
+                    req.Id,
+                    req.UserId,
+                    $"{name} requested to join {team.Name}"));
+            }
+        }
+
+        if (created.Count == 0)
         {
             return [];
         }
 
-        var team = await db.Teams.AsNoTracking().FirstAsync(t => t.Id == teamId, ct);
-        var head = pending[0];
-        var name = await db.Users.AsNoTracking()
-            .Where(u => u.Id == head.UserId)
-            .Select(u => u.DisplayName)
-            .FirstOrDefaultAsync(ct) ?? "Someone";
-        var preview = pending.Count == 1
-            ? $"{name} requested to join {team.Name}"
-            : $"{name} and {pending.Count - 1} other(s) requested to join {team.Name}";
-
-        var created = missing
-            .Select(adminId => NewJoinNotification(adminId, team, head.Id, head.UserId, preview))
-            .ToList();
         db.Notifications.AddRange(created);
         await db.SaveChangesAsync(ct);
         return created;

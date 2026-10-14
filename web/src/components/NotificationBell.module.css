@@ -15,6 +15,7 @@
   background: var(--color-surface);
   color: var(--color-text);
   cursor: pointer;
+  overflow: visible;
 }
 
 .bell:hover,
@@ -31,24 +32,6 @@
   padding: 0 5px;
   border-radius: var(--radius-pill);
   background: var(--color-danger);
-  color: var(--color-on-accent);
-  font-size: 0.675rem;
-  font-weight: 800;
-  line-height: 18px;
-  text-align: center;
-  border: 2px solid var(--color-surface);
-  box-sizing: content-box;
-}
-
-.pendingBadge {
-  position: absolute;
-  bottom: -6px;
-  right: -6px;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border-radius: var(--radius-pill);
-  background: var(--color-text-muted);
   color: var(--color-on-accent);
   font-size: 0.675rem;
   font-weight: 800;

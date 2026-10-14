@@ -422,6 +422,53 @@
   border: 1px solid color-mix(in srgb, var(--color-accent) 35%, var(--color-border));
   border-radius: 12px;
   background: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface));
+  animation: motion-slide-up-in var(--dur-fast) var(--ease-out) both;
+}
+
+.clipboardChip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+  padding: 0.4rem 0.65rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  animation: motion-slide-up-in var(--dur-fast) var(--ease-out) both;
+}
+
+.clipboardChipAction,
+.clipboardChipClear {
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0.1rem 0.25rem;
+}
+
+.clipboardChipAction {
+  color: var(--color-focus);
+}
+
+.clipboardChipAction:hover,
+.clipboardChipAction:focus-visible,
+.clipboardChipClear:hover,
+.clipboardChipClear:focus-visible {
+  color: var(--color-text);
+}
+
+.clipboardChipAction:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.table tr[data-cut="true"] {
+  opacity: 0.45;
+  transition: opacity var(--dur-fast) var(--ease-out);
 }
 
 .bulkCount {
@@ -488,6 +535,9 @@
 .table tr[data-drop-active="true"] {
   background: var(--color-soft);
   outline: 1px solid var(--color-focus);
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    outline-color var(--dur-fast) var(--ease-out);
 }
 
 .dragGhost {
@@ -550,10 +600,9 @@
   color: var(--color-text-muted);
   cursor: pointer;
   transition:
-    background 120ms ease,
-    border-color 120ms ease,
-    color 120ms ease,
-    box-shadow 120ms ease;
+    background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
 }
 
 .table tbody tr:hover .moreBtn,
@@ -611,6 +660,8 @@
   z-index: 1000;
   min-width: 11.5rem;
   box-shadow: var(--shadow-card);
+  animation: motion-fade-scale-in var(--dur-base) var(--ease-out) both;
+  transform-origin: top left;
 }
 
 .menu button {

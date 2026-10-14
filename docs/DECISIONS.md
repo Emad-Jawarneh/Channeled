@@ -195,6 +195,21 @@
 **Decision:** Public `UsernameSlug` is 3–30 ASCII `[a-z0-9._-]`, no leading/trailing/double separators, reserved-name blocklist. First rename is free; then 30-day cooldown; previous name held in `username_reservations` (owner may reclaim without resetting cooldown). Display names are NFC-normalized with zero-width/bidi stripped. Shared `UserSummary` / avatar+card visibility: self, platform admin, or shared team (else 404). Avatars via SkiaSharp (+ Linux NoDependencies), 2 MB dual caps, orphan delete via `object_delete`.
 **Reason:** Stable mentions/chips without using email as the public handle; closed-team profile privacy.
 
+## 2026-10-14 — Motion tokens
+
+**Decision:** CSS variables `--dur-fast` (120ms), `--dur-base` (200ms), `--ease-out` in `tokens.css`. Animate only `transform`/`opacity`. Global `prefers-reduced-motion: reduce` collapses non-essential motion. Playwright sets `reducedMotion: "reduce"`. CI fails if the main Vite JS chunk exceeds 750 KB (`scripts/check-bundle-budget.mjs`).
+**Reason:** Consistent interruptible motion without layout thrash; keep e2e stable.
+
+## 2026-10-14 — In-app file clipboard
+
+**Decision:** Client-only clipboard (ids + source scope + cut|copy). Paste via `POST /api/v1/clipboard/paste` with per-item results. Caps: 50 items; folder copy depth 8 / 200 nodes. Name conflicts auto-rename `name (copy)` / `name (copy N)`. Re-auth + `ChannelWriteGuard` at paste time. Team→personal paste is copy-only (Download required); cut of folders across channels rejected. No OS clipboard; clear on sign-out, successful paste, or vanished source ids while viewing the source folder.
+**Reason:** Bulk paste with partial failure reporting without racing channel delete or leaking quota mid-batch.
+
+## 2026-10-14 — Chat structured file references (Phase 3)
+
+**Decision:** Text messages may attach up to five team file ids in `message_file_refs` (composite PK, cascade when the message row is removed; soft-delete scrubs refs in the same request). POST accepts `fileIds[]`; poster must browse each file’s channel within the same team; body may be empty when at least one file id is present. List/GET and `messageCreated` expose **file ids only**. Clients resolve metadata via `POST /api/v1/teams/{slug}/files/resolve` (`live` / `trashed` / `missing`; inaccessible returns no name/size/type).
+**Reason:** Link files in chat without embedding filenames in the message stream; batch resolve keeps list/hub payloads small and enforces auth at read time.
+
 ## 2026-10-14 — 2FA deferred, not a release gate
 
 **Decision:** Email OTP / pre-auth / recovery codes / trusted devices are deferred. Revisit with an authenticator app (TOTP) first, email codes only as a fallback, and recovery codes included from the start. Identity `TwoFactorEnabled` stays unused and unexposed. Sign-in returns a `SignInOutcome` so a second step can be added later without rewriting session creation.

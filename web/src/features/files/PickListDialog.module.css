@@ -33,6 +33,7 @@
       transparent 28%
     ),
     var(--color-surface);
+  animation: motion-fade-scale-in var(--dur-base) var(--ease-out) both;
 }
 
 .header {

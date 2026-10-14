@@ -12,6 +12,9 @@
 | M12 Replies / mentions / notifications | ✅ Complete | ReplyMentionNotificationTests + MentionResolverTests; NotificationBell + TextChannelPage reply/@ |
 | M13 Channel edit / delete | ✅ Complete | ChannelDeleteApiTests (discard/move/quota/perms); settings edit + type-to-confirm delete (move|discard) |
 | M14 Account / Profiles (no 2FA) | ✅ Complete | Usernames, avatars, UserChip, account settings, SMTP + self-service mail, fragment confirm/reset, session revoke on password/email change |
+| M15 Chat file refs (Phase 3) | ✅ Complete | `message_file_refs` + resolve API; MessageFileRefsApiTests; TextChannelPage attach/# + FileBrowser “Share to chat…” |
+| M16 Motion tokens | ✅ Complete | `--dur-*` / reduced-motion; skeletons; Playwright reducedMotion; bundle budget script |
+| M17 File clipboard | ✅ Complete | `POST /api/v1/clipboard/paste`; client chip + shortcuts; ClipboardPasteApiTests + e2e smoke |
 
 ## M9–M12 notes
 

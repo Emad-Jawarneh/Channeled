@@ -273,6 +273,25 @@ public static class FileEndpoints
             return ToHttp(await files.CompleteUploadAsync(userId, uploadId, request, Ctx(http), ct));
         });
 
+        var teamFiles = app.MapGroup("/api/v1/teams/{slug}/files")
+            .WithTags("Files")
+            .RequireAuthorization();
+
+        teamFiles.MapPost("/resolve", async Task<IResult> (
+            string slug,
+            ResolveFilesRequest body,
+            IFileReferenceService fileRefs,
+            ClaimsPrincipal principal,
+            CancellationToken ct) =>
+        {
+            if (!TryUser(principal, out var userId))
+            {
+                return Unauthorized();
+            }
+
+            return ToHttp(await fileRefs.ResolveAsync(userId, slug, body, ct));
+        });
+
         uploads.MapPost("/{uploadId:guid}/abort", async Task<IResult> (
             Guid uploadId,
             IFileService files,

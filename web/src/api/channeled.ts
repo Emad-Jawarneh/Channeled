@@ -430,6 +430,7 @@ export type ChannelMessage = {
   /** Quote of the message this one replies to (absent/null when it is not a reply). */
   replyTo?: ReplyPreview | null;
   mentions: MessageMention[];
+  fileIds: string[];
 };
 
 export type ReplyPreview = {
@@ -446,7 +447,21 @@ export type PostMessageRequest = {
   body: string;
   replyToMessageId?: string | null;
   mentionedUserIds?: string[];
+  fileIds?: string[];
 };
+
+export type ResolvedFile = {
+  fileId: string;
+  accessible: boolean;
+  name?: string | null;
+  sizeBytes?: number | null;
+  contentType?: string | null;
+  channelName?: string | null;
+  folderId?: string | null;
+  state: "live" | "trashed" | "missing" | string;
+};
+
+export type ResolveFilesResponse = { items: ResolvedFile[] };
 
 /** Newest-first page; `nextCursor` pages toward older messages. */
 export type MessageList = { items: ChannelMessage[]; nextCursor?: string | null };
@@ -487,6 +502,7 @@ export const messagesApi = {
           body: request.body,
           replyToMessageId: request.replyToMessageId ?? null,
           mentionedUserIds: request.mentionedUserIds ?? [],
+          fileIds: request.fileIds ?? [],
         },
       },
     ),
@@ -644,6 +660,11 @@ export const filesApi = {
       method: "POST",
       json: { name, parentFolderId: parentFolderId ?? null },
     }),
+  resolve: (slug: string, fileIds: string[]) =>
+    api<ResolveFilesResponse>(`/api/v1/teams/${encodeURIComponent(slug)}/files/resolve`, {
+      method: "POST",
+      json: { fileIds },
+    }),
   startUpload: (body: {
     teamSlug: string;
     channelName: string;
@@ -789,6 +810,39 @@ export const searchApi = {
     if (opts.limit) params.set("limit", String(opts.limit));
     return api<SearchResponse>(`/api/v1/search?${params}`);
   },
+};
+
+export type ClipboardScopePayload = {
+  scope: "channel" | "personal";
+  teamSlug?: string | null;
+  channelName?: string | null;
+  folderId?: string | null;
+};
+
+export type ClipboardPasteRequest = {
+  mode: "cut" | "copy";
+  itemIds: string[];
+  source: ClipboardScopePayload;
+  target: ClipboardScopePayload;
+};
+
+export type ClipboardPasteItemResult = {
+  itemId: string;
+  status: string;
+  newItemId?: string | null;
+  errorCode?: string | null;
+  message?: string | null;
+};
+
+export type ClipboardPasteResponse = {
+  succeeded: number;
+  failed: number;
+  results: ClipboardPasteItemResult[];
+};
+
+export const clipboardApi = {
+  paste: (body: ClipboardPasteRequest) =>
+    api<ClipboardPasteResponse>("/api/v1/clipboard/paste", { method: "POST", json: body }),
 };
 
 export const adminApi = {

@@ -121,6 +121,22 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Channeled.Infrastructure.Chat.MessageFileRefEntity", b =>
+                {
+                    b.Property<Guid>("MessageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("FileId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("MessageId", "FileId");
+
+                    b.HasIndex("FileId")
+                        .HasDatabaseName("ix_message_file_refs_file");
+
+                    b.ToTable("message_file_refs", (string)null);
+                });
+
             modelBuilder.Entity("Channeled.Infrastructure.Chat.MessageMentionEntity", b =>
                 {
                     b.Property<Guid>("MessageId")
@@ -1363,6 +1379,17 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                     b.Navigation("ReplyToMessage");
                 });
 
+            modelBuilder.Entity("Channeled.Infrastructure.Chat.MessageFileRefEntity", b =>
+                {
+                    b.HasOne("Channeled.Infrastructure.Chat.ChannelMessageEntity", "Message")
+                        .WithMany("FileRefs")
+                        .HasForeignKey("MessageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Message");
+                });
+
             modelBuilder.Entity("Channeled.Infrastructure.Chat.MessageMentionEntity", b =>
                 {
                     b.HasOne("Channeled.Infrastructure.Chat.ChannelMessageEntity", "Message")
@@ -1546,6 +1573,8 @@ namespace Channeled.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Channeled.Infrastructure.Chat.ChannelMessageEntity", b =>
                 {
+                    b.Navigation("FileRefs");
+
                     b.Navigation("Mentions");
                 });
 

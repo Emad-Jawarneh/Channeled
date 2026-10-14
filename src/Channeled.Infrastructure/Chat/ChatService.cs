@@ -6,6 +6,7 @@ using Channeled.Application.Abstractions.Results;
 using Channeled.Application.Abstractions.Time;
 using Channeled.Application.Chat;
 using Channeled.Application.Identity;
+using Channeled.Application.Files;
 using Channeled.Application.Notifications;
 using Channeled.Domain.Audit;
 using Channeled.Domain.Authorization;
@@ -26,7 +27,8 @@ public sealed class ChatService(
     IAuthorizer authorizer,
     IClock clock,
     IChannelNotifier notifier,
-    PresenceTracker presence) : IChatService
+    PresenceTracker presence,
+    IFileReferenceService fileRefs) : IChatService
 {
     public async Task<AppResult<ChannelMessageDto>> PostMessageAsync(
         Guid userId,
@@ -50,11 +52,26 @@ public sealed class ChatService(
                 : AppResult<ChannelMessageDto>.Fail(ErrorCodes.Forbidden, "You cannot post in this channel.");
         }
 
-        var body = request.Body;
-        if (string.IsNullOrWhiteSpace(body) || body.Contains('\0', StringComparison.Ordinal))
+        var rawBody = request.Body ?? "";
+        if (rawBody.Contains('\0', StringComparison.Ordinal))
         {
             return AppResult<ChannelMessageDto>.Fail(ErrorCodes.Validation, "Message body is required.");
         }
+
+        var fileIdResult = await fileRefs.ValidateForMessagePostAsync(userId, channel.Team.Id, request.FileIds, ct);
+        if (!fileIdResult.Succeeded)
+        {
+            return AppResult<ChannelMessageDto>.Fail(fileIdResult.Code!, fileIdResult.Message!);
+        }
+
+        var attachedFileIds = fileIdResult.Value!;
+        var hasFiles = attachedFileIds.Count > 0;
+        if (string.IsNullOrWhiteSpace(rawBody) && !hasFiles)
+        {
+            return AppResult<ChannelMessageDto>.Fail(ErrorCodes.Validation, "Message body is required.");
+        }
+
+        var body = string.IsNullOrWhiteSpace(rawBody) ? "" : rawBody;
 
         if (CodePointCount(body) > ChatOptions.MaxBodyLength)
         {
@@ -105,7 +122,12 @@ public sealed class ChatService(
             db.MessageMentions.Add(new MessageMentionEntity { MessageId = message.Id, UserId = mentionedId });
         }
 
-        var preview = Truncate(body.Trim(), 280);
+        foreach (var fileId in attachedFileIds)
+        {
+            db.MessageFileRefs.Add(new MessageFileRefEntity { MessageId = message.Id, FileId = fileId });
+        }
+
+        var preview = Truncate((string.IsNullOrWhiteSpace(body) ? "[file]" : body.Trim()), 280);
         var notifications = BuildNotifications(
             actorId: userId,
             messageId: message.Id,
@@ -139,7 +161,7 @@ public sealed class ChatService(
             .OrderBy(m => m.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        var dto = ToDto(message, author, replyDto, mentionDtos);
+        var dto = ToDto(message, author, replyDto, mentionDtos, attachedFileIds);
         notifier.NotifyMessageCreated(channel.Channel.Id, dto);
 
         var actorName = author;
@@ -235,6 +257,14 @@ public sealed class ChatService(
             : await db.MessageMentions.AsNoTracking()
                 .Where(m => messageIds.Contains(m.MessageId))
                 .ToListAsync(ct);
+        var fileRefRows = messageIds.Count == 0
+            ? new List<MessageFileRefEntity>()
+            : await db.MessageFileRefs.AsNoTracking()
+                .Where(r => messageIds.Contains(r.MessageId))
+                .ToListAsync(ct);
+        var fileIdsByMessage = fileRefRows
+            .GroupBy(r => r.MessageId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<Guid>)g.Select(r => r.FileId).ToList());
         var mentionUserIds = mentions.Select(m => m.UserId).Distinct().ToList();
         var mentionNames = mentionUserIds.Count == 0
             ? new Dictionary<Guid, string>()
@@ -256,7 +286,8 @@ public sealed class ChatService(
                 .OrderBy(m => m.DisplayName, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
-            return ToDto(r, names.GetValueOrDefault(r.AuthorId, "Deleted user"), reply, msgMentions);
+            var msgFileIds = fileIdsByMessage.GetValueOrDefault(r.Id, []);
+            return ToDto(r, names.GetValueOrDefault(r.AuthorId, "Deleted user"), reply, msgMentions, msgFileIds);
         }).ToList();
 
         return AppResult<MessageListResponse>.Ok(new MessageListResponse(items, next));
@@ -305,6 +336,7 @@ public sealed class ChatService(
         message.Body = "";
         message.DeletedAt = clock.UtcNow;
         message.DeletedBy = userId;
+        await db.MessageFileRefs.Where(r => r.MessageId == message.Id).ExecuteDeleteAsync(ct);
 
         db.AuditEvents.Add(new AuditEvent
         {
@@ -419,8 +451,9 @@ public sealed class ChatService(
         ChannelMessageEntity m,
         string authorDisplayName,
         MessageReplyPreviewDto? replyTo,
-        IReadOnlyList<MessageMentionDto> mentions) =>
-        new(m.Id, m.ChannelId, m.AuthorId, authorDisplayName, m.Body, m.CreatedAt, replyTo, mentions);
+        IReadOnlyList<MessageMentionDto> mentions,
+        IReadOnlyList<Guid> fileIds) =>
+        new(m.Id, m.ChannelId, m.AuthorId, authorDisplayName, m.Body, m.CreatedAt, replyTo, mentions, fileIds);
 
     private static MessageReplyPreviewDto ToReplyPreview(ChannelMessageEntity parent, string authorDisplayName)
     {

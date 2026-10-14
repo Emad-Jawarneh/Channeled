@@ -9,6 +9,7 @@ import {
 } from "react";
 import { authApi, type AuthUser } from "../api/channeled";
 import { clearCsrf, ensureCsrf } from "../api/http";
+import { clearFileClipboard } from "../features/files/fileClipboard";
 
 type AuthState = {
   user: AuthUser | null;
@@ -59,6 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await authApi.logout();
     } finally {
+      clearFileClipboard();
       clearCsrf();
       setUser(null);
     }

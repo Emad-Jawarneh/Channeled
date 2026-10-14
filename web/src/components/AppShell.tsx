@@ -8,6 +8,7 @@ import { createTeamWithGeneral } from "../features/teams/createTeam";
 import { TeamMark } from "../features/teams/TeamMark";
 import { UploadTray } from "../uploads/UploadTray";
 import { ThemeToggle } from "../theme/ThemeToggle";
+import { ClipboardShelf } from "../features/files/ClipboardShelf";
 import { NotificationBell } from "./NotificationBell";
 import styles from "./AppShell.module.css";
 
@@ -245,6 +246,7 @@ export function AppShell({ children, sidebar, details, title, topbarExtra }: App
           <div className={styles.topActions}>
             {topbarExtra}
             <ThemeToggle compact />
+            <ClipboardShelf />
             <NotificationBell />
           </div>
         </header>

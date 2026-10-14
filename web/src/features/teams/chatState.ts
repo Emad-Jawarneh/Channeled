@@ -36,11 +36,19 @@ export function compareMessages(a: ChannelMessage, b: ChannelMessage): number {
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
+function normalizeMessage(message: ChannelMessage): ChannelMessage {
+  return {
+    ...message,
+    mentions: message.mentions ?? [],
+    fileIds: message.fileIds ?? [],
+  };
+}
+
 function merge(...lists: ChannelMessage[][]): ChannelMessage[] {
   const byId = new Map<string, ChannelMessage>();
   for (const list of lists) {
     for (const message of list) {
-      byId.set(message.id, message);
+      byId.set(message.id, normalizeMessage(message));
     }
   }
   return [...byId.values()].sort(compareMessages);

@@ -21,8 +21,11 @@ import { DropOverlay } from "../../uploads/DropOverlay";
 import { useFileDrop } from "../../uploads/useFileDrop";
 import { useUploads } from "../../uploads/UploadContext";
 import { Button } from "../../ui/Button";
+import { SkeletonList } from "../../ui/SkeletonList";
 import { BulkBar } from "../files/BulkBar";
+import { ClipboardChip } from "../files/ClipboardChip";
 import { CreateFolderDialog } from "../files/CreateFolderDialog";
+import { useFileClipboard } from "../files/useFileClipboard";
 import {
   CHANNELED_ITEMS_MIME,
   clearDraggedItemIds,
@@ -43,6 +46,7 @@ import { moveBatch, summarizeMoveResult, type MoveBatchPrior } from "../files/mo
 import { PickListDialog } from "../files/PickListDialog";
 import { SelectionControls } from "../files/SelectionControls";
 import { nextSortState, SortableTh, type SortColumn } from "../files/SortableTh";
+import { compareFileItems } from "../files/sortItems";
 import { UploadButton } from "../files/UploadButton";
 import { useFolderNav } from "../files/useFolderNav";
 import styles from "../files/FileBrowser.module.css";
@@ -244,19 +248,7 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
     if (q) {
       items = items.filter((i) => i.name.toLowerCase().includes(q));
     }
-    const dir = sortDir === "asc" ? 1 : -1;
-    return [...items].sort((a, b) => {
-      if (sort === "size") {
-        return ((a.sizeBytes ?? 0) - (b.sizeBytes ?? 0)) * dir;
-      }
-      if (sort === "updated") {
-        return (new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime()) * dir;
-      }
-      if (sort === "type") {
-        return formatFileType(a).localeCompare(formatFileType(b)) * dir;
-      }
-      return a.name.localeCompare(b.name) * dir;
-    });
+    return [...items].sort((a, b) => compareFileItems(a, b, sort, sortDir));
   }, [list.data, nameQuery, sort, sortDir]);
 
   function onSortColumn(column: SortColumn) {
@@ -269,6 +261,37 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
     () => visibleItems.filter((i) => checked.has(i.id)),
     [visibleItems, checked],
   );
+  const listedIds = useMemo(() => visibleItems.map((i) => i.id), [visibleItems]);
+  const selectedIds = useMemo(() => {
+    if (checked.size > 0) return [...checked];
+    return selected ? [selected.id] : [];
+  }, [checked, selected]);
+  const clipboard = useFileClipboard({
+    currentSource: { scope: "personal", folderId: folderId ?? null },
+    listedIds,
+    listedItems: visibleItems,
+    selectedIds,
+    enabled: mode === "files",
+    onError: (message) => setError(message),
+    onPasteResult: (res) => {
+      setMoveSummary({
+        message:
+          res.failed === 0
+            ? `Pasted ${res.succeeded} item${res.succeeded === 1 ? "" : "s"}`
+            : `Pasted ${res.succeeded} of ${res.succeeded + res.failed}`,
+        failures: res.results
+          .filter((r) => r.status !== "succeeded")
+          .map((r) => ({
+            id: r.itemId,
+            message: r.message ?? r.errorCode ?? r.status,
+          })),
+      });
+      void qc.invalidateQueries({ queryKey: ["personal"] });
+    },
+    refresh: () => {
+      void qc.invalidateQueries({ queryKey: ["personal"] });
+    },
+  });
   const allVisibleChecked =
     visibleItems.length > 0 && visibleItems.every((i) => checked.has(i.id));
   const someVisibleChecked = checkedItems.length > 0 && !allVisibleChecked;
@@ -653,7 +676,8 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
           count={checked.size}
           busy={bulkBusy || creatingFolder}
           downloadEnabled={visibleItems.some((i) => checked.has(i.id) && i.kind === ItemKind.File)}
-          onClear={selectNone}
+          onCut={() => clipboard.cutOrCopy("cut")}
+          onCopy={() => clipboard.cutOrCopy("copy")}
           onDownload={downloadChecked}
           onNewFolder={() => {
             setCreateFolderError(null);
@@ -677,15 +701,25 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
         </p>
       )}
 
-      {list.isLoading && <p>Loading…</p>}
+      {canBulk && (
+        <ClipboardChip onPaste={() => void clipboard.paste()} pasteDisabled={bulkBusy} />
+      )}
+      {list.isLoading && <SkeletonList rows={8} />}
       {!list.isLoading && rawCount === 0 && (
-        <p data-testid="personal-empty">
-          {canBrowseFolders && folderId
-            ? "This folder is empty"
-            : canUpload
-              ? "No files yet"
-              : "No items here."}
-        </p>
+        <div data-testid="personal-empty">
+          <p>
+            {canBrowseFolders && folderId
+              ? "This folder is empty"
+              : canUpload
+                ? "No files yet"
+                : "No items here."}
+          </p>
+          {canBulk && clipboard.clip && (
+            <Button type="button" data-testid="empty-paste" onClick={() => void clipboard.paste()}>
+              Paste
+            </Button>
+          )}
+        </div>
       )}
       {!list.isLoading && rawCount > 0 && visibleItems.length === 0 && (
         <p>No items match these filters</p>
@@ -755,6 +789,7 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
                     data-selected={
                       selected?.id === item.id || checked.has(item.id) ? "true" : "false"
                     }
+                    data-cut={clipboard.isCutId(item.id) ? "true" : undefined}
                     data-drop-active={
                       isFolder && dropTargetId === item.id ? "true" : undefined
                     }
@@ -762,6 +797,18 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
                     onDragStart={(e) => onRowDragStart(e, item)}
                     onDragEnd={onRowDragEnd}
                     onClick={() => setSelected(item)}
+                    onContextMenu={(e) => {
+                      if (!canBulk) return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const width = 160;
+                      const left = Math.min(Math.max(8, e.clientX), window.innerWidth - width - 8);
+                      setMenu({
+                        id: item.id,
+                        top: Math.min(Math.max(8, e.clientY), window.innerHeight - 8),
+                        left,
+                      });
+                    }}
                     {...(isFolder && canBrowseFolders ? bindFolderDrop(item.id) : {})}
                   >
                     <td onClick={(e) => e.stopPropagation()}>
@@ -989,6 +1036,47 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
               <>
                 {canBrowseFolders && (
                   <>
+                    <li>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        data-testid={`cut-${menuItem.name}`}
+                        onClick={() => {
+                          closeMenu();
+                          clipboard.cutOrCopy("cut", [menuItem.id]);
+                        }}
+                      >
+                        Cut
+                      </button>
+                    </li>
+                    <li>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        data-testid={`clipboard-copy-${menuItem.name}`}
+                        onClick={() => {
+                          closeMenu();
+                          clipboard.cutOrCopy("copy", [menuItem.id]);
+                        }}
+                      >
+                        Copy
+                      </button>
+                    </li>
+                    {clipboard.clip && (
+                      <li>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          data-testid="menu-paste"
+                          onClick={() => {
+                            closeMenu();
+                            void clipboard.paste();
+                          }}
+                        >
+                          Paste
+                        </button>
+                      </li>
+                    )}
                     <li>
                       <button
                         type="button"

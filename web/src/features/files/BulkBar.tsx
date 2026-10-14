@@ -6,8 +6,9 @@ type Props = {
   busy?: boolean;
   downloadEnabled?: boolean;
   moveEnabled?: boolean;
-  onClear: () => void;
   onDownload?: () => void;
+  onCut?: () => void;
+  onCopy?: () => void;
   onNewFolder: () => void;
   onMoveTo: () => void;
   onSendToChannel: () => void;
@@ -18,8 +19,9 @@ export function BulkBar({
   busy = false,
   downloadEnabled = false,
   moveEnabled = true,
-  onClear,
   onDownload,
+  onCut,
+  onCopy,
   onNewFolder,
   onMoveTo,
   onSendToChannel,
@@ -32,6 +34,16 @@ export function BulkBar({
         {count} selected
       </span>
       <div className={styles.bulkActions}>
+        {onCut && (
+          <Button type="button" disabled={busy} data-testid="bulk-cut" onClick={onCut}>
+            Cut
+          </Button>
+        )}
+        {onCopy && (
+          <Button type="button" disabled={busy} data-testid="bulk-copy" onClick={onCopy}>
+            Copy
+          </Button>
+        )}
         {onDownload && (
           <Button
             type="button"
@@ -55,9 +67,6 @@ export function BulkBar({
         </Button>
         <Button type="button" disabled={busy} data-testid="bulk-send-channel" onClick={onSendToChannel}>
           Send to channel…
-        </Button>
-        <Button type="button" disabled={busy} data-testid="bulk-clear" onClick={onClear}>
-          Clear
         </Button>
       </div>
     </div>

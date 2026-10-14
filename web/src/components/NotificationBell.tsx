@@ -9,8 +9,6 @@ import styles from "./NotificationBell.module.css";
 const COUNT_KEY = ["notifications", "unread-count"] as const;
 const LIST_KEY = ["notifications", "list"] as const;
 
-const PENDING_KEY = ["notifications", "pending-join-count"] as const;
-
 function describe(n: NotificationDto): string {
   if (n.type === NotificationType.TeamJoinRequest) {
     return n.actorDisplayName
@@ -52,16 +50,9 @@ export function NotificationBell() {
     queryFn: () => notificationsApi.unreadCount(),
     enabled,
   });
-  // Admin+ only get a non-zero value (server returns 0 for everyone else). Polled as a fallback to realtime.
-  const pendingJoin = useQuery({
-    queryKey: PENDING_KEY,
-    queryFn: () => notificationsApi.pendingJoinCount(),
-    enabled,
-    refetchInterval: 60_000,
-  });
   const list = useQuery({
     queryKey: LIST_KEY,
-    queryFn: () => notificationsApi.list({ limit: 20 }),
+    queryFn: () => notificationsApi.list({ limit: 50 }),
     enabled: enabled && open,
   });
 
@@ -104,7 +95,6 @@ export function NotificationBell() {
   if (!user) return null;
 
   const unread = count.data?.unreadCount ?? 0;
-  const pendingJoins = pendingJoin.data?.count ?? 0;
   const items = list.data ?? [];
 
   function onSelect(n: NotificationDto) {
@@ -122,11 +112,7 @@ export function NotificationBell() {
           if (!open) refresh();
           setOpen((v) => !v);
         }}
-        aria-label={
-          `Notifications` +
-          (unread > 0 ? ` (${unread} unread)` : "") +
-          (pendingJoins > 0 ? ` (${pendingJoins} pending join request${pendingJoins === 1 ? "" : "s"})` : "")
-        }
+        aria-label={`Notifications` + (unread > 0 ? ` (${unread} unread)` : "")}
         aria-haspopup="true"
         aria-expanded={open}
         data-testid="notification-bell"
@@ -138,11 +124,6 @@ export function NotificationBell() {
         {unread > 0 && (
           <span className={styles.badge} data-testid="notification-badge">
             {unread > 99 ? "99+" : unread}
-          </span>
-        )}
-        {pendingJoins > 0 && (
-          <span className={styles.pendingBadge} data-testid="pending-join-badge" title="Pending join requests">
-            {pendingJoins > 99 ? "99+" : pendingJoins}
           </span>
         )}
       </button>

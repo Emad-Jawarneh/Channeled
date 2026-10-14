@@ -19,6 +19,7 @@ public sealed class ChannelMessageEntity
 
     public ChannelMessageEntity? ReplyToMessage { get; set; }
     public List<MessageMentionEntity> Mentions { get; set; } = [];
+    public List<MessageFileRefEntity> FileRefs { get; set; } = [];
 }
 
 public sealed class MessageMentionEntity

@@ -41,6 +41,7 @@ public sealed class ApplicationDbContext : IdentityDbContext<AppUser, AppRole, G
     public DbSet<FileShareLinkEntity> FileShareLinks => Set<FileShareLinkEntity>();
     public DbSet<ChannelMessageEntity> ChannelMessages => Set<ChannelMessageEntity>();
     public DbSet<MessageMentionEntity> MessageMentions => Set<MessageMentionEntity>();
+    public DbSet<MessageFileRefEntity> MessageFileRefs => Set<MessageFileRefEntity>();
     public DbSet<NotificationEntity> Notifications => Set<NotificationEntity>();
     public DbSet<UsernameReservation> UsernameReservations => Set<UsernameReservation>();
     public DbSet<PendingEmailChange> PendingEmailChanges => Set<PendingEmailChange>();
@@ -250,6 +251,17 @@ public sealed class ApplicationDbContext : IdentityDbContext<AppUser, AppRole, G
                 .HasForeignKey(x => x.MessageId)
                 .OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(x => x.UserId).HasDatabaseName("ix_message_mentions_user");
+        });
+
+        builder.Entity<MessageFileRefEntity>(entity =>
+        {
+            entity.ToTable("message_file_refs");
+            entity.HasKey(x => new { x.MessageId, x.FileId });
+            entity.HasOne(x => x.Message)
+                .WithMany(m => m.FileRefs)
+                .HasForeignKey(x => x.MessageId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => x.FileId).HasDatabaseName("ix_message_file_refs_file");
         });
 
         builder.Entity<NotificationEntity>(entity =>

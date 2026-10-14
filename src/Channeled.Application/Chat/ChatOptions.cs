@@ -11,6 +11,9 @@ public sealed class ChatOptions
     public const int DefaultPageSize = 50;
     public const int MaxPageSize = 200;
 
+    /// <summary>Max structured file attachments per message (deduped server-side).</summary>
+    public const int MaxFileRefsPerMessage = 5;
+
     /// <summary>Per-user budget for POST message (fixed window, 1 minute).</summary>
     public int PostsPerMinutePerUser { get; set; } = 30;
 

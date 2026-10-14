@@ -56,6 +56,11 @@
   --shadow-btn: 0 4px 12px rgba(102, 172, 183, 0.45);
   --shadow-focus: 0 0 0 3px color-mix(in srgb, var(--color-focus) 35%, transparent);
   --color-backdrop: rgb(17 21 28 / 0.55);
+
+  /* Motion — animate only transform/opacity; keep interruptible */
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 html[data-theme="dark"] {
@@ -192,4 +197,139 @@ select {
   outline: none;
   border-color: var(--color-focus);
   box-shadow: var(--shadow-focus);
+}
+
+/* Overlay enter: fade + slight scale (dialogs, menus, popovers) */
+@keyframes motion-fade-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Chrome enter: short slide (toasts, trays, bars, details) */
+@keyframes motion-slide-up-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes motion-slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(0.75rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes motion-shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes motion-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.motion-overlay-in {
+  animation: motion-fade-scale-in var(--dur-base) var(--ease-out) both;
+}
+
+.motion-chrome-in {
+  animation: motion-slide-up-in var(--dur-fast) var(--ease-out) both;
+}
+
+.motion-panel-in {
+  animation: motion-slide-in-right var(--dur-base) var(--ease-out) both;
+}
+
+.motion-row-exit {
+  animation: motion-fade-out var(--dur-fast) var(--ease-out) both;
+  pointer-events: none;
+}
+
+.motion-drag-over {
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    outline-color var(--dur-fast) var(--ease-out);
+}
+
+/* Skeleton shimmer — transform only */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-soft) 80%, var(--color-border));
+}
+
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--color-surface) 55%, transparent) 50%,
+    transparent 100%
+  );
+  animation: motion-shimmer 1.2s var(--ease-out) infinite;
+}
+
+.skeleton-row {
+  display: grid;
+  grid-template-columns: 1.5rem 1fr 5rem 4rem 2rem;
+  gap: var(--space-3);
+  align-items: center;
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid var(--color-row-line);
+}
+
+.skeleton-row .skeleton {
+  height: 0.85rem;
+}
+
+.skeleton-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .skeleton::after {
+    animation: none !important;
+  }
 }

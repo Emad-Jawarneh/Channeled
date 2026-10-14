@@ -3,7 +3,8 @@ namespace Channeled.Application.Chat;
 public sealed record PostMessageRequest(
     string? Body,
     Guid? ReplyToMessageId = null,
-    IReadOnlyList<Guid>? MentionedUserIds = null);
+    IReadOnlyList<Guid>? MentionedUserIds = null,
+    IReadOnlyList<Guid>? FileIds = null);
 
 public sealed record MessageReplyPreviewDto(
     Guid Id,
@@ -22,7 +23,8 @@ public sealed record ChannelMessageDto(
     string Body,
     DateTimeOffset CreatedAt,
     MessageReplyPreviewDto? ReplyTo,
-    IReadOnlyList<MessageMentionDto> Mentions);
+    IReadOnlyList<MessageMentionDto> Mentions,
+    IReadOnlyList<Guid> FileIds);
 
 /// <summary>Newest-first page. <c>NextCursor</c> pages toward older messages.</summary>
 public sealed record MessageListResponse(IReadOnlyList<ChannelMessageDto> Items, string? NextCursor);

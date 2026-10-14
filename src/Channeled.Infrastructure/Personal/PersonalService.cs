@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Channeled.Application.Abstractions.Realtime;
 using Channeled.Application.Abstractions.Results;
 using Channeled.Application.Abstractions.Storage;
 using Channeled.Application.Abstractions.Time;
@@ -27,7 +28,8 @@ public sealed class PersonalService(
     IFileStore store,
     IClock clock,
     IOptions<UploadLimitsOptions> limitsOptions,
-    ChannelWriteGuard channelWriteGuard) : IPersonalService
+    ChannelWriteGuard channelWriteGuard,
+    IChannelNotifier channelNotifier) : IPersonalService
 {
     private readonly UploadLimitsOptions _limits = limitsOptions.Value;
 
@@ -762,6 +764,7 @@ public sealed class PersonalService(
             throw;
         }
 
+        channelNotifier.NotifyFilesChanged(channel.Channel.Id);
         return AppResult<FileItemDto>.Ok(ToFileDto(copy));
     }
 

@@ -1,11 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import { createPortal } from "react-dom";
+import { useSearchParams } from "react-router-dom";
 import {
   ChannelKind,
   filesApi,
   ItemKind,
   MemberRole,
+  messagesApi,
   teamsApi,
   type FileItem,
   type FolderPathSegment,
@@ -24,10 +34,13 @@ import { DropOverlay } from "../../uploads/DropOverlay";
 import { useFileDrop } from "../../uploads/useFileDrop";
 import { useUploads } from "../../uploads/UploadContext";
 import { Button } from "../../ui/Button";
+import { SkeletonList } from "../../ui/SkeletonList";
 import { ChannelSidebar } from "../teams/ChannelSidebar";
 import { BulkBar } from "./BulkBar";
 import { canMoveItem } from "./canMoveItem";
+import { ClipboardChip } from "./ClipboardChip";
 import { CreateFolderDialog } from "./CreateFolderDialog";
+import { useFileClipboard } from "./useFileClipboard";
 import {
   CHANNELED_ITEMS_MIME,
   clearDraggedItemIds,
@@ -49,6 +62,7 @@ import { PickListDialog } from "./PickListDialog";
 import { SelectionControls } from "./SelectionControls";
 import { ShareLinkDialog } from "./ShareLinkDialog";
 import { nextSortState, SortableTh, type SortColumn } from "./SortableTh";
+import { compareFileItems } from "./sortItems";
 import { UploadButton } from "./UploadButton";
 import { useFolderNav } from "./useFolderNav";
 import styles from "./FileBrowser.module.css";
@@ -88,6 +102,8 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
   useChannelFilesChanged(channelId, teamSlug, channelName);
 
   const [selected, setSelected] = useState<FileItem | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const highlightItemId = searchParams.get("item");
   const isTablet = useMediaQuery(TABLET_MQ);
   const [previewOpen, setPreviewOpen] = useState(() => {
     try {
@@ -117,6 +133,9 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
   const [createFolderError, setCreateFolderError] = useState<string | null>(null);
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [shareItem, setShareItem] = useState<FileItem | null>(null);
+  const [shareChatItem, setShareChatItem] = useState<FileItem | null>(null);
+  const [shareChatBusy, setShareChatBusy] = useState(false);
+  const [shareChatError, setShareChatError] = useState<string | null>(null);
   const [checked, setChecked] = useState<Set<string>>(() => new Set());
   const [moveOpen, setMoveOpen] = useState(false);
   const [singleMoveItem, setSingleMoveItem] = useState<FileItem | null>(null);
@@ -146,13 +165,18 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
     const scrollTimer = window.setTimeout(() => {
       window.addEventListener("scroll", close, true);
     }, 100);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
     window.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("resize", close);
+    window.addEventListener("keydown", onKey);
     return () => {
       window.clearTimeout(scrollTimer);
       window.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("scroll", close, true);
       window.removeEventListener("resize", close);
+      window.removeEventListener("keydown", onKey);
     };
   }, [menu]);
 
@@ -165,6 +189,15 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
     const width = 160;
     const left = Math.min(Math.max(8, rect.right - width), window.innerWidth - width - 8);
     setMenu({ id: itemId, top: rect.bottom + 4, left });
+  }
+
+  function openContextMenu(itemId: string, e: ReactMouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    const width = 160;
+    const left = Math.min(Math.max(8, e.clientX), window.innerWidth - width - 8);
+    const top = Math.min(Math.max(8, e.clientY), window.innerHeight - 8);
+    setMenu({ id: itemId, top, left });
   }
 
   function closeMenu() {
@@ -254,19 +287,7 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
     if (q) {
       items = items.filter((i) => i.name.toLowerCase().includes(q));
     }
-    const dir = sortDir === "asc" ? 1 : -1;
-    return [...items].sort((a, b) => {
-      if (sort === "size") {
-        return ((a.sizeBytes ?? 0) - (b.sizeBytes ?? 0)) * dir;
-      }
-      if (sort === "updated") {
-        return (new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime()) * dir;
-      }
-      if (sort === "type") {
-        return formatFileType(a).localeCompare(formatFileType(b)) * dir;
-      }
-      return a.name.localeCompare(b.name) * dir;
-    });
+    return [...items].sort((a, b) => compareFileItems(a, b, sort, sortDir));
   }, [list.data, nameQuery, sort, sortDir]);
 
   function onSortColumn(column: SortColumn) {
@@ -285,6 +306,42 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
     () => visibleItems.filter((i) => checked.has(i.id)),
     [visibleItems, checked],
   );
+  const listedIds = useMemo(() => visibleItems.map((i) => i.id), [visibleItems]);
+  const selectedIds = useMemo(() => {
+    if (checked.size > 0) return [...checked];
+    return selected ? [selected.id] : [];
+  }, [checked, selected]);
+  const clipboard = useFileClipboard({
+    currentSource: {
+      scope: "channel",
+      teamSlug,
+      channelName,
+      folderId: folderId ?? null,
+    },
+    listedIds,
+    listedItems: visibleItems,
+    selectedIds,
+    enabled: !trash,
+    onError: (message) => setError(message),
+    onPasteResult: (res) => {
+      setMoveSummary({
+        message:
+          res.failed === 0
+            ? `Pasted ${res.succeeded} item${res.succeeded === 1 ? "" : "s"}`
+            : `Pasted ${res.succeeded} of ${res.succeeded + res.failed}`,
+        failures: res.results
+          .filter((r) => r.status !== "succeeded")
+          .map((r) => ({
+            id: r.itemId,
+            message: r.message ?? r.errorCode ?? r.status,
+          })),
+      });
+      void qc.invalidateQueries({ queryKey: ["items", teamSlug, channelName] });
+    },
+    refresh: () => {
+      void qc.invalidateQueries({ queryKey: ["items", teamSlug, channelName] });
+    },
+  });
   const movableChecked = useMemo(
     () => checkedItems.filter(itemMovable),
     [checkedItems, itemMovable],
@@ -292,6 +349,21 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
   const allVisibleChecked =
     visibleItems.length > 0 && visibleItems.every((i) => checked.has(i.id));
   const someVisibleChecked = checkedItems.length > 0 && !allVisibleChecked;
+
+  // Deep-link from chat file chips: ?item=<id> selects the row once the list loads.
+  useEffect(() => {
+    if (!highlightItemId || list.isLoading) return;
+    const match = (list.data?.items ?? []).find((i) => i.id === highlightItemId);
+    if (!match) return;
+    setSelected(match);
+    requestAnimationFrame(() => {
+      document.querySelector(`[data-item-id="${match.id}"]`)?.scrollIntoView({ block: "nearest" });
+    });
+    if (!searchParams.has("item")) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete("item");
+    setSearchParams(next, { replace: true });
+  }, [highlightItemId, list.isLoading, list.data?.items, searchParams, setSearchParams]);
 
   const movePickerOptions = useMemo(() => {
     const exclude = new Set(checked);
@@ -321,6 +393,14 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
         )
         .map((c) => ({ id: c.name, label: `#${c.name}` })),
     [channels.data, channelName],
+  );
+
+  const textChannelShareOptions = useMemo(
+    () =>
+      (channels.data ?? [])
+        .filter((c) => (c.kind ?? ChannelKind.File) === ChannelKind.Text)
+        .map((c) => ({ id: c.name, label: `#${c.name}` })),
+    [channels.data],
   );
 
   function toggleChecked(id: string) {
@@ -704,6 +784,9 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
       {moveSummary && (
         <MoveSummary message={moveSummary.message} failures={moveSummary.failures} />
       )}
+      {!trash && (
+        <ClipboardChip onPaste={() => void clipboard.paste()} pasteDisabled={bulkBusy} />
+      )}
 
       {!trash && (
         <BulkBar
@@ -711,7 +794,8 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
           busy={bulkBusy || creatingFolder}
           downloadEnabled={visibleItems.some((i) => checked.has(i.id) && i.kind === ItemKind.File)}
           moveEnabled={movableChecked.length > 0}
-          onClear={selectNone}
+          onCut={() => clipboard.cutOrCopy("cut")}
+          onCopy={() => clipboard.cutOrCopy("copy")}
           onDownload={downloadChecked}
           onNewFolder={() => {
             setCreateFolderError(null);
@@ -730,14 +814,23 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
       )}
 
       {error && <p className={styles.error}>{error}</p>}
-      {list.isLoading && <p>Loading…</p>}
+      {list.isLoading && <SkeletonList rows={8} />}
       {list.isError && !(list.error instanceof ApiError && list.error.status === 404) && (
         <p className={styles.error}>Failed to load items.</p>
       )}
       {!list.isLoading && (list.data?.items.length ?? 0) === 0 && (
-        <p data-testid="empty-state">
-          {folderId ? "This folder is empty" : `No files in #${channelName} yet`}
-        </p>
+        <div data-testid="empty-state">
+          <p>{folderId ? "This folder is empty" : `No files in #${channelName} yet`}</p>
+          {!trash && clipboard.clip && (
+            <Button
+              type="button"
+              data-testid="empty-paste"
+              onClick={() => void clipboard.paste()}
+            >
+              Paste
+            </Button>
+          )}
+        </div>
       )}
       {!list.isLoading && (list.data?.items.length ?? 0) > 0 && visibleItems.length === 0 && (
         <p data-testid="filter-empty">No items match these filters</p>
@@ -805,9 +898,11 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
                   <tr
                     key={item.id}
                     data-testid={`row-${item.name}`}
+                    data-item-id={item.id}
                     data-selected={
                       selected?.id === item.id || checked.has(item.id) ? "true" : "false"
                     }
+                    data-cut={clipboard.isCutId(item.id) ? "true" : undefined}
                     data-drop-active={
                       isFolder && dropTargetId === item.id ? "true" : undefined
                     }
@@ -815,6 +910,10 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
                     onDragStart={(e) => onRowDragStart(e, item)}
                     onDragEnd={onRowDragEnd}
                     onClick={() => setSelected(item)}
+                    onContextMenu={(e) => {
+                      if (trash) return;
+                      openContextMenu(item.id, e);
+                    }}
                     {...(isFolder && !trash ? bindFolderDrop(item.id) : {})}
                   >
                     <td onClick={(e) => e.stopPropagation()}>
@@ -998,6 +1097,39 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
       />
 
       <PickListDialog
+        open={shareChatItem !== null}
+        title={shareChatItem ? `Share “${shareChatItem.name}” to chat` : "Share to chat"}
+        testId="share-chat-dialog"
+        options={textChannelShareOptions}
+        description="Pick a text channel. The file is linked in a new message (no extra caption required)."
+        emptyLabel="No text channels in this team"
+        busy={shareChatBusy}
+        error={shareChatError}
+        confirmLabel="Share"
+        onClose={() => {
+          if (shareChatBusy) return;
+          setShareChatItem(null);
+          setShareChatError(null);
+        }}
+        onPick={async (targetChannelName) => {
+          if (!shareChatItem || !targetChannelName) return;
+          setShareChatBusy(true);
+          setShareChatError(null);
+          try {
+            await messagesApi.post(teamSlug, targetChannelName, {
+              body: "",
+              fileIds: [shareChatItem.id],
+            });
+            setShareChatItem(null);
+          } catch (e) {
+            setShareChatError(e instanceof ApiError ? e.message : "Could not share to chat.");
+          } finally {
+            setShareChatBusy(false);
+          }
+        }}
+      />
+
+      <PickListDialog
         open={sendOpen}
         title={`Send ${checkedItems.filter((i) => i.kind === ItemKind.File).length || checked.size} file${checked.size === 1 ? "" : "s"} to channel`}
         testId="send-channel-dialog"
@@ -1043,6 +1175,47 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
           >
             {!trash && (
               <>
+                <li>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    data-testid={`cut-${menuItem.name}`}
+                    onClick={() => {
+                      closeMenu();
+                      clipboard.cutOrCopy("cut", [menuItem.id]);
+                    }}
+                  >
+                    Cut
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    data-testid={`copy-${menuItem.name}`}
+                    onClick={() => {
+                      closeMenu();
+                      clipboard.cutOrCopy("copy", [menuItem.id]);
+                    }}
+                  >
+                    Copy
+                  </button>
+                </li>
+                {clipboard.clip && (
+                  <li>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      data-testid="menu-paste"
+                      onClick={() => {
+                        closeMenu();
+                        void clipboard.paste();
+                      }}
+                    >
+                      Paste
+                    </button>
+                  </li>
+                )}
                 <li>
                   <button
                     type="button"
@@ -1097,6 +1270,20 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
                         }}
                       >
                         Public link…
+                      </button>
+                    </li>
+                    <li>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        data-testid={`share-chat-${menuItem.name}`}
+                        onClick={() => {
+                          closeMenu();
+                          setShareChatError(null);
+                          setShareChatItem(menuItem);
+                        }}
+                      >
+                        Share to chat…
                       </button>
                     </li>
                   </>

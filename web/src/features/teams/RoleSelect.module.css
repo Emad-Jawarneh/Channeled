@@ -27,9 +27,8 @@
   cursor: pointer;
   text-align: left;
   transition:
-    border-color 140ms ease,
-    box-shadow 140ms ease,
-    background 140ms ease;
+    border-color var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out);
 }
 
 .trigger:hover:not(:disabled) {
@@ -64,7 +63,7 @@
   border-right: 2px solid var(--color-text-muted);
   border-bottom: 2px solid var(--color-text-muted);
   transform: rotate(45deg) translateY(-1px);
-  transition: transform 140ms ease;
+  transition: transform var(--dur-fast) var(--ease-out);
 }
 
 .trigger[aria-expanded="true"] .chevron {
@@ -84,6 +83,7 @@
   box-shadow: 0 14px 40px rgb(0 0 0 / 0.35);
   display: grid;
   gap: 0.2rem;
+  animation: motion-fade-scale-in var(--dur-base) var(--ease-out) both;
 }
 
 .menuUp {
@@ -106,7 +106,7 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: background 120ms ease;
+  transition: background var(--dur-fast) var(--ease-out);
 }
 
 .option:hover,

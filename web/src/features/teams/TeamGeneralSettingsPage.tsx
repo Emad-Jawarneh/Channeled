@@ -379,7 +379,7 @@ export function TeamGeneralSettingsPage({ teamSlug }: { teamSlug: string }) {
             <p className={styles.eyebrow}>Team settings</p>
             <h1 className={styles.pageTitle}>General</h1>
             <p className={styles.pageLede}>
-              Brand the team, edit its profile, and control how people join.
+              Brand the team, edit its details, and control how people join.
             </p>
           </header>
 
@@ -395,9 +395,10 @@ export function TeamGeneralSettingsPage({ teamSlug }: { teamSlug: string }) {
           )}
 
           <section className={styles.card} data-testid="team-profile-card">
-            <h2 className={styles.cardTitle}>Profile</h2>
+            <h2 className={styles.cardTitle}>Team details</h2>
             <p className={styles.cardIntro}>
-              The logo appears in the team rail and sidebars. Square images work best.
+              The logo appears in the team rail and sidebars. Name and description identify the team.
+              Square images work best.
             </p>
             <div className={styles.profile}>
               <div className={styles.logoBlock}>
@@ -492,7 +493,7 @@ export function TeamGeneralSettingsPage({ teamSlug }: { teamSlug: string }) {
                           description.trim() === (team.data.description ?? ""))
                       }
                     >
-                      Save profile
+                      Save details
                     </Button>
                   </div>
                 )}

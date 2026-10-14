@@ -40,6 +40,7 @@ public class ChannelJoinRequestTests : IClassFixture<AuthApiFactory>, IAsyncLife
             Email = "member@example.com",
             UserName = "member@example.com",
             DisplayName = "Member",
+                    UsernameSlug = "member",
             EmailConfirmed = true,
             Status = "active",
         };

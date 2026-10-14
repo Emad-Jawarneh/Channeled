@@ -640,6 +640,7 @@ public class ShareLinkApiTests : IClassFixture<AuthApiFactory>, IAsyncLifetime
             Email = email,
             UserName = email,
             DisplayName = email,
+                    UsernameSlug = email.Split('@')[0].Replace(".", "")[..30],
             EmailConfirmed = true,
             Status = "active",
         };

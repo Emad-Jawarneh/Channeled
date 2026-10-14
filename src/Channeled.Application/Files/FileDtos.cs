@@ -46,7 +46,10 @@ public sealed record FileItemDto(
     DateTimeOffset UpdatedAt,
     DateTimeOffset? DeletedAt,
     Guid? OwnerUserId = null,
-    bool Starred = false);
+    bool Starred = false,
+    string? UploadedByDisplayName = null,
+    string? UploadedByUsername = null,
+    long? UploadedByAvatarVersion = null);
 
 public sealed record FolderPathSegmentDto(Guid Id, string Name);
 

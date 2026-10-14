@@ -45,6 +45,8 @@
   --text-lg: 1.125rem;
   --text-xl: 1.5rem;
 
+  --control-height: 2.75rem;
+
   --radius-sm: 0.625rem;
   --radius-md: 0.875rem;
   --radius-pill: 999px;
@@ -135,13 +137,26 @@ button {
   font: inherit;
 }
 
-input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]),
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="hidden"]),
 select,
 textarea {
   background: var(--color-bg);
   color: var(--color-text);
   border: 1px solid var(--color-border);
   border-radius: 12px;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="hidden"]),
+select {
+  height: var(--control-height);
+  min-height: var(--control-height);
+  padding: 0 0.85rem;
+}
+
+textarea {
+  min-height: var(--control-height);
+  padding: 0.65rem 0.85rem;
+  resize: vertical;
 }
 
 select {

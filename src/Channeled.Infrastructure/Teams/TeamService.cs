@@ -226,7 +226,14 @@ public sealed partial class TeamService(
             .Select(m =>
             {
                 users.TryGetValue(m.UserId, out var u);
-                return new TeamMemberDto(m.UserId, u?.Email ?? "", u?.DisplayName ?? "", m.Role, m.JoinedAt);
+                return new TeamMemberDto(
+                    m.UserId,
+                    u?.Email ?? "",
+                    u?.DisplayName ?? "",
+                    u?.UsernameSlug ?? "",
+                    u?.AvatarUpdatedAt?.ToUnixTimeMilliseconds(),
+                    m.Role,
+                    m.JoinedAt);
             })
             .OrderByDescending(m => m.Role)
             .ThenBy(m => m.Email)
@@ -998,7 +1005,14 @@ public sealed partial class TeamService(
         IReadOnlyList<ChannelMemberDto> dtos = members.Select(m =>
         {
             users.TryGetValue(m.UserId, out var u);
-            return new ChannelMemberDto(m.UserId, u?.Email ?? "", u?.DisplayName ?? "", m.CanWrite, m.CanManage);
+            return new ChannelMemberDto(
+                m.UserId,
+                u?.Email ?? "",
+                u?.DisplayName ?? "",
+                u?.UsernameSlug ?? "",
+                u?.AvatarUpdatedAt?.ToUnixTimeMilliseconds(),
+                m.CanWrite,
+                m.CanManage);
         }).ToList();
 
         return AppResult<IReadOnlyList<ChannelMemberDto>>.Ok(dtos);
@@ -1223,6 +1237,8 @@ public sealed partial class TeamService(
                 r.UserId,
                 u?.Email ?? "",
                 u?.DisplayName ?? "",
+                u?.UsernameSlug ?? "",
+                u?.AvatarUpdatedAt?.ToUnixTimeMilliseconds(),
                 r.Status,
                 r.CreatedAt);
         }).ToList();
@@ -1318,6 +1334,8 @@ public sealed partial class TeamService(
             row.UserId,
             user?.Email ?? "",
             user?.DisplayName ?? "",
+            user?.UsernameSlug ?? "",
+            user?.AvatarUpdatedAt?.ToUnixTimeMilliseconds(),
             row.Status,
             row.CreatedAt);
     }

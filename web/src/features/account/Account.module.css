@@ -1,0 +1,84 @@
+.panel {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+  max-width: 36rem;
+}
+
+.form {
+  display: grid;
+  gap: var(--space-3);
+  max-width: 28rem;
+}
+
+.label {
+  display: grid;
+  gap: 0.35rem;
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.bio {
+  width: 100%;
+  min-height: 6.5rem;
+  resize: vertical;
+  font: inherit;
+  font-weight: 500;
+}
+
+.hint {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.error {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+}
+
+.ok {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.avatarRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.avatar {
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: 14px;
+  object-fit: cover;
+  background: var(--color-soft);
+  border: 1px solid var(--color-border);
+}
+
+.sessionList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.sessionRow {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface);
+}
+
+/* Reserve layout space for future 2FA without placeholders or copy */
+.securityReserve {
+  min-height: 4.5rem;
+}

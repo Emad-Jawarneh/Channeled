@@ -358,6 +358,28 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                     b.ToTable("upload_sessions", (string)null);
                 });
 
+            modelBuilder.Entity("Channeled.Infrastructure.Identity.AddressRateCounter", b =>
+                {
+                    b.Property<string>("AddressKeyHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("Count")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("WindowStart")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("AddressKeyHash");
+
+                    b.HasIndex("ExpiresAt");
+
+                    b.ToTable("address_rate_counters", (string)null);
+                });
+
             modelBuilder.Entity("Channeled.Infrastructure.Identity.AppRole", b =>
                 {
                     b.Property<Guid>("Id")
@@ -394,6 +416,22 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                     b.Property<int>("AccessFailedCount")
                         .HasColumnType("integer");
 
+                    b.Property<string>("AvatarContentType")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("AvatarStorageKey")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<DateTimeOffset?>("AvatarUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Bio")
+                        .IsRequired()
+                        .HasMaxLength(280)
+                        .HasColumnType("character varying(280)");
+
                     b.Property<string>("ConcurrencyStamp")
                         .IsConcurrencyToken()
                         .HasColumnType("text");
@@ -408,6 +446,9 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(256)");
 
                     b.Property<bool>("EmailConfirmed")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("HasChangedUsername")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("IsPlatformAdmin")
@@ -462,6 +503,14 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
+                    b.Property<DateTimeOffset?>("UsernameChangedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UsernameSlug")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("NormalizedEmail")
@@ -471,6 +520,9 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                     b.HasIndex("NormalizedUserName")
                         .IsUnique()
                         .HasDatabaseName("UserNameIndex");
+
+                    b.HasIndex("UsernameSlug")
+                        .IsUnique();
 
                     b.ToTable("AspNetUsers", (string)null);
                 });
@@ -506,6 +558,65 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("password_reset_tokens", (string)null);
+                });
+
+            modelBuilder.Entity("Channeled.Infrastructure.Identity.PendingEmailChange", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CancelExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CancelTokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("ConfirmExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ConfirmTokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("ConsumedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("NewEmail")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)");
+
+                    b.Property<string>("NewEmailNormalized")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CancelTokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("ConfirmTokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("NewEmailNormalized");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("pending_email_changes", (string)null);
                 });
 
             modelBuilder.Entity("Channeled.Infrastructure.Identity.PlatformInvitation", b =>
@@ -580,6 +691,30 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("sessions", (string)null);
+                });
+
+            modelBuilder.Entity("Channeled.Infrastructure.Identity.UsernameReservation", b =>
+                {
+                    b.Property<string>("NormalizedUsername")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("PreviousOwnerUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("NormalizedUsername");
+
+                    b.HasIndex("ExpiresAt");
+
+                    b.ToTable("username_reservations", (string)null);
                 });
 
             modelBuilder.Entity("Channeled.Infrastructure.Jobs.JobEntity", b =>
@@ -724,6 +859,26 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                     b.HasIndex("Kind");
 
                     b.ToTable("backups", (string)null);
+                });
+
+            modelBuilder.Entity("Channeled.Infrastructure.Operations.OperationsSettingsEntity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("SmtpSettingsFingerprint")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTimeOffset?>("SmtpVerifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("operations_settings", (string)null);
                 });
 
             modelBuilder.Entity("Channeled.Infrastructure.PublicLinks.FileShareLinkEntity", b =>

@@ -53,5 +53,13 @@ public static class AuditCatalog
         AuditEventType.BackupRun,
         AuditEventType.BackupRestore,
         AuditEventType.ConfigChange,
+        AuditEventType.EmailChange,
+        AuditEventType.EmailChangeStart,
+        AuditEventType.EmailChangeCancel,
+        AuditEventType.UsernameChange,
+        AuditEventType.AvatarChange,
+        AuditEventType.AdminEmailCorrection,
+        AuditEventType.SmtpTest,
+        AuditEventType.SmtpConfigChange,
     ];
 }

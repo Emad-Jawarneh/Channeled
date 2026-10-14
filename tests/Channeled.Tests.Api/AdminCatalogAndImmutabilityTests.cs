@@ -44,6 +44,7 @@ public class AdminCatalogAndImmutabilityTests : IClassFixture<AuthApiFactory>, I
             Email = "member@example.com",
             UserName = "member@example.com",
             DisplayName = "Member",
+                    UsernameSlug = "member",
             EmailConfirmed = true,
             Status = "active",
         };

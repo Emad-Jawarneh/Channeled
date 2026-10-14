@@ -6,7 +6,12 @@ public sealed record AuthUserDto(
     Guid Id,
     string Email,
     string DisplayName,
-    bool IsPlatformAdmin);
+    string Username,
+    long? AvatarVersion,
+    bool IsPlatformAdmin,
+    bool HasChangedUsername = false,
+    DateTimeOffset? UsernameChangedAt = null,
+    string? Bio = null);
 
 public sealed record SessionDto(
     Guid Id,

@@ -4,7 +4,30 @@ export type AuthUser = {
   id: string;
   email: string;
   displayName: string;
+  username: string;
+  avatarVersion?: number | null;
   isPlatformAdmin: boolean;
+  hasChangedUsername?: boolean;
+  usernameChangedAt?: string | null;
+  bio?: string | null;
+};
+
+export type UserCard = {
+  id: string;
+  displayName: string;
+  username: string;
+  avatarVersion?: number | null;
+  email?: string | null;
+  bio?: string | null;
+};
+
+export type SessionInfo = {
+  id: string;
+  createdAt: string;
+  lastSeenAt: string;
+  ip: string;
+  userAgent: string;
+  isCurrent: boolean;
 };
 
 export type Team = {
@@ -37,6 +60,9 @@ export type FileItem = {
   sizeBytes?: number | null;
   sha256?: string | null;
   uploadedBy?: string | null;
+  uploadedByDisplayName?: string | null;
+  uploadedByUsername?: string | null;
+  uploadedByAvatarVersion?: number | null;
   createdAt: string;
   updatedAt: string;
   deletedAt?: string | null;
@@ -56,6 +82,8 @@ export type TeamMember = {
   userId: string;
   email: string;
   displayName: string;
+  username: string;
+  avatarVersion?: number | null;
   role: number;
   joinedAt: string;
 };
@@ -74,6 +102,8 @@ export type ChannelJoinRequest = {
   userId: string;
   email: string;
   displayName: string;
+  username: string;
+  avatarVersion?: number | null;
   status: number;
   createdAt: string;
 };
@@ -113,6 +143,54 @@ export const authApi = {
     }),
   resetPassword: (token: string, newPassword: string) =>
     api<void>("/api/v1/auth/reset-password", {
+      method: "POST",
+      json: { token, newPassword },
+    }),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    api<void>("/api/v1/auth/change-password", {
+      method: "POST",
+      json: { currentPassword, newPassword },
+    }),
+  sessions: () => api<SessionInfo[]>("/api/v1/auth/sessions"),
+  revokeSession: (sessionId: string) =>
+    api<void>(`/api/v1/auth/sessions/${sessionId}`, { method: "DELETE" }),
+};
+
+export const accountApi = {
+  updateProfile: (body: { displayName?: string; username?: string; bio?: string }) =>
+    api<AuthUser>("/api/v1/account/profile", { method: "PATCH", json: body }),
+  getUserCard: (userId: string) => api<UserCard>(`/api/v1/users/${userId}/card`),
+  uploadAvatar: async (file: File) => {
+    const res = await fetch("/api/v1/account/avatar", {
+      method: "PUT",
+      body: file,
+      credentials: "include",
+      headers: {
+        "Content-Type": file.type || "application/octet-stream",
+        "X-CSRF-TOKEN": (await (await fetch("/api/v1/auth/csrf", { credentials: "include" })).json()).token,
+      },
+    });
+    if (!res.ok) {
+      const problem = await res.json().catch(() => ({}));
+      throw new Error(problem.detail ?? "Avatar upload failed");
+    }
+    return (await res.json()) as AuthUser;
+  },
+  selfServiceMail: () =>
+    api<{ available: boolean; lastSmtpProbeAt?: string | null }>("/api/v1/account/self-service-mail"),
+  startEmailChange: (newEmail: string, currentPassword: string) =>
+    api<void>("/api/v1/account/email-change", {
+      method: "POST",
+      json: { newEmail, currentPassword },
+    }),
+  confirmEmailChange: (token: string) =>
+    api<void>("/api/v1/account/email-change/confirm", { method: "POST", json: { token } }),
+  cancelEmailChange: (token: string) =>
+    api<void>("/api/v1/account/email-change/cancel", { method: "POST", json: { token } }),
+  signOutAllEmailChange: (token: string) =>
+    api<void>("/api/v1/account/email-change/sign-out-all", { method: "POST", json: { token } }),
+  passwordFromCancelToken: (token: string, newPassword: string) =>
+    api<void>("/api/v1/account/email-change/password", {
       method: "POST",
       json: { token, newPassword },
     }),

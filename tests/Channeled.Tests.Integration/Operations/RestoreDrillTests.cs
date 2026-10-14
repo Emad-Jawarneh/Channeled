@@ -101,6 +101,7 @@ public class RestoreDrillTests
                 Email = "drill@example.com",
                 UserName = "drill@example.com",
                 DisplayName = "Drill",
+                    UsernameSlug = "drill",
                 EmailConfirmed = true,
                 Status = "active",
             };

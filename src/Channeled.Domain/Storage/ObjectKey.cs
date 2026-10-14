@@ -11,4 +11,10 @@ public static class ObjectKey
         var hex = fileId.ToString("N");
         return $"objects/{hex[..2]}/{hex[2..4]}/{fileId:D}";
     }
+
+    public static string ForUserAvatar(Guid userId, Guid blobId)
+    {
+        var hex = userId.ToString("N");
+        return $"avatars/{hex[..2]}/{hex[2..4]}/{userId:D}/{blobId:D}";
+    }
 }

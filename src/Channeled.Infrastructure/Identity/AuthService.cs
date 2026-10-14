@@ -1,5 +1,8 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Channeled.Application.Abstractions.Email;
+using Channeled.Application.Abstractions.Operations;
 using Channeled.Application.Abstractions.Realtime;
 using Channeled.Application.Abstractions.Results;
 using Channeled.Application.Abstractions.Time;
@@ -7,10 +10,13 @@ using Channeled.Application.Identity;
 using Channeled.Domain.Audit;
 using Channeled.Domain.Errors;
 using Channeled.Domain.Identity;
+using Channeled.Infrastructure.Jobs;
 using Channeled.Infrastructure.Persistence;
 using Channeled.Infrastructure.Security;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Channeled.Infrastructure.Identity;
 
@@ -20,12 +26,41 @@ public sealed class AuthService(
     ApplicationDbContext db,
     IClock clock,
     IEmailSender emailSender,
-    IAuthStateChanged authStateChanged) : IAuthService
+    IAuthStateChanged authStateChanged,
+    ISelfServiceMail selfServiceMail,
+    IDataProtectionProvider dataProtection,
+    IOptionsMonitor<OperationsOptions> operations,
+    IOptionsMonitor<AccountOptions> accountOptions) : IAuthService
 {
     private static readonly TimeSpan InvitationLifetime = TimeSpan.FromDays(7);
     private static readonly TimeSpan PasswordResetLifetime = TimeSpan.FromHours(1);
 
     public async Task<AppResult<AuthUserDto>> LoginAsync(
+        LoginRequest request,
+        RequestContext context,
+        CancellationToken ct = default)
+    {
+        var outcome = await AuthenticateAsync(request, context, ct);
+        return outcome.Status switch
+        {
+            SignInStatus.SignedIn when outcome.User is not null =>
+                AppResult<AuthUserDto>.Ok(new AuthUserDto(
+                    outcome.User.Id,
+                    outcome.User.Email,
+                    outcome.User.DisplayName,
+                    outcome.User.Username,
+                    outcome.User.AvatarVersion,
+                    outcome.User.IsPlatformAdmin,
+                    Bio: outcome.User.Bio)),
+            SignInStatus.LockedOut =>
+                AppResult<AuthUserDto>.Fail(outcome.ErrorCode ?? ErrorCodes.LockedOut, outcome.Message ?? "Account temporarily locked."),
+            _ =>
+                AppResult<AuthUserDto>.Fail(outcome.ErrorCode ?? ErrorCodes.Unauthorized, outcome.Message ?? "Invalid email or password."),
+        };
+    }
+
+    /// <summary>Credential evaluation + session creation in one place so a future second step can sit in front of session creation.</summary>
+    public async Task<SignInOutcome> AuthenticateAsync(
         LoginRequest request,
         RequestContext context,
         CancellationToken ct = default)
@@ -37,23 +72,24 @@ public sealed class AuthService(
         }
         catch (ArgumentException)
         {
-            return AppResult<AuthUserDto>.Fail(ErrorCodes.Unauthorized, "Invalid email or password.");
+            await WriteAuditAsync(null, AuditEventType.LoginFailure, "user", request.Email, context, ct);
+            await db.SaveChangesAsync(ct);
+            return new SignInOutcome(SignInStatus.Failed, null, ErrorCodes.Unauthorized, "Invalid email or password.");
         }
 
         var user = await userManager.FindByEmailAsync(email.Value);
-        // Constant-ish response for unknown users
         if (user is null || user.Status != "active")
         {
             await WriteAuditAsync(null, AuditEventType.LoginFailure, "user", email.Value, context, ct);
             await db.SaveChangesAsync(ct);
-            return AppResult<AuthUserDto>.Fail(ErrorCodes.Unauthorized, "Invalid email or password.");
+            return new SignInOutcome(SignInStatus.Failed, null, ErrorCodes.Unauthorized, "Invalid email or password.");
         }
 
         if (await userManager.IsLockedOutAsync(user))
         {
             await WriteAuditAsync(user.Id, AuditEventType.LoginFailure, "user", user.Id.ToString(), context, ct, """{"reason":"locked_out"}""");
             await db.SaveChangesAsync(ct);
-            return AppResult<AuthUserDto>.Fail(ErrorCodes.LockedOut, "Account temporarily locked.");
+            return new SignInOutcome(SignInStatus.LockedOut, null, ErrorCodes.LockedOut, "Account temporarily locked.");
         }
 
         var passwordOk = await userManager.CheckPasswordAsync(user, request.Password);
@@ -65,10 +101,10 @@ public sealed class AuthService(
 
             if (await userManager.IsLockedOutAsync(user))
             {
-                return AppResult<AuthUserDto>.Fail(ErrorCodes.LockedOut, "Account temporarily locked.");
+                return new SignInOutcome(SignInStatus.LockedOut, null, ErrorCodes.LockedOut, "Account temporarily locked.");
             }
 
-            return AppResult<AuthUserDto>.Fail(ErrorCodes.Unauthorized, "Invalid email or password.");
+            return new SignInOutcome(SignInStatus.Failed, null, ErrorCodes.Unauthorized, "Invalid email or password.");
         }
 
         await userManager.ResetAccessFailedCountAsync(user);
@@ -76,7 +112,12 @@ public sealed class AuthService(
         await WriteAuditAsync(user.Id, AuditEventType.LoginSuccess, "user", user.Id.ToString(), context, ct);
         await db.SaveChangesAsync(ct);
 
-        return AppResult<AuthUserDto>.Ok(ToDto(user));
+        var dto = ToDto(user);
+        return new SignInOutcome(
+            SignInStatus.SignedIn,
+            new AppUserRef(dto.Id, dto.Email, dto.DisplayName, dto.Username, dto.AvatarVersion, dto.IsPlatformAdmin, dto.Bio),
+            null,
+            null);
     }
 
     public async Task<AppResult> LogoutAsync(
@@ -229,12 +270,18 @@ public sealed class AuthService(
             return AppResult<AuthUserDto>.Fail(ErrorCodes.InvalidToken, "Invitation token has expired.");
         }
 
+        if (!DisplayNameRules.TryValidate(request.DisplayName, out var displayName, out var displayErr))
+        {
+            return AppResult<AuthUserDto>.Fail(ErrorCodes.Validation, displayErr!);
+        }
+
         var user = new AppUser
         {
             Id = UuidV7.NewGuid(),
             Email = invitation.Email,
             UserName = invitation.Email,
-            DisplayName = request.DisplayName.Trim(),
+            DisplayName = displayName,
+            UsernameSlug = await UsernameAllocator.AllocateUniqueAsync(userManager, db, displayName, ct),
             EmailConfirmed = true,
             Status = "active",
         };
@@ -270,9 +317,9 @@ public sealed class AuthService(
             return AppResult<AuthUserDto>.Fail(ErrorCodes.Validation, ex.Message);
         }
 
-        if (string.IsNullOrWhiteSpace(request.DisplayName))
+        if (!DisplayNameRules.TryValidate(request.DisplayName, out var displayName, out var displayErr))
         {
-            return AppResult<AuthUserDto>.Fail(ErrorCodes.Validation, "Display name is required.");
+            return AppResult<AuthUserDto>.Fail(ErrorCodes.Validation, displayErr!);
         }
 
         if (!PasswordRules.IsValid(request.Password))
@@ -290,7 +337,8 @@ public sealed class AuthService(
             Id = UuidV7.NewGuid(),
             Email = email.Value,
             UserName = email.Value,
-            DisplayName = request.DisplayName.Trim(),
+            DisplayName = displayName,
+            UsernameSlug = await UsernameAllocator.AllocateUniqueAsync(userManager, db, displayName, ct),
             EmailConfirmed = true,
             Status = "active",
         };
@@ -314,8 +362,13 @@ public sealed class AuthService(
         RequestContext context,
         CancellationToken ct = default)
     {
-        var result = await CreatePasswordResetAsync(request, context, ct);
-        // Always succeed to avoid account enumeration
+        if (!await selfServiceMail.IsAvailableAsync(ct))
+        {
+            return AppResult.Fail(ErrorCodes.Validation, "Mail is not configured.");
+        }
+
+        _ = await CreatePasswordResetAsync(request, context, ct);
+        // Always the same success path for existing/unknown/locked/cap (cap returns null too).
         return AppResult.Ok();
     }
 
@@ -364,7 +417,8 @@ public sealed class AuthService(
         }
 
         token.UsedAt = clock.UtcNow;
-        await userManager.UpdateSecurityStampAsync(user);
+        await userManager.ResetAccessFailedCountAsync(user);
+        await SessionSecurity.RevokeSessionsAsync(db, userManager, authStateChanged, clock, user, keepSessionId: null, ct);
         await WriteAuditAsync(user.Id, AuditEventType.PasswordReset, "user", user.Id.ToString(), context, ct);
         await db.SaveChangesAsync(ct);
         return AppResult.Ok();
@@ -393,6 +447,8 @@ public sealed class AuthService(
             return AppResult.Fail(ErrorCodes.Validation, string.Join("; ", result.Errors.Select(e => e.Description)));
         }
 
+        await SessionSecurity.RevokeSessionsAsync(
+            db, userManager, authStateChanged, clock, user, context.CurrentSessionId, ct);
         await WriteAuditAsync(userId, AuditEventType.PasswordChange, "user", userId.ToString(), context, ct);
         await db.SaveChangesAsync(ct);
         return AppResult.Ok();
@@ -420,12 +476,14 @@ public sealed class AuthService(
             return AppResult<AuthUserDto>.Fail(ErrorCodes.Conflict, "Operator already seeded.");
         }
 
+        var displayName = DisplayNameRules.SanitizeForMigration(request.DisplayName, "Operator");
         var user = new AppUser
         {
             Id = UuidV7.NewGuid(),
             Email = email.Value,
             UserName = email.Value,
-            DisplayName = string.IsNullOrWhiteSpace(request.DisplayName) ? "Operator" : request.DisplayName.Trim(),
+            DisplayName = displayName,
+            UsernameSlug = await UsernameAllocator.AllocateUniqueAsync(userManager, db, displayName, ct),
             EmailConfirmed = true,
             IsPlatformAdmin = true,
             Status = "active",
@@ -464,6 +522,11 @@ public sealed class AuthService(
             return null;
         }
 
+        if (!await TryConsumeAddressCapAsync(email.Value, ct))
+        {
+            return null;
+        }
+
         var user = await userManager.FindByEmailAsync(email.Value);
         if (user is null || user.Status != "active")
         {
@@ -471,23 +534,67 @@ public sealed class AuthService(
         }
 
         var raw = TokenHasher.CreateRawToken();
+        var expires = clock.UtcNow.Add(PasswordResetLifetime);
         db.PasswordResetTokens.Add(new PasswordResetToken
         {
             Id = UuidV7.NewGuid(),
             UserId = user.Id,
             TokenHash = TokenHasher.Hash(raw),
             CreatedAt = clock.UtcNow,
-            ExpiresAt = clock.UtcNow.Add(PasswordResetLifetime),
+            ExpiresAt = expires,
         });
+
+        var link = $"{operations.CurrentValue.PublicUrl.TrimEnd('/')}/reset#token={raw}";
+        EmailSendOutbox.Enqueue(
+            db,
+            dataProtection,
+            clock.UtcNow,
+            new EmailSendPlainPayload(
+                email.Value,
+                "Channeled password reset",
+                $"Reset your password: {link}\n\nIf the link fails, paste this token on the reset page: {raw}",
+                expires));
+
         await db.SaveChangesAsync(ct);
-
-        await emailSender.SendAsync(
-            email.Value,
-            "Channeled password reset",
-            $"Use this reset token: {raw}",
-            ct);
-
         return raw;
+    }
+
+    private async Task<bool> TryConsumeAddressCapAsync(string email, CancellationToken ct)
+    {
+        var key = Convert.ToHexString(HMACSHA256.HashData(
+            Encoding.UTF8.GetBytes("channeled-forgot-v1"),
+            Encoding.UTF8.GetBytes(email.Trim().ToLowerInvariant()))).ToLowerInvariant();
+        var limit = Math.Max(1, accountOptions.CurrentValue.ForgotPasswordPerAddressPerHour);
+        var now = clock.UtcNow;
+        var row = await db.AddressRateCounters.FirstOrDefaultAsync(r => r.AddressKeyHash == key, ct);
+        if (row is null)
+        {
+            db.AddressRateCounters.Add(new AddressRateCounter
+            {
+                AddressKeyHash = key,
+                Count = 1,
+                WindowStart = now,
+                ExpiresAt = now.AddHours(24),
+            });
+            return true;
+        }
+
+        if (now - row.WindowStart >= TimeSpan.FromHours(1))
+        {
+            row.WindowStart = now;
+            row.Count = 1;
+            row.ExpiresAt = now.AddHours(24);
+            return true;
+        }
+
+        if (row.Count >= limit)
+        {
+            return false;
+        }
+
+        row.Count++;
+        row.ExpiresAt = now.AddHours(24);
+        return true;
     }
 
     private async Task SignInWithSessionAsync(AppUser user, RequestContext context, CancellationToken ct)
@@ -542,8 +649,7 @@ public sealed class AuthService(
         await Task.CompletedTask;
     }
 
-    private static AuthUserDto ToDto(AppUser user) =>
-        new(user.Id, user.Email ?? "", user.DisplayName, user.IsPlatformAdmin);
+    private static AuthUserDto ToDto(AppUser user) => AuthMapping.ToDto(user);
 
     private static string Truncate(string value, int max) =>
         value.Length <= max ? value : value[..max];

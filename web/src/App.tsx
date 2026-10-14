@@ -2,6 +2,12 @@ import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import { LoginPage } from "./features/login/LoginPage";
 import { InvitePage } from "./features/invite/InvitePage";
 import { ResetPage } from "./features/reset/ResetPage";
+import { AccountLayout } from "./features/account/AccountLayout";
+import { ProfilePage } from "./features/account/ProfilePage";
+import { SecurityPage } from "./features/account/SecurityPage";
+import { SessionsPage } from "./features/account/SessionsPage";
+import { ConfirmEmailPage } from "./features/account/ConfirmEmailPage";
+import { CancelEmailChangePage } from "./features/account/CancelEmailChangePage";
 import { SharePage } from "./features/share/SharePage";
 import { FileBrowser } from "./features/files/FileBrowser";
 import { PersonalFilesPage } from "./features/personal/PersonalFilesPage";
@@ -125,8 +131,24 @@ export function App() {
         }
       />
       <Route path="/invite/:token" element={<InvitePage />} />
+      <Route path="/reset" element={<ResetPage />} />
       <Route path="/reset/:token" element={<ResetPage />} />
+      <Route path="/account/confirm-email" element={<ConfirmEmailPage />} />
+      <Route path="/account/security/email-change-cancel" element={<CancelEmailChangePage />} />
       <Route path="/s/:token" element={<SharePage />} />
+      <Route
+        path="/account"
+        element={
+          <RequireAuth>
+            <AccountLayout />
+          </RequireAuth>
+        }
+      >
+        <Route index element={<Navigate to="profile" replace />} />
+        <Route path="profile" element={<ProfilePage />} />
+        <Route path="security" element={<SecurityPage />} />
+        <Route path="sessions" element={<SessionsPage />} />
+      </Route>
       <Route
         path="/join/:team/:channel"
         element={

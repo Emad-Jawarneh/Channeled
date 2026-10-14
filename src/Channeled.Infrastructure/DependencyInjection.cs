@@ -80,6 +80,8 @@ public static class DependencyInjection
             .AddEntityFrameworkStores<ApplicationDbContext>()
             .AddDefaultTokenProviders();
 
+        services.AddMemoryCache();
+        services.AddSingleton<SessionValidationCache>();
         services.ConfigureApplicationCookie(options =>
         {
             options.Cookie.Name = "channeled.auth";
@@ -98,10 +100,17 @@ public static class DependencyInjection
                 context.Response.StatusCode = StatusCodes.Status403Forbidden;
                 return Task.CompletedTask;
             };
+            options.Events.OnValidatePrincipal = SessionCookieEvents.ValidatePrincipalAsync;
+        });
+
+        services.Configure<SecurityStampValidatorOptions>(o =>
+        {
+            o.ValidationInterval = TimeSpan.FromSeconds(5);
         });
 
         services.AddSingleton<IClock, SystemClock>();
-        services.AddSingleton<IEmailSender, LoggingEmailSender>();
+        services.Configure<AccountOptions>(configuration.GetSection(AccountOptions.SectionName));
+        RegisterEmailSender(services, configuration);
         services.AddSingleton<IAuthorizer, Authorizer>();
         services.AddSingleton<HubConnectionRegistry>();
         services.AddSingleton<PresenceTracker>();
@@ -111,6 +120,10 @@ public static class DependencyInjection
         services.AddSingleton<IChannelNotifier, NullChannelNotifier>();
         services.AddSingleton<IAuthStateChanged, NullAuthStateChanged>();
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IProfileService, ProfileService>();
+        services.AddScoped<ISelfServiceMail, SelfServiceMail>();
+        services.AddScoped<IAccountMailService, AccountMailService>();
+        services.AddScoped<IEmailSendJobProcessor, EmailSendJobProcessor>();
         services.AddScoped<ChannelWriteGuard>();
         services.AddScoped<ITeamService, TeamService>();
         services.AddScoped<IFileService, FileService>();
@@ -149,9 +162,27 @@ public static class DependencyInjection
             services.AddHostedService<BackupHostedService>();
             services.AddHostedService<ChatPurgeHostedService>();
             services.AddHostedService<ObjectDeleteHostedService>();
+            services.AddHostedService<EmailSendHostedService>();
             services.AddHostedService<TrashPurgeHostedService>();
+            services.AddHostedService<UsernameReservationSweepHostedService>();
         }
 
         return services;
+    }
+
+    private static void RegisterEmailSender(IServiceCollection services, IConfiguration configuration)
+    {
+        var host = configuration[$"{OperationsOptions.SectionName}:SmtpHost"];
+        var useSmtp = !string.IsNullOrWhiteSpace(host);
+        if (useSmtp)
+        {
+            services.AddSingleton<IEmailSender, SmtpEmailSender>();
+            services.AddSingleton<IEmailSenderMarker>(_ => new EmailSenderMarker(true));
+        }
+        else
+        {
+            services.AddSingleton<IEmailSender, LoggingEmailSender>();
+            services.AddSingleton<IEmailSenderMarker>(_ => new EmailSenderMarker(false));
+        }
     }
 }

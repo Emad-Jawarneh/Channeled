@@ -2,8 +2,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { MemberRole, teamsApi } from "../../api/channeled";
 import { AppShell } from "../../components/AppShell";
+import { UserChip } from "../../components/UserChip";
 import { Button } from "../../ui/Button";
-import styles from "../files/FileBrowser.module.css";
+import styles from "./MembersPage.module.css";
 
 const roleLabel = ["Viewer", "Member", "Admin", "Owner"];
 
@@ -73,7 +74,15 @@ export function MembersPage({ teamSlug }: { teamSlug: string }) {
             {(members.data ?? []).map((m) => (
               <tr key={m.userId} data-testid={`member-${m.email}`}>
                 <td>
-                  {m.displayName} ({m.email})
+                  <div className={styles.memberCell}>
+                    <UserChip
+                      userId={m.userId}
+                      displayName={m.displayName}
+                      username={m.username}
+                      avatarVersion={m.avatarVersion}
+                    />
+                    <span className={styles.email}>{m.email}</span>
+                  </div>
                 </td>
                 <td>{roleLabel[m.role] ?? m.role}</td>
                 <td>

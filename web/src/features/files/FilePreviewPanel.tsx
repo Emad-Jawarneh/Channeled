@@ -126,6 +126,12 @@ export function FilePreviewPanel({
               </time>
             </dd>
           </div>
+          {item.kind !== ItemKind.Folder && item.uploadedByDisplayName && (
+            <div>
+              <dt>Uploaded by</dt>
+              <dd>{item.uploadedByDisplayName}</dd>
+            </div>
+          )}
         </dl>
 
         {showDownload && item.kind === ItemKind.File && onDownload && (

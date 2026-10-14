@@ -176,7 +176,7 @@ public static class AuthEndpoints
             return ToHttp(await auth.ResetPasswordAsync(body, CreateContext(http), ct));
         })
         .AllowAnonymous()
-        .RequireRateLimiting("auth");
+        .RequireRateLimiting("auth-token");
 
         return group;
     }

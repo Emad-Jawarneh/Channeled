@@ -7,7 +7,6 @@ import { CreateTeamDialog } from "../features/teams/CreateTeamDialog";
 import { createTeamWithGeneral } from "../features/teams/createTeam";
 import { UploadTray } from "../uploads/UploadTray";
 import { ThemeToggle } from "../theme/ThemeToggle";
-import { Button } from "../ui/Button";
 import { NotificationBell } from "./NotificationBell";
 import styles from "./AppShell.module.css";
 
@@ -28,6 +27,7 @@ export function AppShell({ children, sidebar, details, title, topbarExtra }: App
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [accountOpen, setAccountOpen] = useState(false);
   const teams = useQuery({
     queryKey: ["teams"],
     queryFn: () => teamsApi.list(),
@@ -95,9 +95,44 @@ export function AppShell({ children, sidebar, details, title, topbarExtra }: App
             </NavLink>
           )}
           {user && (
-            <span className={styles.railItem} title={user.displayName} aria-hidden="true">
-              {user.displayName.slice(0, 2).toUpperCase()}
-            </span>
+            <div className={styles.accountMenu}>
+              <button
+                type="button"
+                className={`${styles.railItem} ${styles.accountTrigger}`}
+                data-testid="current-user"
+                title={user.displayName}
+                aria-label={`Account menu for ${user.displayName}`}
+                aria-expanded={accountOpen}
+                aria-haspopup="menu"
+                onClick={() => setAccountOpen((v) => !v)}
+              >
+                {user.displayName.slice(0, 2).toUpperCase()}
+              </button>
+              {accountOpen && (
+                <div className={styles.accountDropdown} role="menu">
+                  <Link role="menuitem" to="/account/profile" onClick={() => setAccountOpen(false)}>
+                    Profile
+                  </Link>
+                  <Link role="menuitem" to="/account/security" onClick={() => setAccountOpen(false)}>
+                    Security
+                  </Link>
+                  <Link role="menuitem" to="/account/sessions" onClick={() => setAccountOpen(false)}>
+                    Sessions
+                  </Link>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={async () => {
+                      setAccountOpen(false);
+                      await logout();
+                      navigate("/login");
+                    }}
+                  >
+                    Sign out
+                  </button>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </aside>
@@ -126,22 +161,6 @@ export function AppShell({ children, sidebar, details, title, topbarExtra }: App
             {topbarExtra}
             <ThemeToggle compact />
             <NotificationBell />
-            {user && (
-              <span className={styles.user} data-testid="current-user">
-                {user.displayName}
-              </span>
-            )}
-            {user && (
-              <Button
-                type="button"
-                onClick={async () => {
-                  await logout();
-                  navigate("/login");
-                }}
-              >
-                Sign out
-              </Button>
-            )}
           </div>
         </header>
         <div className={styles.content}>{children}</div>

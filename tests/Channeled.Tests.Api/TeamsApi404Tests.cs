@@ -41,6 +41,7 @@ public class TeamsApi404Tests : IClassFixture<AuthApiFactory>, IAsyncLifetime
             Email = "outsider@example.com",
             UserName = "outsider@example.com",
             DisplayName = "Outsider",
+                    UsernameSlug = "outsider",
             EmailConfirmed = true,
             Status = "active",
         };

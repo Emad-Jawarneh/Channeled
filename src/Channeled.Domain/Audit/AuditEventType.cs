@@ -48,4 +48,13 @@ public enum AuditEventType
     BackupRun = 60,
     BackupRestore = 61,
     ConfigChange = 70,
+    // Reserved 80–89 for future 2FA / authenticator events.
+    EmailChange = 90,
+    EmailChangeStart = 91,
+    EmailChangeCancel = 92,
+    UsernameChange = 93,
+    AvatarChange = 94,
+    AdminEmailCorrection = 95,
+    SmtpTest = 96,
+    SmtpConfigChange = 97,
 }

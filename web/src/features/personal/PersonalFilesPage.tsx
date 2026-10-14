@@ -134,10 +134,13 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
       if ((target as Element).closest?.(`[data-menu-trigger="${menu.id}"]`)) return;
       close();
     };
+    const scrollTimer = window.setTimeout(() => {
+      window.addEventListener("scroll", close, true);
+    }, 100);
     window.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("scroll", close, true);
     window.addEventListener("resize", close);
     return () => {
+      window.clearTimeout(scrollTimer);
       window.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("scroll", close, true);
       window.removeEventListener("resize", close);
@@ -191,7 +194,6 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
 
   function enqueue(files: File[]) {
     uploads.enqueuePersonal(files, folderId);
-    void qc.invalidateQueries({ queryKey: ["personal"] });
   }
 
   const { dropActive } = useFileDrop({
@@ -209,7 +211,7 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
       }
     }
     if (refreshed) {
-      void qc.invalidateQueries({ queryKey: ["personal"] });
+      void qc.refetchQueries({ queryKey: ["personal"], type: "active" });
     }
   }, [uploads.jobs, qc]);
 

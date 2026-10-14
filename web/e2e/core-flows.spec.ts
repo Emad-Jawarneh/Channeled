@@ -1,6 +1,15 @@
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import { E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD, apiLogin, uiLogin } from "./helpers";
+import {
+  E2E_ADMIN_EMAIL,
+  E2E_ADMIN_PASSWORD,
+  apiLogin,
+  ensureFreshTeam,
+  openRowActions,
+  uiLogin,
+  waitForUploadDone,
+  waitForUploadedRow,
+} from "./helpers";
 
 test.describe.configure({ mode: "serial" });
 
@@ -10,16 +19,7 @@ test("sign in, upload, rename, move, trash, restore, join link, role, restricted
 }) => {
   // --- Sign in ---
   await uiLogin(page, E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD);
-
-  // Create team + general if landing on welcome
-  if (await page.getByTestId("create-team").isVisible().catch(() => false)) {
-    await page.getByTestId("create-team-name").fill(`E2E Team ${Date.now()}`);
-    await page.getByTestId("create-team").click();
-  }
-  await expect(page).toHaveURL(/\/t\/.+\/c\/general/);
-
-  const teamSlug = page.url().match(/\/t\/([^/]+)\//)?.[1];
-  expect(teamSlug).toBeTruthy();
+  const teamSlug = await ensureFreshTeam(page, "E2E Team");
 
   // --- Upload ---
   const fileName = `e2e-${Date.now()}.txt`;
@@ -28,13 +28,12 @@ test("sign in, upload, rename, move, trash, restore, join link, role, restricted
     mimeType: "text/plain",
     buffer: Buffer.from("hello-e2e-upload"),
   });
-  await expect(page.getByText("done · 100%")).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByTestId(`row-${fileName}`)).toBeVisible({ timeout: 30_000 });
+  await waitForUploadedRow(page, `row-${fileName}`);
 
   // --- Rename ---
   const renamed = `renamed-${fileName}`;
   page.once("dialog", (d) => d.accept(renamed));
-  await page.getByTestId(`actions-${fileName}`).click();
+  await openRowActions(page, fileName);
   await page.getByRole("menuitem", { name: "Rename" }).click();
   await expect(page.getByTestId(`row-${renamed}`)).toBeVisible();
 
@@ -42,9 +41,10 @@ test("sign in, upload, rename, move, trash, restore, join link, role, restricted
   await page.getByTestId("new-folder").click();
   await page.getByTestId("create-folder-name").fill("Docs");
   await page.getByTestId("create-folder-submit").click();
+  await expect(page.getByTestId("create-folder-dialog")).toBeHidden({ timeout: 15_000 });
   await expect(page.getByTestId("row-Docs")).toBeVisible();
 
-  await page.getByTestId(`actions-${renamed}`).click();
+  await openRowActions(page, renamed);
   await page.getByTestId(`move-${renamed}`).click();
   await page.getByTestId("move-to-dialog-select").selectOption({ label: "Docs" });
   await page.getByTestId("move-to-dialog-submit").click();
@@ -66,7 +66,7 @@ test("sign in, upload, rename, move, trash, restore, join link, role, restricted
   await expect(page.getByTestId(`row-${renamed}`)).toBeVisible();
 
   // --- Delete (trash) ---
-  await page.getByTestId(`actions-${renamed}`).click();
+  await openRowActions(page, renamed);
   await page.getByTestId(`trash-${renamed}`).click();
   await expect(page.getByTestId(`row-${renamed}`)).toHaveCount(0);
 
@@ -74,7 +74,7 @@ test("sign in, upload, rename, move, trash, restore, join link, role, restricted
   const csrf = await apiLogin(request, E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD);
   await page.goto(`/t/${teamSlug}/c/general/trash`);
   await expect(page.getByTestId(`row-${renamed}`)).toBeVisible();
-  await page.getByTestId(`actions-${renamed}`).click();
+  await openRowActions(page, renamed);
   await page.getByTestId(`restore-${renamed}`).click();
   await expect(page.getByTestId(`row-${renamed}`)).toHaveCount(0);
   await page.goto(`/t/${teamSlug}/c/general`);
@@ -146,7 +146,9 @@ test("sign in, upload, rename, move, trash, restore, join link, role, restricted
   await expect(page.getByTestId(`grant-row-secret-${inviteEmail}`)).toBeVisible();
   await uiLogin(page, inviteEmail, "E2eMemberPassword1!");
   await page.goto(`/t/${teamSlug}/c/secret`);
-  await expect(page.getByTestId("file-table")).toBeVisible();
+  // Empty restricted channel shows empty-state (file-table only appears once items exist).
+  await expect(page.getByTestId("empty-state")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "#secret" })).toBeVisible();
 
   // --- Personal copy to channel ---
   await page.goto("/me/files");
@@ -156,9 +158,8 @@ test("sign in, upload, rename, move, trash, restore, join link, role, restricted
     mimeType: "text/plain",
     buffer: Buffer.from("personal-bytes"),
   });
-  await expect(page.getByText("done · 100%").first()).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByTestId(`personal-row-${personalName}`)).toBeVisible({ timeout: 30_000 });
-  await page.getByTestId(`actions-${personalName}`).click();
+  await waitForUploadedRow(page, `personal-row-${personalName}`);
+  await openRowActions(page, personalName);
   await page.getByTestId(`copy-${personalName}`).click();
   await expect(page.getByTestId("copy-success")).toBeVisible();
 

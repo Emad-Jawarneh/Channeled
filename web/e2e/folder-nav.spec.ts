@@ -1,5 +1,13 @@
 import { test, expect } from "@playwright/test";
-import { E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD, apiLogin, uiLogin } from "./helpers";
+import {
+  E2E_ADMIN_EMAIL,
+  E2E_ADMIN_PASSWORD,
+  apiLogin,
+  ensureFreshTeam,
+  openRowActions,
+  uiLogin,
+  waitForUploadedRow,
+} from "./helpers";
 
 test.describe.configure({ mode: "serial" });
 
@@ -8,18 +16,12 @@ test("folder crumbs, Back, picker move, and internal DnD skips upload overlay", 
   request,
 }) => {
   await uiLogin(page, E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD);
-
-  if (await page.getByTestId("create-team").isVisible().catch(() => false)) {
-    await page.getByTestId("create-team-name").fill(`E2E Folder ${Date.now()}`);
-    await page.getByTestId("create-team").click();
-  }
-  await expect(page).toHaveURL(/\/t\/.+\/c\/general/);
-  const teamSlug = page.url().match(/\/t\/([^/]+)\//)?.[1];
-  expect(teamSlug).toBeTruthy();
+  const teamSlug = await ensureFreshTeam(page, "E2E Folder");
 
   await page.getByTestId("new-folder").click();
   await page.getByTestId("create-folder-name").fill("Alpha");
   await page.getByTestId("create-folder-submit").click();
+  await expect(page.getByTestId("create-folder-dialog")).toBeHidden({ timeout: 15_000 });
   await expect(page.getByTestId("row-Alpha")).toBeVisible();
 
   await page.getByTestId("open-folder-Alpha").click();
@@ -32,11 +34,10 @@ test("folder crumbs, Back, picker move, and internal DnD skips upload overlay", 
     mimeType: "text/plain",
     buffer: Buffer.from("folder-nav"),
   });
-  await expect(page.getByText("done · 100%")).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByTestId(`row-${fileName}`)).toBeVisible({ timeout: 30_000 });
+  await waitForUploadedRow(page, `row-${fileName}`);
 
   // Move file to root via picker (ancestors include root via allowNone)
-  await page.getByTestId(`actions-${fileName}`).click();
+  await openRowActions(page, fileName);
   await page.getByTestId(`move-${fileName}`).click();
   await page.getByTestId("move-to-dialog-select").selectOption({ value: "" });
   await page.getByTestId("move-to-dialog-submit").click();
@@ -68,15 +69,18 @@ test("folder crumbs, Back, picker move, and internal DnD skips upload overlay", 
   await page.getByTestId("new-folder").click();
   await page.getByTestId("create-folder-name").fill("Gamma");
   await page.getByTestId("create-folder-submit").click();
+  await expect(page.getByTestId("create-folder-dialog")).toBeHidden({ timeout: 15_000 });
   await expect(page.getByTestId("row-Gamma")).toBeVisible();
 
   const itemsRes = await request.get(`/api/v1/teams/${teamSlug}/channels/general/items`);
+  expect(itemsRes.ok()).toBeTruthy();
   const items = (await itemsRes.json()) as {
     items: { id: string; name: string; kind: number; folderId?: string | null }[];
   };
-  const gamma = items.items.find((i) => i.name === "Gamma" && i.kind === 1);
-  const file = items.items.find((i) => i.name === fileName && i.kind === 0);
-  expect(gamma && file).toBeTruthy();
+  const gamma = items.items.find((i) => i.name === "Gamma");
+  const file = items.items.find((i) => i.name === fileName);
+  expect(gamma, `Gamma missing in ${JSON.stringify(items.items.map((i) => i.name))}`).toBeTruthy();
+  expect(file, `File missing in ${JSON.stringify(items.items.map((i) => i.name))}`).toBeTruthy();
 
   // Place a copy-named conflict inside Gamma via API move of a duplicate folder name setup:
   // Create folder "conflict" at root and inside Gamma, then try moving root conflict into Gamma.

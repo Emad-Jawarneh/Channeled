@@ -141,10 +141,15 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
       if ((target as Element).closest?.(`[data-menu-trigger="${menu.id}"]`)) return;
       close();
     };
+    // Defer scroll-close so opening the menu (and Playwright scrolling the trigger into view)
+    // does not immediately dismiss it.
+    const scrollTimer = window.setTimeout(() => {
+      window.addEventListener("scroll", close, true);
+    }, 100);
     window.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("scroll", close, true);
     window.addEventListener("resize", close);
     return () => {
+      window.clearTimeout(scrollTimer);
       window.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("scroll", close, true);
       window.removeEventListener("resize", close);
@@ -209,7 +214,12 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
       }
     }
     if (refreshed) {
-      void qc.invalidateQueries({ queryKey: ["items", teamSlug, channelName] });
+      const key = ["items", teamSlug, channelName] as const;
+      void qc.refetchQueries({ queryKey: key, type: "active" });
+      // Upload complete can race SignalR JoinChannel; nudge once more shortly after.
+      window.setTimeout(() => {
+        void qc.refetchQueries({ queryKey: key, type: "active" });
+      }, 300);
     }
   }, [uploads.jobs, teamSlug, channelName, qc]);
 
@@ -505,7 +515,6 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
 
   function enqueueChannelFiles(files: File[]) {
     uploads.enqueueChannel(files, teamSlug, channelName, folderId);
-    void qc.invalidateQueries({ queryKey: listKey });
   }
 
   const { dropActive } = useFileDrop({

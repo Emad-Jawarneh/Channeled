@@ -4,8 +4,8 @@
   flex-shrink: 0;
   overflow: hidden;
   border-radius: 12px;
-  background: var(--color-focus);
-  color: var(--color-on-accent, var(--color-accent-contrast));
+  background: var(--color-accent-strong);
+  color: var(--color-on-accent);
   font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1;

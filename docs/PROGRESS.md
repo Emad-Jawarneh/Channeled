@@ -11,6 +11,7 @@
 | M11 Text chat | ✅ Complete | ChatApiTests + ChatHubTests + ChatAuthorizerTests + rate-limit; TextChannelPage composer |
 | M12 Replies / mentions / notifications | ✅ Complete | ReplyMentionNotificationTests + MentionResolverTests; NotificationBell + TextChannelPage reply/@ |
 | M13 Channel edit / delete | ✅ Complete | ChannelDeleteApiTests (discard/move/quota/perms); settings edit + type-to-confirm delete (move|discard) |
+| M14 Account / Profiles (no 2FA) | ✅ Complete | Usernames, avatars, UserChip, account settings, SMTP + self-service mail, fragment confirm/reset, session revoke on password/email change |
 
 ## M9–M12 notes
 

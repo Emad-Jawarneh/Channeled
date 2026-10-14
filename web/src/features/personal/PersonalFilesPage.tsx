@@ -11,6 +11,7 @@ import {
 } from "../../api/channeled";
 import { ApiError } from "../../api/http";
 import { AppShell } from "../../components/AppShell";
+import { UserChip } from "../../components/UserChip";
 import { formatFileType } from "../../lib/describeFileKind";
 import { formatBytes } from "../../lib/formatBytes";
 import { ModifiedAt } from "../../lib/formatModified";
@@ -729,6 +730,7 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
                   sortDir={sortDir}
                   onSort={onSortColumn}
                 />
+                <th scope="col">Uploaded by</th>
                 <SortableTh
                   column="updated"
                   label="Modified"
@@ -808,6 +810,18 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
                       <span className={styles.typeCell}>{formatFileType(item)}</span>
                     </td>
                     <td>{isFolder ? "—" : formatBytes(item.sizeBytes)}</td>
+                    <td className={styles.uploaderCell} onClick={(e) => e.stopPropagation()}>
+                      {!isFolder && item.uploadedBy && item.uploadedByDisplayName ? (
+                        <UserChip
+                          userId={item.uploadedBy}
+                          displayName={item.uploadedByDisplayName}
+                          username={item.uploadedByUsername ?? undefined}
+                          avatarVersion={item.uploadedByAvatarVersion}
+                        />
+                      ) : (
+                        "—"
+                      )}
+                    </td>
                     <td>
                       <ModifiedAt value={item.updatedAt} />
                     </td>

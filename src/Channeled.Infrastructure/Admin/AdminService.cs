@@ -101,12 +101,18 @@ public sealed class AdminService(
             return NotFound<AdminUserDto>();
         }
 
+        if (!DisplayNameRules.TryValidate(request.DisplayName, out var displayName, out var displayErr))
+        {
+            return AppResult<AdminUserDto>.Fail(ErrorCodes.Validation, displayErr!);
+        }
+
         var user = new AppUser
         {
             Id = UuidV7.NewGuid(),
             Email = request.Email.Trim(),
             UserName = request.Email.Trim(),
-            DisplayName = request.DisplayName.Trim(),
+            DisplayName = displayName,
+            UsernameSlug = await UsernameAllocator.AllocateUniqueAsync(userManager, db, displayName, ct),
             EmailConfirmed = true,
             Status = "active",
             IsPlatformAdmin = request.IsPlatformAdmin,

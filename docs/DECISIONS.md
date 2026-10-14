@@ -189,3 +189,18 @@
 
 **Decision:** No `DeletingAt`. Delete takes `FOR UPDATE` on the channel (and `FOR SHARE` on a move target), locking by ascending channel Id. Writers use `ChannelWriteGuard` (`FOR SHARE` + exists). Caps: 10k files / 10k messages per txn; `SET LOCAL lock_timeout` + `statement_timeout`. Discard enqueues `object_delete` jobs in the same txn (chunk ≤2000, SKIP LOCKED worker, retry/backoff/`dead` on health). Admin purge and trash purge commit rows then delete bytes/outbox. Reconcile reports missing store keys and files with neither channel nor personal owner.
 **Reason:** Exists-check after lock wait matches a deleting flag without a useless column; async deletes keep the request under statement timeout.
+
+## 2026-10-14 — Account profiles (usernames + avatars)
+
+**Decision:** Public `UsernameSlug` is 3–30 ASCII `[a-z0-9._-]`, no leading/trailing/double separators, reserved-name blocklist. First rename is free; then 30-day cooldown; previous name held in `username_reservations` (owner may reclaim without resetting cooldown). Display names are NFC-normalized with zero-width/bidi stripped. Shared `UserSummary` / avatar+card visibility: self, platform admin, or shared team (else 404). Avatars via SkiaSharp (+ Linux NoDependencies), 2 MB dual caps, orphan delete via `object_delete`.
+**Reason:** Stable mentions/chips without using email as the public handle; closed-team profile privacy.
+
+## 2026-10-14 — 2FA deferred, not a release gate
+
+**Decision:** Email OTP / pre-auth / recovery codes / trusted devices are deferred. Revisit with an authenticator app (TOTP) first, email codes only as a fallback, and recovery codes included from the start. Identity `TwoFactorEnabled` stays unused and unexposed. Sign-in returns a `SignInOutcome` so a second step can be added later without rewriting session creation.
+**Reason:** Pilot relies on lockout, rate limits, session revoke, and HTTPS; closed networks further justify waiting.
+
+## 2026-10-14 — Self-service mail + fragment tokens
+
+**Decision:** `Account:SelfServiceMail` = `Auto`|`Off`. Available only when the active sender is `SmtpEmailSender` and `smtp_verified_at` is set. Reset/confirm links use URL fragments (`#token=`); pages POST the token (GET is inert). Email job payloads are Data Protection–encrypted and blanked after send; decrypt failure dead-letters. Session cookie validation checks the sessions table with optional cache TTL ≤5s (startup fails if configured higher).
+**Reason:** Avoid logging/proxy token capture; avoid bricking no-mail production; keep session revoke effective within seconds.

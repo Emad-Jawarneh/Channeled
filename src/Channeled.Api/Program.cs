@@ -1,5 +1,8 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using System.Threading.RateLimiting;
 using Channeled.Api.Admin;
 using Channeled.Api.Auth;
@@ -11,6 +14,8 @@ using Channeled.Api.Notifications;
 using Channeled.Api.Realtime;
 using Channeled.Api.Search;
 using Channeled.Api.Teams;
+using Channeled.Api.Users;
+using Channeled.Api.Account;
 using Channeled.Application.Abstractions.Operations;
 using Channeled.Application.Abstractions.Realtime;
 using Channeled.Application.Identity;
@@ -50,12 +55,35 @@ builder.Services.AddAntiforgery(options =>
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    options.AddFixedWindowLimiter("auth", limiter =>
+    // Configurable so the API test suite (many logins per minute) is not throttled; prod default stays 20/min.
+    // Partitioned per IP so one client cannot exhaust the global budget.
+    options.AddPolicy("auth", httpContext =>
     {
-        // Configurable so the API test suite (many logins per minute) is not throttled; prod default stays 20/min.
-        limiter.PermitLimit = Math.Max(1, builder.Configuration.GetValue("RateLimits:AuthPermitPerMinute", 20));
-        limiter.Window = TimeSpan.FromMinutes(1);
-        limiter.QueueLimit = 0;
+        var ip = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        var permit = Math.Max(1, builder.Configuration.GetValue("RateLimits:AuthPermitPerMinute", 20));
+        return RateLimitPartition.GetFixedWindowLimiter(
+            $"auth:{ip}",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = permit,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+            });
+    });
+
+    // Token POSTs: partition by IP and token (body) so brute-force is limited per-token too.
+    options.AddPolicy("auth-token", httpContext =>
+    {
+        var ip = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        var tokenKey = PeekJsonTokenKey(httpContext.Request);
+        return RateLimitPartition.GetFixedWindowLimiter(
+            $"tok:{ip}:{tokenKey}",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+            });
     });
 
     // Anonymous public share endpoints: per-IP budget (read lazily so IOptionsMonitor/test config applies).
@@ -170,6 +198,7 @@ if (args.Contains("ensure-user", StringComparer.OrdinalIgnoreCase))
             Email = email,
             UserName = email,
             DisplayName = name,
+                    UsernameSlug = email.Split('@')[0].Replace(".", "")[..30],
             EmailConfirmed = true,
             IsPlatformAdmin = admin,
             Status = "active",
@@ -268,6 +297,7 @@ if (args.Contains("seed-bench-files", StringComparer.OrdinalIgnoreCase))
             Email = email,
             UserName = email,
             DisplayName = "Bench",
+                    UsernameSlug = email.Split('@')[0].Replace(".", "")[..30],
             EmailConfirmed = true,
             Status = "active",
         };
@@ -303,6 +333,13 @@ if (app.Environment.IsDevelopment())
 app.UseForwardedHeaders(new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
+});
+
+app.Use(async (context, next) =>
+{
+    // Token links must not leak via Referer (fragment still preferred for tokens).
+    context.Response.Headers["Referrer-Policy"] = "no-referrer";
+    await next();
 });
 
 app.Use(async (context, next) =>
@@ -375,6 +412,10 @@ app.Use(async (context, next) =>
                      || path.StartsWith("/api/v1/auth/forgot-password", StringComparison.OrdinalIgnoreCase)
                      || path.StartsWith("/api/v1/auth/reset-password", StringComparison.OrdinalIgnoreCase)
                      || path.StartsWith("/api/v1/auth/csrf", StringComparison.OrdinalIgnoreCase)
+                     || path.StartsWith("/api/v1/account/email-change/confirm", StringComparison.OrdinalIgnoreCase)
+                     || path.StartsWith("/api/v1/account/email-change/cancel", StringComparison.OrdinalIgnoreCase)
+                     || path.StartsWith("/api/v1/account/email-change/sign-out-all", StringComparison.OrdinalIgnoreCase)
+                     || path.StartsWith("/api/v1/account/email-change/password", StringComparison.OrdinalIgnoreCase)
                      // Anonymous public share claim: no cookie session, so there is no CSRF surface.
                      || path.StartsWith("/api/v1/public/", StringComparison.OrdinalIgnoreCase);
 
@@ -448,7 +489,24 @@ app.MapGet("/metrics", async Task<IResult> (ISystemHealthService healthSvc, Canc
     .WithTags("Health")
     .AllowAnonymous();
 
+// Startup guards for account/mail configuration.
+{
+    var accountOpts = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<AccountOptions>>().Value;
+    if (accountOpts.SessionCacheTtlSeconds > 5)
+    {
+        throw new InvalidOperationException("Account:SessionCacheTtlSeconds must be 5 or less.");
+    }
+
+    // Self-service availability is computed at runtime (SMTP sender ∧ smtp_verified_at ∧ fingerprint).
+    // Logging sender + Auto is fine: IsAvailableAsync stays false; no-mail prod still starts.
+    _ = app.Services.GetRequiredService<IEmailSenderMarker>();
+    _ = accountOpts.SelfServiceMail;
+}
+
 app.MapAuthEndpoints();
+app.MapUserEndpoints();
+app.MapAccountEndpoints();
+app.MapAccountMailEndpoints();
 app.MapTeamEndpoints();
 app.MapFileEndpoints();
 app.MapChatEndpoints();
@@ -476,6 +534,55 @@ static string? GetArg(string[] args, string name)
     }
 
     return null;
+}
+
+/// <summary>Stable partition key from JSON body <c>token</c> (or "none"). Enables per-IP+per-token limits.</summary>
+static string PeekJsonTokenKey(HttpRequest request)
+{
+    try
+    {
+        request.EnableBuffering();
+        if (request.ContentLength is null or <= 0 or > 16_384)
+        {
+            return "none";
+        }
+
+        var buffer = new byte[(int)request.ContentLength.Value];
+        var read = request.Body.Read(buffer, 0, buffer.Length);
+        request.Body.Position = 0;
+        if (read <= 0)
+        {
+            return "none";
+        }
+
+        using var doc = JsonDocument.Parse(buffer.AsMemory(0, read));
+        if (!doc.RootElement.TryGetProperty("token", out var tokenProp))
+        {
+            return "none";
+        }
+
+        var token = tokenProp.GetString() ?? "";
+        if (token.Length == 0)
+        {
+            return "none";
+        }
+
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(token));
+        return Convert.ToHexString(hash.AsSpan(0, 8)).ToLowerInvariant();
+    }
+    catch
+    {
+        try
+        {
+            request.Body.Position = 0;
+        }
+        catch
+        {
+            // ignore
+        }
+
+        return "none";
+    }
 }
 
 static async Task<int> RunRestoreDrillAsync(IServiceProvider root)
@@ -512,6 +619,7 @@ static async Task<int> RunRestoreDrillAsync(IServiceProvider root)
         Email = $"drill-{userId:N}@example.com",
         UserName = $"drill-{userId:N}@example.com",
         DisplayName = "Drill",
+        UsernameSlug = $"drill{userId:N}"[..30],
         EmailConfirmed = true,
         Status = "active",
     };

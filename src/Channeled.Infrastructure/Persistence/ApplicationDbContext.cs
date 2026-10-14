@@ -42,6 +42,10 @@ public sealed class ApplicationDbContext : IdentityDbContext<AppUser, AppRole, G
     public DbSet<ChannelMessageEntity> ChannelMessages => Set<ChannelMessageEntity>();
     public DbSet<MessageMentionEntity> MessageMentions => Set<MessageMentionEntity>();
     public DbSet<NotificationEntity> Notifications => Set<NotificationEntity>();
+    public DbSet<UsernameReservation> UsernameReservations => Set<UsernameReservation>();
+    public DbSet<PendingEmailChange> PendingEmailChanges => Set<PendingEmailChange>();
+    public DbSet<AddressRateCounter> AddressRateCounters => Set<AddressRateCounter>();
+    public DbSet<OperationsSettingsEntity> OperationsSettings => Set<OperationsSettingsEntity>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -50,9 +54,52 @@ public sealed class ApplicationDbContext : IdentityDbContext<AppUser, AppRole, G
         builder.Entity<AppUser>(entity =>
         {
             entity.Property(x => x.DisplayName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Bio).HasMaxLength(280).IsRequired();
+            entity.Property(x => x.UsernameSlug).HasMaxLength(30).IsRequired();
+            entity.HasIndex(x => x.UsernameSlug).IsUnique();
+            entity.Property(x => x.AvatarStorageKey).HasMaxLength(512);
+            entity.Property(x => x.AvatarContentType).HasMaxLength(128);
             entity.Property(x => x.Status).HasMaxLength(32).IsRequired();
             entity.HasIndex(x => x.NormalizedEmail).IsUnique();
             entity.Property(x => x.PersonalUsageBytes).HasDefaultValue(0L);
+        });
+
+        builder.Entity<UsernameReservation>(entity =>
+        {
+            entity.ToTable("username_reservations");
+            entity.HasKey(x => x.NormalizedUsername);
+            entity.Property(x => x.NormalizedUsername).HasMaxLength(30);
+            entity.Property(x => x.Reason).HasMaxLength(64);
+            entity.HasIndex(x => x.ExpiresAt);
+        });
+
+        builder.Entity<PendingEmailChange>(entity =>
+        {
+            entity.ToTable("pending_email_changes");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.NewEmail).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.NewEmailNormalized).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.ConfirmTokenHash).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.CancelTokenHash).HasMaxLength(64).IsRequired();
+            entity.HasIndex(x => x.UserId);
+            entity.HasIndex(x => x.NewEmailNormalized);
+            entity.HasIndex(x => x.ConfirmTokenHash).IsUnique();
+            entity.HasIndex(x => x.CancelTokenHash).IsUnique();
+        });
+
+        builder.Entity<AddressRateCounter>(entity =>
+        {
+            entity.ToTable("address_rate_counters");
+            entity.HasKey(x => x.AddressKeyHash);
+            entity.Property(x => x.AddressKeyHash).HasMaxLength(64);
+            entity.HasIndex(x => x.ExpiresAt);
+        });
+
+        builder.Entity<OperationsSettingsEntity>(entity =>
+        {
+            entity.ToTable("operations_settings");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.SmtpSettingsFingerprint).HasMaxLength(128);
         });
 
         builder.Entity<AuditEvent>(entity =>

@@ -61,6 +61,10 @@ Filled for M8 against the implemented API + SPA. Status: **Pass** / **Partial** 
 - Full CSP for SPA should be enforced at the edge in production (documented in ops samples).
 - Load test full 2 TB object corpus is operator-run; CI uses a reduced concurrency/latency profile.
 - Formal threat model document can be expanded beyond AGENTS narrative.
+- **Pilot without 2FA:** account security relies on lockout (5/15m), auth rate limits, 12-character passwords, session list/revoke, and audits for sign-in and password/email changes. Deploy **HTTPS only**. Closed-network pilots are a further reason to defer TOTP/email 2FA.
+- **Avatar decode:** SkiaSharp runs in-process; a native decoder crash can take down the API process (including hubs). Keep SkiaSharp patched; reject unknown magic bytes / animated WebP / oversized dimensions in `AvatarImageProcessor`; consider out-of-process decode for final release.
+- **Mail fragments:** tokens are not sent to the server on GET; some tracker-rewriting mail clients may drop `#token=` — paste-token fallback is provided.
+- Token-based account POSTs (confirm/reset/cancel) are CSRF-exempt but require the token in the body; attempts are rate-limited **per IP and per token** (`auth-token` policy). Tokens are ≥128 bits.
 
 ## Sign-off
 

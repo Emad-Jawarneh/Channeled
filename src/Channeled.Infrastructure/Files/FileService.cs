@@ -162,8 +162,10 @@ public sealed class FileService(
         }
 
         var files = await filesQuery.ToListAsync(ct);
+        var uploaders = await LoadUploadersAsync(files.Select(f => (Guid?)f.UploadedBy), ct);
 
-        IEnumerable<FileItemDto> items = folders.Select(ToFolderDto).Concat(files.Select(ToFileDto));
+        IEnumerable<FileItemDto> items = folders.Select(ToFolderDto)
+            .Concat(files.Select(f => ToFileDto(f, uploaders.GetValueOrDefault(f.UploadedBy))));
 
         items = (query.Sort?.ToLowerInvariant()) switch
         {
@@ -219,7 +221,7 @@ public sealed class FileService(
             .FirstOrDefaultAsync(f => f.Id == itemId && f.ChannelId == channel.Channel.Id, ct);
         if (file is not null)
         {
-            return AppResult<FileItemDto>.Ok(ToFileDto(file));
+            return AppResult<FileItemDto>.Ok(await ToFileDtoAsync(file, ct));
         }
 
         var folder = await db.Folders.AsNoTracking()
@@ -1340,11 +1342,65 @@ public sealed class FileService(
         await Task.CompletedTask;
     }
 
-    private static FileItemDto ToFileDto(FileEntity f) =>
-        new(f.Id, ItemKind.File, f.Name, f.FolderId, f.ChannelId, f.ContentType, f.SizeBytes, f.Sha256, f.UploadedBy, f.CreatedAt, f.UpdatedAt, f.DeletedAt, f.OwnerUserId);
+    private async Task<Dictionary<Guid, UploaderInfo>> LoadUploadersAsync(
+        IEnumerable<Guid?> ids,
+        CancellationToken ct)
+    {
+        var list = ids.Where(id => id is Guid).Select(id => id!.Value).Distinct().ToList();
+        if (list.Count == 0)
+        {
+            return new Dictionary<Guid, UploaderInfo>();
+        }
+
+        return await db.Users.AsNoTracking()
+            .Where(u => list.Contains(u.Id))
+            .Select(u => new
+            {
+                u.Id,
+                u.DisplayName,
+                u.UsernameSlug,
+                u.AvatarUpdatedAt,
+            })
+            .ToDictionaryAsync(
+                u => u.Id,
+                u => new UploaderInfo(
+                    u.DisplayName,
+                    u.UsernameSlug,
+                    u.AvatarUpdatedAt.HasValue ? u.AvatarUpdatedAt.Value.ToUnixTimeMilliseconds() : null),
+                ct);
+    }
+
+    private async Task<FileItemDto> ToFileDtoAsync(FileEntity f, CancellationToken ct)
+    {
+        var map = await LoadUploadersAsync([f.UploadedBy], ct);
+        map.TryGetValue(f.UploadedBy, out var info);
+        return ToFileDto(f, info);
+    }
+
+    private static FileItemDto ToFileDto(FileEntity f, UploaderInfo? uploader = null) =>
+        new(
+            f.Id,
+            ItemKind.File,
+            f.Name,
+            f.FolderId,
+            f.ChannelId,
+            f.ContentType,
+            f.SizeBytes,
+            f.Sha256,
+            f.UploadedBy,
+            f.CreatedAt,
+            f.UpdatedAt,
+            f.DeletedAt,
+            f.OwnerUserId,
+            Starred: false,
+            UploadedByDisplayName: uploader?.DisplayName,
+            UploadedByUsername: uploader?.Username,
+            UploadedByAvatarVersion: uploader?.AvatarVersion);
 
     private static FileItemDto ToFolderDto(FolderEntity f) =>
         new(f.Id, ItemKind.Folder, f.Name, f.ParentId, f.ChannelId, null, null, null, null, f.CreatedAt, f.UpdatedAt, f.DeletedAt, f.OwnerUserId);
+
+    private sealed record UploaderInfo(string DisplayName, string Username, long? AvatarVersion);
 
     private static AppResult NotFoundChannel() =>
         AppResult.Fail(ErrorCodes.NotFound, "Channel not found.");

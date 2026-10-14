@@ -117,6 +117,14 @@ Reports missing objects, orphans, and checksum mismatches.
 
 Configure `Backup__AlertEmail`. Failures (backup errors, low disk below `Backup__LowDiskBytes`) are emailed via the configured `IEmailSender` (logs in development).
 
+## SMTP and self-service mail
+
+- Set `Operations__SmtpHost`, `Operations__SmtpPort`, `Operations__SmtpFrom`, and optional username/password. When `SmtpHost` is set, the API uses `SmtpEmailSender`; otherwise it uses the logging sender (bodies redacted).
+- `Account__SelfServiceMail` = `Auto` (default) or `Off`. Self-service password reset and email change are available only when the **SMTP sender is active** and an admin has run a successful SMTP test (`smtp_verified_at`). Changing SMTP settings clears verification.
+- Development: run [Mailpit](https://github.com/axllent/mailpit) (or similar) as the SMTP target so reset/confirm links are visible. Logging sender alone redacts tokens.
+- Email send jobs encrypt payloads with Data Protection. After restore without DP keys, failed decrypts go to **dead** with an admin-visible reason (not infinite retry). Preserve the data-protection key ring across restores.
+- Confirm/reset links use `#token=` fragments; if a mail client drops the fragment, users can paste the token shown in the email body.
+
 ## Seed first operator
 
 ```bash

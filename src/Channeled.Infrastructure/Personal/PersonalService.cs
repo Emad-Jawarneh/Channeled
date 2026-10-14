@@ -140,9 +140,10 @@ public sealed class PersonalService(
             .Select(s => s.FileId)
             .ToListAsync(ct);
         var starredSet = starred.ToHashSet();
+        var uploaders = await LoadUploadersAsync(files.Select(f => (Guid?)f.UploadedBy), ct);
 
         IEnumerable<FileItemDto> items = folders.Select(ToFolderDto)
-            .Concat(files.Select(f => ToFileDto(f, starredSet.Contains(f.Id))));
+            .Concat(files.Select(f => ToFileDto(f, starredSet.Contains(f.Id), uploaders.GetValueOrDefault(f.UploadedBy))));
 
         items = SortItems(items, query.Sort);
         items = ApplyCursor(items, query.Cursor);
@@ -178,7 +179,8 @@ public sealed class PersonalService(
             .ToListAsync(ct);
 
         var starred = await StarredIdsAsync(userId, ct);
-        IEnumerable<FileItemDto> items = files.Select(f => ToFileDto(f, starred.Contains(f.Id)));
+        var uploaders = await LoadUploadersAsync(files.Select(f => (Guid?)f.UploadedBy), ct);
+        IEnumerable<FileItemDto> items = files.Select(f => ToFileDto(f, starred.Contains(f.Id), uploaders.GetValueOrDefault(f.UploadedBy)));
         items = ApplyCursor(items, cursor);
         var page = items.Take(limit + 1).ToList();
         string? next = null;
@@ -213,7 +215,9 @@ public sealed class PersonalService(
             .Take(500)
             .ToListAsync(ct);
 
-        IEnumerable<FileItemDto> items = rows.Select(x => ToFileDto(x.File, starred: true));
+        var uploaders = await LoadUploadersAsync(rows.Select(x => (Guid?)x.File.UploadedBy), ct);
+        IEnumerable<FileItemDto> items = rows.Select(x =>
+            ToFileDto(x.File, starred: true, uploaders.GetValueOrDefault(x.File.UploadedBy)));
         items = ApplyCursor(items, cursor);
         var page = items.Take(limit + 1).ToList();
         string? next = null;
@@ -991,11 +995,52 @@ public sealed class PersonalService(
             || (i.UpdatedAt == cursorTime && i.Id.CompareTo(cursorId) < 0));
     }
 
-    private static FileItemDto ToFileDto(FileEntity f, bool starred = false) =>
-        new(f.Id, ItemKind.File, f.Name, f.FolderId, f.ChannelId, f.ContentType, f.SizeBytes, f.Sha256, f.UploadedBy, f.CreatedAt, f.UpdatedAt, f.DeletedAt, f.OwnerUserId, starred);
+    private async Task<Dictionary<Guid, UploaderInfo>> LoadUploadersAsync(
+        IEnumerable<Guid?> ids,
+        CancellationToken ct)
+    {
+        var list = ids.Where(id => id is Guid).Select(id => id!.Value).Distinct().ToList();
+        if (list.Count == 0)
+        {
+            return new Dictionary<Guid, UploaderInfo>();
+        }
+
+        return await db.Users.AsNoTracking()
+            .Where(u => list.Contains(u.Id))
+            .Select(u => new { u.Id, u.DisplayName, u.UsernameSlug, u.AvatarUpdatedAt })
+            .ToDictionaryAsync(
+                u => u.Id,
+                u => new UploaderInfo(
+                    u.DisplayName,
+                    u.UsernameSlug,
+                    u.AvatarUpdatedAt.HasValue ? u.AvatarUpdatedAt.Value.ToUnixTimeMilliseconds() : null),
+                ct);
+    }
+
+    private static FileItemDto ToFileDto(FileEntity f, bool starred = false, UploaderInfo? uploader = null) =>
+        new(
+            f.Id,
+            ItemKind.File,
+            f.Name,
+            f.FolderId,
+            f.ChannelId,
+            f.ContentType,
+            f.SizeBytes,
+            f.Sha256,
+            f.UploadedBy,
+            f.CreatedAt,
+            f.UpdatedAt,
+            f.DeletedAt,
+            f.OwnerUserId,
+            starred,
+            uploader?.DisplayName,
+            uploader?.Username,
+            uploader?.AvatarVersion);
 
     private static FileItemDto ToFolderDto(FolderEntity f) =>
         new(f.Id, ItemKind.Folder, f.Name, f.ParentId, f.ChannelId, null, null, null, null, f.CreatedAt, f.UpdatedAt, f.DeletedAt, f.OwnerUserId);
+
+    private sealed record UploaderInfo(string DisplayName, string Username, long? AvatarVersion);
 
     private static AppResult<FileItemDto> NotFound() =>
         AppResult<FileItemDto>.Fail(ErrorCodes.NotFound, "Not found.");

@@ -64,6 +64,7 @@ public sealed class ChatWorld : IAsyncDisposable
                     Email = email,
                     UserName = email,
                     DisplayName = name,
+                    UsernameSlug = email.Split('@')[0].Replace(".", "")[..30],
                     EmailConfirmed = true,
                     Status = "active",
                 };

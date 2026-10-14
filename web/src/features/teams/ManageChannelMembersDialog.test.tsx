@@ -17,6 +17,7 @@ function member(partial: Partial<TeamMember> & Pick<TeamMember, "userId" | "emai
     role: MemberRole.Member,
     joinedAt: "2024-01-01T00:00:00Z",
     ...partial,
+    username: partial.username ?? partial.email.split("@")[0] ?? "user",
   };
 }
 

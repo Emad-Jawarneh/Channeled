@@ -130,6 +130,32 @@ public static class AdminEndpoints
             return Results.Ok(report);
         });
 
+        admin.MapPost("/operations/smtp/test", async Task<IResult> (
+            HttpContext http,
+            IAccountMailService mail,
+            ClaimsPrincipal p,
+            CancellationToken ct) =>
+            await RequireUser(p, async adminId =>
+            {
+                var to = http.Request.Query["to"].ToString();
+                if (string.IsNullOrWhiteSpace(to))
+                {
+                    to = p.FindFirstValue(ClaimTypes.Email) ?? "";
+                }
+
+                return ToHttp(await mail.TestSmtpAsync(adminId, to, Ctx(http), ct));
+            }));
+
+        admin.MapPost("/users/{id:guid}/email", async Task<IResult> (
+            Guid id,
+            AdminCorrectEmailRequest body,
+            IAccountMailService mail,
+            ClaimsPrincipal p,
+            HttpContext http,
+            CancellationToken ct) =>
+            await RequireUser(p, async adminId =>
+                ToHttp(await mail.AdminCorrectEmailAsync(adminId, id, body, Ctx(http), ct))));
+
         admin.MapPost("/config", async Task<IResult> (
             ConfigChangeBody body, IAdminService svc, ClaimsPrincipal p, HttpContext http, CancellationToken ct) =>
             await RequireUser(p, async userId => ToHttp(await svc.RecordConfigChangeAsync(userId, body.Key, body.Value, Ctx(http), ct))));

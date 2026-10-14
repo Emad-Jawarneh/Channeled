@@ -45,13 +45,13 @@
   --text-lg: 1.125rem;
   --text-xl: 1.5rem;
 
-  --radius-sm: 0.625rem;
-  --radius-md: 0.875rem;
-  --radius-pill: 999px;
-
   /* Shared height for text fields, selects, and primary buttons */
   --control-height: 2.75rem;
   --control-padding-x: 0.85rem;
+
+  --radius-sm: 0.625rem;
+  --radius-md: 0.875rem;
+  --radius-pill: 999px;
   --shadow-card: 0 1px 2px rgba(55, 63, 81, 0.05), 0 8px 24px rgba(55, 63, 81, 0.05);
   --shadow-btn: 0 4px 12px rgba(102, 172, 183, 0.45);
   --shadow-focus: 0 0 0 3px color-mix(in srgb, var(--color-focus) 35%, transparent);

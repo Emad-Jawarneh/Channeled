@@ -17,4 +17,10 @@ public static class ObjectKey
         var hex = teamId.ToString("N");
         return $"team-logos/{hex[..2]}/{hex[2..4]}/{teamId:D}";
     }
+
+    public static string ForUserAvatar(Guid userId, Guid blobId)
+    {
+        var hex = userId.ToString("N");
+        return $"avatars/{hex[..2]}/{hex[2..4]}/{userId:D}/{blobId:D}";
+    }
 }

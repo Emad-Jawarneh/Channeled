@@ -579,7 +579,15 @@ public sealed partial class TeamService
         IReadOnlyList<TeamJoinRequestDto> dtos = rows.Select(r =>
         {
             users.TryGetValue(r.UserId, out var u);
-            return new TeamJoinRequestDto(r.Id, r.UserId, u?.Email ?? "", u?.DisplayName ?? "", r.Status, r.CreatedAt);
+            return new TeamJoinRequestDto(
+                r.Id,
+                r.UserId,
+                u?.Email ?? "",
+                u?.DisplayName ?? "",
+                u?.UsernameSlug ?? "",
+                u?.AvatarUpdatedAt?.ToUnixTimeMilliseconds(),
+                r.Status,
+                r.CreatedAt);
         }).ToList();
         return AppResult<IReadOnlyList<TeamJoinRequestDto>>.Ok(dtos);
     }

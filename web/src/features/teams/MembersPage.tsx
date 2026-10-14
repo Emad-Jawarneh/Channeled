@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { MemberRole, teamsApi, type TeamMember } from "../../api/channeled";
 import { useAuth } from "../../auth/AuthContext";
 import { AppShell } from "../../components/AppShell";
+import { UserChip } from "../../components/UserChip";
 import { Button } from "../../ui/Button";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { RoleSelect } from "./RoleSelect";
@@ -105,7 +106,12 @@ export function MembersPage({ teamSlug }: { teamSlug: string }) {
               <tr key={m.userId} data-testid={`member-${m.email}`}>
                 <td data-label="Member">
                   <div className={styles.member}>
-                    <span className={styles.memberName}>{m.displayName}</span>
+                    <UserChip
+                      userId={m.userId}
+                      displayName={m.displayName}
+                      username={m.username}
+                      avatarVersion={m.avatarVersion}
+                    />
                     <span className={styles.memberEmail}>{m.email}</span>
                   </div>
                 </td>

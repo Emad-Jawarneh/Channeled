@@ -48,6 +48,8 @@ public sealed record TeamJoinRequestDto(
     Guid UserId,
     string Email,
     string DisplayName,
+    string Username,
+    long? AvatarVersion,
     TeamJoinRequestStatus Status,
     DateTimeOffset CreatedAt);
 
@@ -55,7 +57,15 @@ public sealed record TeamJoinRequestDto(
 public sealed record ApproveTeamJoinRequestRequest(MemberRole Role);
 public sealed record PendingJoinCountDto(int Count);
 
-public sealed record TeamMemberDto(Guid UserId, string Email, string DisplayName, MemberRole Role, DateTimeOffset JoinedAt);
+public sealed record TeamMemberDto(
+    Guid UserId,
+    string Email,
+    string DisplayName,
+    string Username,
+    long? AvatarVersion,
+    MemberRole Role,
+    DateTimeOffset JoinedAt);
+
 public sealed record ChangeMemberRoleRequest(MemberRole Role);
 
 /// <summary>Kind is required in JSON; missing/null is rejected (do not default to File).</summary>
@@ -74,7 +84,14 @@ public sealed record ChannelDto(Guid Id, Guid TeamId, string Name, string? Descr
 public sealed record SetChannelVisibilityRequest(ChannelVisibility Visibility);
 public sealed record SetChannelVisibilityResult(ChannelDto Channel, int MembersLosingAccess, int ShareLinksRevoked);
 
-public sealed record ChannelMemberDto(Guid UserId, string Email, string DisplayName, bool ReadOnly);
+public sealed record ChannelMemberDto(
+    Guid UserId,
+    string Email,
+    string DisplayName,
+    string Username,
+    long? AvatarVersion,
+    bool ReadOnly);
+
 public sealed record UpsertChannelMemberRequest(Guid UserId, bool ReadOnly);
 public sealed record BulkUpsertChannelMembersRequest(IReadOnlyList<UpsertChannelMemberRequest> Members);
 
@@ -91,6 +108,8 @@ public sealed record ChannelJoinRequestDto(
     Guid UserId,
     string Email,
     string DisplayName,
+    string Username,
+    long? AvatarVersion,
     ChannelJoinRequestStatus Status,
     DateTimeOffset CreatedAt);
 public sealed record ApproveChannelJoinRequestRequest(bool CanWrite = true, bool CanManage = false);

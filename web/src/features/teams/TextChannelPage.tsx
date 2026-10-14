@@ -53,6 +53,48 @@ function previewOf(body: string): string {
   return chars.length > REPLY_PREVIEW_LENGTH ? `${chars.slice(0, REPLY_PREVIEW_LENGTH).join("")}…` : flat;
 }
 
+function authorInitial(name: string): string {
+  const ch = Array.from(name.trim())[0];
+  return (ch ?? "?").toUpperCase();
+}
+
+/** Stable pastel hue from an id — Discord-style avatar without new API fields. */
+function avatarHue(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return h % 360;
+}
+
+function IconReply({ className }: { className?: string }) {
+  return (
+    <svg className={className} width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"
+      />
+    </svg>
+  );
+}
+
+function IconTrash({ className }: { className?: string }) {
+  return (
+    <svg className={className} width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6zm3.5-9h1v9h-1zm3 0h1v9h-1zM15.5 4l-1-1h-5l-1 1H5v2h14V4z"
+      />
+    </svg>
+  );
+}
+
+function IconPlus({ className }: { className?: string }) {
+  return (
+    <svg className={className} width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z" />
+    </svg>
+  );
+}
+
 function MessageBody({ message, myId }: { message: ChannelMessage; myId: string | undefined }) {
   const segments = segmentBody(message.body, message.mentions ?? []);
   return (
@@ -553,68 +595,88 @@ export function TextChannelPage({ teamSlug, channelName }: Props) {
               const showDay = day !== lastDay;
               lastDay = day;
               const mine = message.authorId === user?.id;
+              const canDelete = canDeleteMessage({ isAuthor: mine, teamRole });
+              const mentionsMe = message.mentions?.some((m) => m.userId === user?.id);
               return (
                 <li key={message.id} className={local.messageItem} data-testid="chat-message">
-                  {showDay && <p className={local.day}>{day}</p>}
+                  {showDay && (
+                    <div className={local.day} role="separator" aria-label={day}>
+                      <span className={local.dayLine} aria-hidden="true" />
+                      <span className={local.dayLabel}>{day}</span>
+                      <span className={local.dayLine} aria-hidden="true" />
+                    </div>
+                  )}
                   <div
                     id={`msg-${message.id}`}
-                    className={
-                      message.mentions?.some((m) => m.userId === user?.id)
-                        ? `${local.message} ${local.messageMentionsMe}`
-                        : local.message
-                    }
+                    className={mentionsMe ? `${local.message} ${local.messageMentionsMe}` : local.message}
                   >
-                    {message.replyTo && (
-                      message.replyTo.deleted ? (
-                        <p className={`${local.quote} ${local.quoteDeleted}`} data-testid="chat-reply-quote">
-                          Replying to a deleted message
-                        </p>
-                      ) : (
-                        <button
-                          type="button"
-                          className={local.quote}
-                          onClick={() => jumpToMessage(message.replyTo!.id)}
-                          aria-label={`Replying to ${message.replyTo.authorDisplayName}: ${message.replyTo.bodyPreview}`}
-                          data-testid="chat-reply-quote"
-                        >
-                          <span className={local.quoteAuthor}>{message.replyTo.authorDisplayName}</span>
-                          <span className={local.quoteText}>{message.replyTo.bodyPreview}</span>
-                        </button>
-                      )
-                    )}
-                    <div className={local.messageHead}>
-                      <span className={local.author}>{message.authorDisplayName}</span>
-                      <time className={local.time} dateTime={message.createdAt} title={new Date(message.createdAt).toLocaleString()}>
-                        {formatTime(message.createdAt)}
-                      </time>
-                      <span className={local.actions}>
+                    {(canPost || canDelete) && (
+                      <div className={local.hoverBar} role="toolbar" aria-label="Message actions">
                         {canPost && (
                           <button
                             type="button"
-                            className={local.actionButton}
+                            className={local.iconButton}
                             onClick={() => startReply(message)}
                             aria-label={`Reply to ${message.authorDisplayName} at ${formatTime(message.createdAt)}`}
                             data-testid="chat-reply"
+                            title="Reply"
                           >
-                            Reply
+                            <IconReply />
                           </button>
                         )}
-                        {canDeleteMessage({ isAuthor: mine, teamRole }) && (
+                        {canDelete && (
                           <button
                             type="button"
-                            className={local.actionButton}
+                            className={`${local.iconButton} ${local.iconButtonDanger}`}
                             onClick={() => void remove(message.id)}
                             aria-label={`Delete message from ${message.authorDisplayName} at ${formatTime(message.createdAt)}`}
                             data-testid="chat-delete"
+                            title="Delete"
                           >
-                            Delete
+                            <IconTrash />
                           </button>
                         )}
-                      </span>
+                      </div>
+                    )}
+                    <div
+                      className={local.avatar}
+                      style={{ backgroundColor: `hsl(${avatarHue(message.authorId)} 42% 42%)` }}
+                      aria-hidden="true"
+                    >
+                      {authorInitial(message.authorDisplayName)}
                     </div>
-                    {/* Plain text only: React escapes it and pre-wrap keeps line breaks. */}
-                    <MessageBody message={message} myId={user?.id} />
-                    <MessageFileChips teamSlug={teamSlug} fileIds={message.fileIds ?? []} />
+                    <div className={local.messageBody}>
+                      {message.replyTo &&
+                        (message.replyTo.deleted ? (
+                          <p className={`${local.quote} ${local.quoteDeleted}`} data-testid="chat-reply-quote">
+                            Replying to a deleted message
+                          </p>
+                        ) : (
+                          <button
+                            type="button"
+                            className={local.quote}
+                            onClick={() => jumpToMessage(message.replyTo!.id)}
+                            aria-label={`Replying to ${message.replyTo.authorDisplayName}: ${message.replyTo.bodyPreview}`}
+                            data-testid="chat-reply-quote"
+                          >
+                            <span className={local.quoteAuthor}>{message.replyTo.authorDisplayName}</span>
+                            <span className={local.quoteText}>{message.replyTo.bodyPreview}</span>
+                          </button>
+                        ))}
+                      <div className={local.messageHead}>
+                        <span className={local.author}>{message.authorDisplayName}</span>
+                        <time
+                          className={local.time}
+                          dateTime={message.createdAt}
+                          title={new Date(message.createdAt).toLocaleString()}
+                        >
+                          {formatTime(message.createdAt)}
+                        </time>
+                      </div>
+                      {/* Plain text only: React escapes it and pre-wrap keeps line breaks. */}
+                      <MessageBody message={message} myId={user?.id} />
+                      <MessageFileChips teamSlug={teamSlug} fileIds={message.fileIds ?? []} />
+                    </div>
                   </div>
                 </li>
               );
@@ -640,7 +702,7 @@ export function TextChannelPage({ teamSlug, channelName }: Props) {
               </span>
               <button
                 type="button"
-                className={local.actionButton}
+                className={local.chipDismiss}
                 onClick={() => setReplyToId(null)}
                 aria-label="Cancel reply"
                 data-testid="chat-reply-cancel"
@@ -656,7 +718,7 @@ export function TextChannelPage({ teamSlug, channelName }: Props) {
                   {composerFileLabels[id] ?? "File"}
                   <button
                     type="button"
-                    className={local.actionButton}
+                    className={local.chipDismiss}
                     aria-label="Remove attachment"
                     onClick={() => removeComposerFile(id)}
                   >
@@ -666,84 +728,102 @@ export function TextChannelPage({ teamSlug, channelName }: Props) {
               ))}
             </div>
           )}
-          <div className={local.composerAttachRow}>
-            <Button type="button" onClick={startFileAttach} disabled={!canPost || sending} data-testid="chat-attach-file">
-              Attach file
-            </Button>
-            <span className={local.counter}>
-              {composerFileIds.length}/{MAX_MESSAGE_FILE_REFS} files
-            </span>
-          </div>
           {attachLimitError && (
             <p className={local.error} role="alert">
               {attachLimitError}
             </p>
           )}
-          <div className={local.inputWrap}>
-            <FileAttachPicker
-              ref={attachPickerRef}
-              open={fileAttachOpen}
-              teamSlug={teamSlug}
-              filter={attachFilter}
-              excludeIds={composerFileIds}
-              onPick={addComposerFile}
-              onClose={closeAttachPicker}
-            />
-            {mentionOpen && (
-              <ul id="mention-listbox" className={local.mentionList} role="listbox" aria-label="Mention a teammate" data-testid="mention-list">
-                {mentionCandidates.map((member, index) => (
-                  <li
-                    key={member.userId}
-                    id={`mention-option-${member.userId}`}
-                    role="option"
-                    aria-selected={index === mentionIndex}
-                    className={index === mentionIndex ? `${local.mentionOption} ${local.mentionOptionActive}` : local.mentionOption}
-                    onMouseDown={(e) => {
-                      // Keep focus (and caret) in the textarea.
-                      e.preventDefault();
-                      insertMention(member);
-                    }}
-                    onMouseEnter={() => setMentionIndex(index)}
-                    data-testid="mention-option"
-                  >
-                    {member.displayName}
-                  </li>
-                ))}
-              </ul>
-            )}
-          <textarea
-            id="chat-input"
-            ref={inputRef}
-            className={local.input}
-            value={draft}
-            onChange={onDraftChange}
-            onSelect={(e) => updateComposerQueries(e.currentTarget.value, e.currentTarget.selectionStart)}
-            onBlur={() => {
-              setMentionQuery(null);
-              // Keep hierarchical picker open so channel/file clicks register; dismiss via Close/Escape.
-            }}
-            onKeyDown={onComposerKeyDown}
-            aria-controls={fileAttachOpen ? "file-attach-listbox" : mentionOpen ? "mention-listbox" : undefined}
-            aria-autocomplete="list"
-            aria-expanded={fileAttachOpen || mentionOpen}
-            aria-activedescendant={
-              mentionOpen && mentionCandidates[mentionIndex]
-                ? `mention-option-${mentionCandidates[mentionIndex]!.userId}`
-                : undefined
-            }
-            placeholder={
-              archived
-                ? "This channel is archived"
-                : canPost
-                  ? "Write a message — # or Attach file, Enter to send"
-                  : "You have read-only access to this channel"
-            }
-            rows={2}
-            disabled={!canPost || sending}
-            aria-invalid={tooLong}
-            aria-describedby="chat-counter"
-            data-testid="chat-input"
-          />
+          <div className={local.composerBar}>
+            <button
+              type="button"
+              className={local.plusButton}
+              onClick={startFileAttach}
+              disabled={!canPost || sending}
+              aria-label={`Attach file (${composerFileIds.length}/${MAX_MESSAGE_FILE_REFS})`}
+              title="Attach file"
+              data-testid="chat-attach-file"
+            >
+              <IconPlus />
+            </button>
+            <div className={local.inputWrap}>
+              <FileAttachPicker
+                ref={attachPickerRef}
+                open={fileAttachOpen}
+                teamSlug={teamSlug}
+                filter={attachFilter}
+                excludeIds={composerFileIds}
+                onPick={addComposerFile}
+                onClose={closeAttachPicker}
+              />
+              {mentionOpen && (
+                <ul
+                  id="mention-listbox"
+                  className={local.mentionList}
+                  role="listbox"
+                  aria-label="Mention a teammate"
+                  data-testid="mention-list"
+                >
+                  {mentionCandidates.map((member, index) => (
+                    <li
+                      key={member.userId}
+                      id={`mention-option-${member.userId}`}
+                      role="option"
+                      aria-selected={index === mentionIndex}
+                      className={
+                        index === mentionIndex
+                          ? `${local.mentionOption} ${local.mentionOptionActive}`
+                          : local.mentionOption
+                      }
+                      onMouseDown={(e) => {
+                        // Keep focus (and caret) in the textarea.
+                        e.preventDefault();
+                        insertMention(member);
+                      }}
+                      onMouseEnter={() => setMentionIndex(index)}
+                      data-testid="mention-option"
+                    >
+                      {member.displayName}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <textarea
+                id="chat-input"
+                ref={inputRef}
+                className={local.input}
+                value={draft}
+                onChange={onDraftChange}
+                onSelect={(e) => updateComposerQueries(e.currentTarget.value, e.currentTarget.selectionStart)}
+                onBlur={() => {
+                  setMentionQuery(null);
+                  // Keep hierarchical picker open so channel/file clicks register; dismiss via Close/Escape.
+                }}
+                onKeyDown={onComposerKeyDown}
+                aria-controls={fileAttachOpen ? "file-attach-listbox" : mentionOpen ? "mention-listbox" : undefined}
+                aria-autocomplete="list"
+                aria-expanded={fileAttachOpen || mentionOpen}
+                aria-activedescendant={
+                  mentionOpen && mentionCandidates[mentionIndex]
+                    ? `mention-option-${mentionCandidates[mentionIndex]!.userId}`
+                    : undefined
+                }
+                placeholder={
+                  archived
+                    ? "This channel is archived"
+                    : canPost
+                      ? `Message #${channelName}`
+                      : "You have read-only access to this channel"
+                }
+                rows={1}
+                disabled={!canPost || sending}
+                aria-invalid={tooLong}
+                aria-describedby="chat-counter"
+                data-testid="chat-input"
+              />
+            </div>
+            <Button type="submit" variant="primary" disabled={!canSend} data-testid="chat-send" className={local.sendButton}>
+              {sending ? "…" : "Send"}
+            </Button>
           </div>
           <div className={local.composerFoot}>
             <span
@@ -753,10 +833,10 @@ export function TextChannelPage({ teamSlug, channelName }: Props) {
             >
               {length}/{MESSAGE_MAX_LENGTH}
               {tooLong ? " — too long" : ""}
+              {composerFileIds.length > 0
+                ? ` · ${composerFileIds.length}/${MAX_MESSAGE_FILE_REFS} files`
+                : ""}
             </span>
-            <Button type="submit" variant="primary" disabled={!canSend} data-testid="chat-send">
-              {sending ? "Sending…" : "Send"}
-            </Button>
           </div>
           {sendError && (
             <p className={local.error} role="alert" data-testid="chat-send-error">

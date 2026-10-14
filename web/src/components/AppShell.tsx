@@ -222,6 +222,15 @@ export function AppShell({ children, sidebar, details, title, topbarExtra }: App
       <aside className={styles.sidebar} aria-label="Sidebar">
         {sidebar ?? (
           <div className={styles.settingsSide}>
+            {params.team && (
+              <Link
+                to={`/t/${params.team}/c/general`}
+                className={styles.settingsBack}
+                data-testid="settings-back"
+              >
+                <span aria-hidden="true">←</span> Back
+              </Link>
+            )}
             <p className={styles.sidebarTitle}>{title ?? "Channeled"}</p>
             {params.team && (
               <>

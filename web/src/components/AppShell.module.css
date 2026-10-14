@@ -185,6 +185,27 @@
   min-height: 0;
 }
 
+.settingsBack {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  align-self: flex-start;
+  margin: 0 0 0.15rem;
+  padding: 0.35rem 0.55rem;
+  border-radius: 8px;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.settingsBack:hover,
+.settingsBack:focus-visible {
+  color: var(--color-text);
+  background: var(--color-soft);
+  outline: none;
+}
+
 .settingsLabel {
   margin: 0;
   padding: 0 12px;

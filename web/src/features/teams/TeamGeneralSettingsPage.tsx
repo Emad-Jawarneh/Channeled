@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   MemberRole,
   TeamJoinMode,
@@ -241,6 +242,7 @@ function PendingRequests({
 
 export function TeamGeneralSettingsPage({ teamSlug }: { teamSlug: string }) {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const team = useQuery({
     queryKey: ["team", teamSlug],
     queryFn: () => teamsApi.get(teamSlug),
@@ -256,6 +258,8 @@ export function TeamGeneralSettingsPage({ teamSlug }: { teamSlug: string }) {
   const [error, setError] = useState<string | null>(null);
   const [openJoinConfirm, setOpenJoinConfirm] = useState(false);
   const [dialogError, setDialogError] = useState<string | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [logoBusy, setLogoBusy] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
@@ -354,6 +358,17 @@ export function TeamGeneralSettingsPage({ teamSlug }: { teamSlug: string }) {
       setLogoBusy(false);
     }
   }
+
+  const deleteTeam = useMutation({
+    mutationFn: () => teamsApi.delete(teamSlug),
+    onSuccess: async () => {
+      setDeleteOpen(false);
+      await qc.invalidateQueries({ queryKey: ["teams"] });
+      qc.removeQueries({ queryKey: ["team", teamSlug] });
+      navigate("/");
+    },
+    onError: (e) => setDeleteError(errorMessage(e, "Could not delete the team.")),
+  });
 
   return (
     <AppShell title={`${team.data?.name ?? teamSlug} · General`}>
@@ -537,6 +552,30 @@ export function TeamGeneralSettingsPage({ teamSlug }: { teamSlug: string }) {
 
           {isAdmin && <JoinLinkSection teamSlug={teamSlug} />}
           {isAdmin && <PendingRequests teamSlug={teamSlug} defaultRole={defaultRole} />}
+
+          {isOwner && (
+            <section className={`${styles.card} ${styles.dangerCard}`} data-testid="team-danger-zone">
+              <h2 className={styles.cardTitle}>Danger zone</h2>
+              <p className={styles.cardIntro}>
+                Deleting a team permanently removes its channels, files, chat, and membership. This
+                cannot be undone.
+              </p>
+              <div className={styles.actions}>
+                <Button
+                  type="button"
+                  className={styles.dangerBtn}
+                  data-testid="delete-team"
+                  disabled={deleteTeam.isPending || save.isPending || logoBusy}
+                  onClick={() => {
+                    setDeleteError(null);
+                    setDeleteOpen(true);
+                  }}
+                >
+                  Delete team
+                </Button>
+              </div>
+            </section>
+          )}
         </div>
       )}
 
@@ -553,6 +592,29 @@ export function TeamGeneralSettingsPage({ teamSlug }: { teamSlug: string }) {
         <p data-testid="open-join-pending-count">
           {pendingCount} pending join request{pendingCount === 1 ? "" : "s"} will be approved as{" "}
           {roleName} when you confirm. From then on, anyone with the join link joins immediately.
+        </p>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={deleteOpen}
+        title="Delete this team?"
+        confirmLabel="Delete team"
+        requireText={team.data?.name}
+        requireTextLabel={
+          team.data ? `Type "${team.data.name}" to confirm` : "Type the team name to confirm"
+        }
+        busy={deleteTeam.isPending}
+        error={deleteError}
+        testId="delete-team-dialog"
+        onClose={() => {
+          if (!deleteTeam.isPending) setDeleteOpen(false);
+        }}
+        onConfirm={() => void deleteTeam.mutateAsync()}
+      >
+        <p>
+          All channels, files, messages, and members for{" "}
+          <strong>{team.data?.name ?? teamSlug}</strong> will be permanently removed. Share links
+          stop working immediately.
         </p>
       </ConfirmDialog>
     </AppShell>

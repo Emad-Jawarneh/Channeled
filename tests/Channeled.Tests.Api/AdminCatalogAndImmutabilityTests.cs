@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Channeled.Application.Admin;
 using Channeled.Application.Files;
 using Channeled.Application.Identity;
@@ -13,8 +14,10 @@ using Channeled.Domain.Audit;
 using Channeled.Domain.Files;
 using Channeled.Domain.Teams;
 using Channeled.Infrastructure.Identity;
+using Channeled.Infrastructure.Jobs;
 using Channeled.Infrastructure.Persistence;
 using FluentAssertions;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -44,6 +47,7 @@ public class AdminCatalogAndImmutabilityTests : IClassFixture<AuthApiFactory>, I
             Email = "member@example.com",
             UserName = "member@example.com",
             DisplayName = "Member",
+            UsernameSlug = "member",
             EmailConfirmed = true,
             Status = "active",
         };
@@ -179,6 +183,17 @@ public class AdminCatalogAndImmutabilityTests : IClassFixture<AuthApiFactory>, I
 
         (await _admin.DeleteAsync($"/api/v1/teams/{slug}/members/{memberUser}")).EnsureSuccessStatusCode();
 
+        // --- Team logo (TeamLogoChange) ---
+        {
+            // Minimal valid 1x1 PNG.
+            var png = Convert.FromBase64String(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+            using var content = new ByteArrayContent(png);
+            content.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+            (await _admin.PutAsync($"/api/v1/teams/{slug}/logo", content)).EnsureSuccessStatusCode();
+            (await _admin.DeleteAsync($"/api/v1/teams/{slug}/logo")).EnsureSuccessStatusCode();
+        }
+
         // --- Chat: only the delete is audited (ChannelMessageDelete); posts are not ---
         (await _admin.PostAsJsonAsync(
             $"/api/v1/teams/{slug}/channels",
@@ -259,6 +274,56 @@ public class AdminCatalogAndImmutabilityTests : IClassFixture<AuthApiFactory>, I
             .Content.ReadFromJsonAsync<TeamDto>();
         (await _admin.DeleteAsync($"/api/v1/teams/{team2!.Slug}")).EnsureSuccessStatusCode();
 
+        // --- Account / SMTP (EmailChange*, UsernameChange, AvatarChange, AdminEmailCorrection, SmtpTest, SmtpConfigChange) ---
+        (await _admin.PostAsync("/api/v1/admin/operations/smtp/test?to=admin@example.com", null))
+            .EnsureSuccessStatusCode();
+
+        (await _admin.PatchAsJsonAsync(
+            "/api/v1/account/profile",
+            new UpdateProfileRequest("Admin", "adminrenamed", "bio for audit"))).EnsureSuccessStatusCode();
+
+        {
+            var png = Convert.FromBase64String(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+            using var content = new ByteArrayContent(png);
+            content.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+            (await _admin.PutAsync("/api/v1/account/avatar", content)).EnsureSuccessStatusCode();
+            (await _admin.DeleteAsync("/api/v1/account/avatar")).EnsureSuccessStatusCode();
+        }
+
+        (await _admin.PostAsJsonAsync(
+            "/api/v1/account/email-change",
+            new StartEmailChangeRequest("admin2@example.com", "AdminPassword3!"))).EnsureSuccessStatusCode();
+        var confirmToken = await ExtractEmailTokenAsync("Confirm your new");
+        (await _admin.PostAsJsonAsync(
+            "/api/v1/account/email-change/confirm",
+            new ConfirmEmailChangeRequest(confirmToken))).EnsureSuccessStatusCode();
+        await LoginAsync(_admin, "admin2@example.com", "AdminPassword3!");
+
+        (await _admin.PostAsJsonAsync(
+            "/api/v1/account/email-change",
+            new StartEmailChangeRequest("admin3@example.com", "AdminPassword3!"))).EnsureSuccessStatusCode();
+        var cancelToken = await ExtractEmailTokenAsync("email change requested");
+        (await _admin.PostAsJsonAsync(
+            "/api/v1/account/email-change/cancel",
+            new CancelEmailChangeRequest(cancelToken))).EnsureSuccessStatusCode();
+
+        await CreateUserAsync("correctme@example.com");
+        var correctId = await FindUserIdAsync("correctme@example.com");
+        (await _admin.PostAsJsonAsync(
+            $"/api/v1/admin/users/{correctId}/email",
+            new AdminCorrectEmailRequest("corrected@example.com", "AdminPassword3!"))).EnsureSuccessStatusCode();
+
+        await using (var smtpScope = _factory.Services.CreateAsyncScope())
+        {
+            var opsDb = smtpScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var settings = await opsDb.OperationsSettings.FirstAsync();
+            settings.SmtpSettingsFingerprint = "stale-fingerprint";
+            await opsDb.SaveChangesAsync();
+        }
+
+        (await _admin.GetAsync("/api/v1/account/self-service-mail")).EnsureSuccessStatusCode();
+
         (await _admin.PostAsync("/api/v1/auth/logout", null)).EnsureSuccessStatusCode();
 
         await using var verify = _factory.Services.CreateAsyncScope();
@@ -303,6 +368,42 @@ public class AdminCatalogAndImmutabilityTests : IClassFixture<AuthApiFactory>, I
         (await csv.Content.ReadAsStringAsync()).Should().Contain("eventType");
     }
 
+    private async Task<string> ExtractEmailTokenAsync(string subjectContains)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var dp = scope.ServiceProvider.GetRequiredService<IDataProtectionProvider>();
+        var jobs = await db.Jobs.AsNoTracking()
+            .Where(j => j.Type == EmailSendJobTypes.Type)
+            .OrderByDescending(j => j.CreatedAt)
+            .Take(8)
+            .ToListAsync();
+
+        foreach (var job in jobs)
+        {
+            if (!EmailSendOutbox.TryUnprotect(dp, job.DetailsJson, out var payload, out _) || payload is null)
+            {
+                continue;
+            }
+
+            if (!payload.Subject.Contains(subjectContains, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var match = Regex.Match(
+                payload.Body,
+                @"(?:confirm page:|Paste token if needed:)\s*(\S+)",
+                RegexOptions.IgnoreCase);
+            if (match.Success)
+            {
+                return match.Groups[1].Value;
+            }
+        }
+
+        throw new InvalidOperationException($"No email_send job matched subject '{subjectContains}'.");
+    }
+
     private async Task CreateUserAsync(string email)
     {
         await using var scope = _factory.Services.CreateAsyncScope();
@@ -313,6 +414,7 @@ public class AdminCatalogAndImmutabilityTests : IClassFixture<AuthApiFactory>, I
             Email = email,
             UserName = email,
             DisplayName = email,
+            UsernameSlug = email.Split('@')[0].Replace(".", ""),
             EmailConfirmed = true,
             Status = "active",
         };

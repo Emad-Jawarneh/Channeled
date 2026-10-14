@@ -1,5 +1,8 @@
 using Channeled.Application.Abstractions.Operations;
+using Channeled.Application.Abstractions.Time;
 using Channeled.Application.Identity;
+using Channeled.Domain.Audit;
+using Channeled.Domain.Identity;
 using Channeled.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -10,7 +13,8 @@ public sealed class SelfServiceMail(
     IEmailSenderMarker senderMarker,
     IOptionsMonitor<AccountOptions> accountOptions,
     IOptionsMonitor<OperationsOptions> operations,
-    ApplicationDbContext db) : ISelfServiceMail
+    ApplicationDbContext db,
+    IClock clock) : ISelfServiceMail
 {
     public async Task<bool> IsAvailableAsync(CancellationToken ct = default)
     {
@@ -38,6 +42,18 @@ public sealed class SelfServiceMail(
         {
             settings.SmtpVerifiedAt = null;
             settings.SmtpSettingsFingerprint = null;
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Id = UuidV7.NewGuid(),
+                OccurredAt = clock.UtcNow,
+                ActorId = null,
+                EventType = AuditEventType.SmtpConfigChange,
+                TargetType = "operations",
+                TargetId = "smtp",
+                DetailsJson = """{"reason":"fingerprint_mismatch"}""",
+                Ip = "",
+                UserAgent = "",
+            });
             await db.SaveChangesAsync(ct);
             return false;
         }

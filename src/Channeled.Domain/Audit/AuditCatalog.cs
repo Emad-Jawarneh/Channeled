@@ -32,6 +32,7 @@ public static class AuditCatalog
         AuditEventType.TeamJoinRequestReject,
         AuditEventType.TeamJoinRequestWithdraw,
         AuditEventType.ChannelVisibilityChange,
+        AuditEventType.TeamLogoChange,
         AuditEventType.ChannelCreate,
         AuditEventType.ChannelChange,
         AuditEventType.ChannelArchive,

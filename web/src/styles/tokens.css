@@ -140,9 +140,12 @@ button {
   font: inherit;
 }
 
-input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="hidden"]),
-select,
-textarea {
+/* :where() keeps base control styles at 0 specificity so module classes can override padding. */
+:where(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="hidden"]),
+  select,
+  textarea
+) {
   box-sizing: border-box;
   background: var(--color-bg);
   color: var(--color-text);
@@ -152,8 +155,10 @@ textarea {
   font-weight: 500;
 }
 
-input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="hidden"]),
-select {
+:where(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="hidden"]),
+  select
+) {
   height: var(--control-height);
   min-height: var(--control-height);
   padding: 0 var(--control-padding-x);
@@ -179,9 +184,11 @@ select {
   padding-right: 2rem;
 }
 
-input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="hidden"]):focus,
-select:focus,
-textarea:focus {
+:where(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="hidden"]),
+  select,
+  textarea
+):focus {
   outline: none;
   border-color: var(--color-focus);
   box-shadow: var(--shadow-focus);

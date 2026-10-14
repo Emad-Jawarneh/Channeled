@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, NavLink, useLocation, useNavigate, useParams } from "react-router-dom";
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { teamsApi } from "../api/channeled";
 import { CreateTeamDialog } from "../features/teams/CreateTeamDialog";
@@ -34,11 +34,30 @@ export function AppShell({ children, sidebar, details, title, topbarExtra }: App
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [accountOpen, setAccountOpen] = useState(false);
+  const accountMenuRef = useRef<HTMLDivElement>(null);
   const teams = useQuery({
     queryKey: ["teams"],
     queryFn: () => teamsApi.list(),
     enabled: !!user,
   });
+
+  useEffect(() => {
+    if (!accountOpen) return;
+    function onPointerDown(event: MouseEvent) {
+      if (!accountMenuRef.current?.contains(event.target as Node)) {
+        setAccountOpen(false);
+      }
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setAccountOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [accountOpen]);
 
   async function onCreateTeam(name: string) {
     setCreating(true);
@@ -149,7 +168,7 @@ export function AppShell({ children, sidebar, details, title, topbarExtra }: App
             </NavLink>
           )}
           {user && (
-            <div className={styles.accountMenu}>
+            <div className={styles.accountMenu} ref={accountMenuRef}>
               <button
                 type="button"
                 className={`${styles.railItem} ${styles.accountTrigger}`}
@@ -160,7 +179,15 @@ export function AppShell({ children, sidebar, details, title, topbarExtra }: App
                 aria-haspopup="menu"
                 onClick={() => setAccountOpen((v) => !v)}
               >
-                {user.displayName.slice(0, 2).toUpperCase()}
+                {user.avatarVersion ? (
+                  <img
+                    className={styles.accountAvatar}
+                    src={`/api/v1/users/${user.id}/avatar?v=${user.avatarVersion}`}
+                    alt=""
+                  />
+                ) : (
+                  user.displayName.slice(0, 2).toUpperCase()
+                )}
               </button>
               {accountOpen && (
                 <div className={styles.accountDropdown} role="menu">

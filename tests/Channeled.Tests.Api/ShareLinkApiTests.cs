@@ -634,13 +634,14 @@ public class ShareLinkApiTests : IClassFixture<AuthApiFactory>, IAsyncLifetime
 
     private static async Task<AppUser> CreateUserAsync(UserManager<AppUser> users, string email, string password)
     {
+        var slug = email.Split('@')[0].Replace(".", "");
         var user = new AppUser
         {
             Id = Channeled.Domain.Identity.UuidV7.NewGuid(),
             Email = email,
             UserName = email,
             DisplayName = email,
-                    UsernameSlug = email.Split('@')[0].Replace(".", "")[..30],
+            UsernameSlug = slug.Length <= 30 ? slug : slug[..30],
             EmailConfirmed = true,
             Status = "active",
         };

@@ -24,7 +24,10 @@
   flex-shrink: 0;
   align-self: stretch;
   min-height: 0;
-  overflow: hidden;
+  /* Keep visible so the account dropdown can extend into the sidebar column. */
+  overflow: visible;
+  position: relative;
+  z-index: 20;
 }
 
 .brand {
@@ -295,6 +298,7 @@
 
 .accountMenu {
   position: relative;
+  z-index: 30;
 }
 
 .accountTrigger {
@@ -303,6 +307,14 @@
   cursor: pointer;
   font: inherit;
   padding: 0;
+  overflow: hidden;
+}
+
+.accountAvatar {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .accountDropdown {

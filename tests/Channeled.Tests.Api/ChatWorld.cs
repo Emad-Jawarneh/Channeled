@@ -64,7 +64,7 @@ public sealed class ChatWorld : IAsyncDisposable
                     Email = email,
                     UserName = email,
                     DisplayName = name,
-                    UsernameSlug = email.Split('@')[0].Replace(".", "")[..30],
+                    UsernameSlug = UsernameSlugFromEmail(email),
                     EmailConfirmed = true,
                     Status = "active",
                 };
@@ -177,5 +177,11 @@ public sealed class ChatWorld : IAsyncDisposable
         }
 
         await _factory.DisposeAsync();
+    }
+
+    private static string UsernameSlugFromEmail(string email)
+    {
+        var local = email.Split('@')[0].Replace(".", "");
+        return local.Length <= 30 ? local : local[..30];
     }
 }

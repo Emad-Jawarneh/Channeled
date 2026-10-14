@@ -1,3 +1,4 @@
+using Channeled.Infrastructure.Identity;
 using Channeled.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -48,6 +49,10 @@ public class AuthApiFactory : WebApplicationFactory<Program>
             services.RemoveAll(typeof(DbContextOptions<ApplicationDbContext>));
             services.RemoveAll(typeof(ApplicationDbContext));
             services.AddDbContext<ApplicationDbContext>(options => options.UseNpgsql(ConnectionString));
+
+            // Keep LoggingEmailSender, but mark SMTP active so self-service mail + SMTP probe audits are exercisable.
+            services.RemoveAll<IEmailSenderMarker>();
+            services.AddSingleton<IEmailSenderMarker>(_ => new EmailSenderMarker(true));
         });
     }
 
@@ -71,6 +76,7 @@ public class AuthApiFactory : WebApplicationFactory<Program>
               "files",
               "folders",
               "channel_join_requests",
+              "team_join_requests",
               "channel_members",
               "channels",
               "team_invitations",
@@ -78,6 +84,10 @@ public class AuthApiFactory : WebApplicationFactory<Program>
               "teams",
               "password_reset_tokens",
               "platform_invitations",
+              "pending_email_changes",
+              "username_reservations",
+              "address_rate_counters",
+              "operations_settings",
               "sessions",
               "audit_events",
               "AspNetUserTokens",

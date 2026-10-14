@@ -50,6 +50,7 @@ public class PersonalIsolationTests : IClassFixture<AuthApiFactory>, IAsyncLifet
                 Email = email,
                 UserName = email,
                 DisplayName = name,
+                UsernameSlug = email.Split('@')[0].Replace(".", ""),
                 EmailConfirmed = true,
                 Status = "active",
             };

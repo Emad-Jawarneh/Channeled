@@ -569,6 +569,7 @@ public class TeamJoinTests : IClassFixture<AuthApiFactory>, IAsyncLifetime
             Email = email,
             UserName = email,
             DisplayName = name,
+            UsernameSlug = email.Split('@')[0].Replace(".", ""),
             EmailConfirmed = true,
             Status = "active",
         };

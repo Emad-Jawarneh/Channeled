@@ -139,12 +139,14 @@ public class TeamJoinHubTests : IClassFixture<ChatWorldFixture>, IAsyncLifetime
         await using (var scope = _w.Factory.Services.CreateAsyncScope())
         {
             var users = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+            var slug = email.Split('@')[0].Replace(".", "");
             var user = new AppUser
             {
                 Id = UuidV7.NewGuid(),
                 Email = email,
                 UserName = email,
                 DisplayName = "Demotable Admin",
+                UsernameSlug = slug.Length <= 30 ? slug : slug[..30],
                 EmailConfirmed = true,
                 Status = "active",
             };

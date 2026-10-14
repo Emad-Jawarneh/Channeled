@@ -48,13 +48,14 @@ public class ChannelDeleteApiTests : IClassFixture<AuthApiFactory>, IAsyncLifeti
                          ("del-viewer@example.com", "Viewer"),
                      })
             {
+                var slug = email.Split('@')[0].Replace(".", "");
                 var user = new AppUser
                 {
                     Id = UuidV7.NewGuid(),
                     Email = email,
                     UserName = email,
                     DisplayName = name,
-                    UsernameSlug = email.Split('@')[0].Replace(".", "")[..30],
+                    UsernameSlug = slug.Length <= 30 ? slug : slug[..30],
                     EmailConfirmed = true,
                     Status = "active",
                 };

@@ -78,6 +78,7 @@ public abstract class TeamPrivacyTestBase : IAsyncLifetime
                 Email = email,
                 UserName = email,
                 DisplayName = name,
+                UsernameSlug = email.Split('@')[0].Replace(".", ""),
                 EmailConfirmed = true,
                 Status = "active",
             };

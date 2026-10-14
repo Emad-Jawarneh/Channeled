@@ -159,6 +159,8 @@ export type ChannelMember = {
   userId: string;
   email: string;
   displayName: string;
+  username: string;
+  avatarVersion?: number | null;
   readOnly: boolean;
 };
 
@@ -214,6 +216,10 @@ export const authApi = {
 export const accountApi = {
   updateProfile: (body: { displayName?: string; username?: string; bio?: string }) =>
     api<AuthUser>("/api/v1/account/profile", { method: "PATCH", json: body }),
+  usernameAvailable: (username: string) =>
+    api<{ available: boolean; reason?: string | null }>(
+      `/api/v1/account/username-available?username=${encodeURIComponent(username)}`,
+    ),
   getUserCard: (userId: string) => api<UserCard>(`/api/v1/users/${userId}/card`),
   uploadAvatar: async (file: File) => {
     const res = await fetch("/api/v1/account/avatar", {
@@ -231,6 +237,7 @@ export const accountApi = {
     }
     return (await res.json()) as AuthUser;
   },
+  deleteAvatar: () => api<void>("/api/v1/account/avatar", { method: "DELETE" }),
   selfServiceMail: () =>
     api<{ available: boolean; lastSmtpProbeAt?: string | null }>("/api/v1/account/self-service-mail"),
   startEmailChange: (newEmail: string, currentPassword: string) =>
@@ -316,6 +323,10 @@ export const teamsApi = {
     api<void>(`/api/v1/teams/${encodeURIComponent(slug)}/members/${userId}`, { method: "DELETE" }),
   leave: (slug: string) =>
     api<void>(`/api/v1/teams/${encodeURIComponent(slug)}/leave`, { method: "POST" }),
+  archive: (slug: string) =>
+    api<void>(`/api/v1/teams/${encodeURIComponent(slug)}/archive`, { method: "POST" }),
+  delete: (slug: string) =>
+    api<void>(`/api/v1/teams/${encodeURIComponent(slug)}`, { method: "DELETE" }),
 
   updateSettings: (slug: string, input: UpdateTeamSettingsInput) =>
     api<UpdateTeamSettingsResult>(`/api/v1/teams/${encodeURIComponent(slug)}/settings`, {

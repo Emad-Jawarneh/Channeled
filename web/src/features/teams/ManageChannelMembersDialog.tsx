@@ -21,7 +21,8 @@ function matchesQuery(member: TeamMember, query: string): boolean {
   if (!q) return true;
   return (
     member.displayName.toLowerCase().includes(q) ||
-    member.email.toLowerCase().includes(q)
+    member.email.toLowerCase().includes(q) ||
+    member.username.toLowerCase().includes(q)
   );
 }
 

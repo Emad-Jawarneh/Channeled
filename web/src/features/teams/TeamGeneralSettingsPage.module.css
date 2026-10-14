@@ -118,6 +118,20 @@
   font-size: var(--text-sm);
 }
 
+.dangerCard {
+  border-color: color-mix(in srgb, var(--color-danger) 35%, var(--color-border));
+}
+
+.dangerBtn {
+  color: var(--color-danger);
+  border-color: color-mix(in srgb, var(--color-danger) 45%, var(--color-border));
+}
+
+.dangerBtn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-danger) 12%, var(--color-surface));
+  border-color: var(--color-danger);
+}
+
 .field {
   display: grid;
   gap: var(--space-1);

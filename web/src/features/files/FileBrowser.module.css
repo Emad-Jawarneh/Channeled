@@ -114,7 +114,15 @@
 
 .topSearchInput {
   width: 100%;
-  padding-left: 2.25rem;
+  padding-left: 2.5rem;
+  padding-right: var(--control-padding-x);
+}
+
+.topSearchInput::-webkit-search-decoration,
+.topSearchInput::-webkit-search-cancel-button,
+.topSearchInput::-webkit-search-results-button,
+.topSearchInput::-webkit-search-results-decoration {
+  display: none;
 }
 
 @media (max-width: 1450px) {
@@ -126,13 +134,16 @@
 
 .searchIcon {
   position: absolute;
-  left: 0.85rem;
+  left: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
   display: grid;
   place-items: center;
   width: 1rem;
   height: 1rem;
   color: var(--color-text-muted);
   pointer-events: none;
+  z-index: 1;
 }
 
 .searchIcon svg {

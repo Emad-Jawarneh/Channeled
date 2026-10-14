@@ -102,8 +102,11 @@ public static class UserEndpoints
                 return Problem(ErrorCodes.Validation, "Avatar must be 2 MB or smaller.", StatusCodes.Status400BadRequest);
             }
 
-            http.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>()!.MaxRequestBodySize =
-                AvatarMaxBytes;
+            var bodySize = http.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>();
+            if (bodySize is not null)
+            {
+                bodySize.MaxRequestBodySize = AvatarMaxBytes;
+            }
 
             return ToHttp(await profiles.UploadAvatarAsync(
                 userId,

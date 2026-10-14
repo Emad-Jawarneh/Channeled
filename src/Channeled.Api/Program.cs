@@ -198,7 +198,7 @@ if (args.Contains("ensure-user", StringComparer.OrdinalIgnoreCase))
             Email = email,
             UserName = email,
             DisplayName = name,
-                    UsernameSlug = email.Split('@')[0].Replace(".", "")[..30],
+            UsernameSlug = TruncateUsernameSlug(email.Split('@')[0].Replace(".", "")),
             EmailConfirmed = true,
             IsPlatformAdmin = admin,
             Status = "active",
@@ -297,7 +297,7 @@ if (args.Contains("seed-bench-files", StringComparer.OrdinalIgnoreCase))
             Email = email,
             UserName = email,
             DisplayName = "Bench",
-                    UsernameSlug = email.Split('@')[0].Replace(".", "")[..30],
+            UsernameSlug = TruncateUsernameSlug(email.Split('@')[0].Replace(".", "")),
             EmailConfirmed = true,
             Status = "active",
         };
@@ -535,6 +535,9 @@ static string? GetArg(string[] args, string name)
 
     return null;
 }
+
+static string TruncateUsernameSlug(string slug) =>
+    slug.Length <= 30 ? slug : slug[..30];
 
 /// <summary>Stable partition key from JSON body <c>token</c> (or "none"). Enables per-IP+per-token limits.</summary>
 static string PeekJsonTokenKey(HttpRequest request)

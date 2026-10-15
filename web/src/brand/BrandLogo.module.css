@@ -1,0 +1,9 @@
+.logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  object-fit: cover;
+  display: block;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent) 55%, var(--color-on-accent));
+}

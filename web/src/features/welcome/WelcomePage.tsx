@@ -7,6 +7,7 @@ import {
   HierarchyFilesIcon,
   TeamsIcon,
 } from "../landing/FeatureIcons";
+import { BrandLogo } from "../../brand/BrandLogo";
 import { ThemeToggle } from "../../theme/ThemeToggle";
 import { Button } from "../../ui/Button";
 import styles from "./WelcomePage.module.css";
@@ -47,7 +48,7 @@ export function WelcomePage({ loadingTeams = false }: Props) {
       <section className={styles.hero} aria-label="Welcome">
         <div className={styles.heroTop}>
           <p className={styles.brandRow}>
-            <span className={styles.logo}>C</span>
+            <BrandLogo decorative />
             Channeled
           </p>
           <ThemeToggle compact />

@@ -10,6 +10,7 @@ import { UploadTray } from "../uploads/UploadTray";
 import { ThemeToggle } from "../theme/ThemeToggle";
 import { ClipboardShelf } from "../features/files/ClipboardShelf";
 import { GlobalSearch } from "../features/search/GlobalSearch";
+import { BrandLogo } from "../brand/BrandLogo";
 import { NotificationBell } from "./NotificationBell";
 import styles from "./AppShell.module.css";
 
@@ -81,8 +82,8 @@ export function AppShell({ children, sidebar, details, title, topbarExtra, conte
   return (
     <div className={styles.shell} data-has-details={details ? "true" : "false"}>
       <aside className={styles.rail} aria-label="Team rail">
-        <Link to="/" className={styles.brand} data-testid="brand">
-          C
+        <Link to="/" className={styles.brand} data-testid="brand" aria-label="Channeled">
+          <BrandLogo decorative />
         </Link>
         <nav className={styles.railNav} aria-label="Teams">
           <NavLink

@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
-import { ThemeToggle } from "../../theme/ThemeToggle";
 import { Button } from "../../ui/Button";
+import { AuthHero } from "./AuthHero";
 import styles from "./LoginPage.module.css";
 
 export function LoginPage() {
@@ -32,26 +32,10 @@ export function LoginPage() {
 
   return (
     <div className={styles.page}>
-      <section className={styles.hero} aria-label="About Channeled">
-        <div className={styles.heroTop}>
-          <p className={styles.brandRow}>
-            <span className={styles.logo}>C</span>
-            Channeled
-          </p>
-          <ThemeToggle compact />
-        </div>
-        <div>
-          <h1 className={styles.heroTitle}>Share files with your teams, on your own server.</h1>
-          <p className={styles.heroLede}>
-            Organized by team and channel, with clear permissions on every file.
-          </p>
-        </div>
-        <div className={styles.heroPoints}>
-          <p>Independent teams and channels</p>
-          <p>Private, self-hosted storage</p>
-          <p>A full audit trail</p>
-        </div>
-      </section>
+      <AuthHero
+        title="Share files with your teams, on your own server."
+        lede="Organized by team and channel, with clear permissions on every file."
+      />
 
       <main className={styles.panel}>
         <form className={styles.form} onSubmit={onSubmit} data-testid="login-form">

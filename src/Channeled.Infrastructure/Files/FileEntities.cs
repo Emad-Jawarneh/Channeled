@@ -13,6 +13,9 @@ public sealed class FolderEntity
     public DateTimeOffset UpdatedAt { get; set; }
     public DateTimeOffset? DeletedAt { get; set; }
 
+    /// <summary>Stored generated <c>COALESCE(ChannelId, OwnerUserId)</c>: one listing index set serves both scopes.</summary>
+    public Guid ContainerId { get; private set; }
+
     public FolderEntity? Parent { get; set; }
 }
 
@@ -31,6 +34,9 @@ public sealed class FileEntity
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
     public DateTimeOffset? DeletedAt { get; set; }
+
+    /// <summary>Stored generated <c>COALESCE(ChannelId, OwnerUserId)</c>: one listing index set serves both scopes.</summary>
+    public Guid ContainerId { get; private set; }
 
     public FolderEntity? Folder { get; set; }
 }

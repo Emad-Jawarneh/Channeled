@@ -44,7 +44,7 @@ Filled for M8 against the implemented API + SPA. Status: **Pass** / **Partial** 
 | V10.3 | Application integrity | Partial | No code-signing of releases yet |
 | V11.1 | Business logic | Pass | Quota enforcement; ownership transfer rules |
 | V12.1 | File upload | Pass | Multipart via API; type/size limits; authz on write |
-| V12.2 | File download | Pass | Authz + optional Range; download audit hook |
+| V12.2 | File download | Pass | Authz + Range/If-Range; download audit hook. Download tickets (`/api/v1/downloads`): CSRF-protected issue, Data Protection time-limited payload bound to user **and session**, 60 s fresh-start window, resume only with matching strong ETag, ACL + liveness re-checked per request, wrong user/session/tampered → 404; `no-store`, `no-referrer`, sandbox CSP, `nosniff`, attachment with RFC 6266 filename; per-user/global concurrent download caps (DownloadTicketApiTests, ContentHeadersApiTests, DownloadEgressLimitTests) |
 | V12.3 | SSRF / untrusted fetch | Pass | No user-controlled server-side URL fetch |
 | V12.4 | File storage | Pass | Object keys scoped; filesystem path traversal guards |
 | V13.1 | API generic | Pass | `/api/v1`, problem+json, cursor pagination |

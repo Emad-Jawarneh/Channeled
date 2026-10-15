@@ -34,17 +34,11 @@ export function labelForResolvedFile(file: ResolvedFile): string {
   return file.name ?? "File";
 }
 
-/** Path to open the file in its channel (folder + highlight). Null when not navigable. */
-export function hrefForResolvedFile(teamSlug: string, file: ResolvedFile): string | null {
-  if (!file.accessible || !file.channelName || file.state === "missing") return null;
-  const channel = encodeURIComponent(file.channelName);
-  const base =
-    file.state === "trashed"
-      ? `/t/${encodeURIComponent(teamSlug)}/c/${channel}/trash`
-      : `/t/${encodeURIComponent(teamSlug)}/c/${channel}`;
-  const q = new URLSearchParams();
-  if (file.state !== "trashed" && file.folderId) q.set("folder", file.folderId);
-  q.set("item", file.fileId);
-  const qs = q.toString();
-  return qs ? `${base}?${qs}` : base;
+/**
+ * Link that opens the file wherever it lives now (`/open/:id` locates it, then shows its folder or trash with the
+ * row highlighted, even past the first page). Null when the viewer cannot open it.
+ */
+export function hrefForResolvedFile(file: ResolvedFile): string | null {
+  if (!file.accessible || file.state === "missing") return null;
+  return `/open/${encodeURIComponent(file.fileId)}`;
 }

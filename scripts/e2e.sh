@@ -16,6 +16,11 @@ export FileStore__RootPath="${FileStore__RootPath:-$ROOT/.data/e2e-object-store}
 export Backup__RootPath="${Backup__RootPath:-$ROOT/.data/e2e-backups}"
 export DisableBackgroundJobs=true
 export MigrateOnStartup=true
+# Specs seed many users and messages through the API from one IP (mirrors AuthApiFactory).
+export RateLimits__AuthPermitPerMinute="${RateLimits__AuthPermitPerMinute:-100000}"
+export Chat__PostsPerMinutePerUser="${Chat__PostsPerMinutePerUser:-100000}"
+# 2 MiB/s per download stream so downloads.spec.ts can prove the browser starts before the body arrives.
+export Downloads__PerStreamBytesPerSecond="${Downloads__PerStreamBytesPerSecond:-2097152}"
 export E2E_ADMIN_EMAIL="${E2E_ADMIN_EMAIL:-e2e-admin@example.com}"
 export E2E_ADMIN_PASSWORD="${E2E_ADMIN_PASSWORD:-E2eAdminPassword1!}"
 # Unset skip so host validation runs when deps are installed; allow override.
@@ -50,7 +55,7 @@ curl -fsS "http://127.0.0.1:5048/api/v1/health" >/dev/null
 
 pushd web >/dev/null
 npm ci --prefer-offline
-npx playwright install chromium
+npx playwright install chromium firefox
 npm run build
 npx vite preview --host 127.0.0.1 --port 5173 >/tmp/channeled-e2e-web.log 2>&1 &
 WEB_PID=$!
@@ -66,7 +71,7 @@ done
 export PLAYWRIGHT_BASE_URL=http://127.0.0.1:5173
 # Proxy API through vite preview — configure preview proxy
 pushd web >/dev/null
-npx playwright test
+npx playwright test "$@"
 popd >/dev/null
 
 echo "=== e2e green ==="

@@ -1,75 +1,62 @@
-import { useInfiniteQuery } from "@tanstack/react-query";
-import { useState } from "react";
-import { Link } from "react-router-dom";
-import { ItemKind, SearchScope, searchApi, type SearchHit } from "../../api/channeled";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { ItemKind, SearchScope, searchApi, teamsApi } from "../../api/channeled";
 import { AppShell } from "../../components/AppShell";
+import { useAnnounce } from "../../components/liveAnnouncerContext";
+import { useDebouncedValue } from "../../lib/useDebouncedValue";
 import { Button } from "../../ui/Button";
 import styles from "../files/FileBrowser.module.css";
-
-function hitLocation(hit: SearchHit): { label: string; to: string } {
-  if (hit.teamSlug && hit.channelName) {
-    return {
-      label: `${hit.teamSlug} · #${hit.channelName}`,
-      to: `/t/${hit.teamSlug}/c/${hit.channelName}`,
-    };
-  }
-  return { label: "My files", to: "/me/files" };
-}
+import { hitLocationLabel } from "./hitLocation";
 
 export function SearchPage() {
-  const [q, setQ] = useState("");
-  const [submitted, setSubmitted] = useState("");
+  const [params] = useSearchParams();
+  const q = (params.get("q") ?? "").trim();
+  const debounced = useDebouncedValue(q, 200);
+  const announce = useAnnounce();
+  const teams = useQuery({ queryKey: ["teams"], queryFn: () => teamsApi.list() });
 
-  // Accessible scope: every file the user can currently see across all teams plus their own files.
   const results = useInfiniteQuery({
-    queryKey: ["search", SearchScope.Accessible, submitted],
-    enabled: submitted.length > 0,
+    queryKey: ["search", SearchScope.Accessible, debounced],
+    enabled: debounced.length > 0,
     initialPageParam: null as string | null,
-    queryFn: ({ pageParam }) =>
-      searchApi.search(submitted, SearchScope.Accessible, { cursor: pageParam }),
+    queryFn: ({ pageParam, signal }) =>
+      searchApi.search(debounced, SearchScope.Accessible, { cursor: pageParam }, signal),
     getNextPageParam: (last) => last.nextCursor ?? null,
   });
 
   const hits = (results.data?.pages ?? []).flatMap((p) => p.hits ?? []);
 
+  useEffect(() => {
+    if (!debounced || results.isFetching) return;
+    if (results.isSuccess) {
+      announce(
+        hits.length === 0
+          ? `No results for ${debounced}`
+          : `${hits.length} result${hits.length === 1 ? "" : "s"} for ${debounced}`,
+      );
+    }
+  }, [debounced, results.isFetching, results.isSuccess, hits.length, announce]);
+
   return (
     <AppShell title="Search">
-      <form
-        className={styles.toolbar}
-        onSubmit={(e) => {
-          e.preventDefault();
-          setSubmitted(q.trim());
-        }}
-      >
-        <label>
-          Query
-          <input
-            data-testid="search-input"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            required
-          />
-        </label>
-        <Button type="submit" variant="primary">
-          Search
-        </Button>
-      </form>
-      {results.isLoading && <p className={styles.lede}>Searching…</p>}
-      {results.isError && (
+      {!q && <p className={styles.lede}>Type in the search bar above to find files and folders.</p>}
+      {q && results.isLoading && <p className={styles.lede}>Searching…</p>}
+      {q && results.isError && (
         <p className={styles.lede} role="alert">
           Search failed. Try again.
         </p>
       )}
       <ul data-testid="search-results" className={styles.resultList}>
         {hits.map((hit) => {
-          const where = hitLocation(hit);
+          const label = hitLocationLabel(hit, teams.data);
           return (
-            <li key={`${hit.id}`}>
-              <Link to={where.to}>
-                {hit.kind === ItemKind.Folder ? "📁 " : ""}
+            <li key={hit.id}>
+              <Link to={`/open/${encodeURIComponent(hit.id)}`} data-testid={`search-result-${hit.name}`}>
+                {hit.kind === ItemKind.Folder ? "Folder · " : ""}
                 {hit.name}
               </Link>{" "}
-              <span className={styles.lede}>{where.label}</span>
+              <span className={styles.lede}>{label}</span>
             </li>
           );
         })}
@@ -84,7 +71,7 @@ export function SearchPage() {
           {results.isFetchingNextPage ? "Loading…" : "Load more"}
         </Button>
       )}
-      {submitted && results.isSuccess && hits.length === 0 && <p className={styles.lede}>No matches.</p>}
+      {debounced && results.isSuccess && hits.length === 0 && <p className={styles.lede}>No matches.</p>}
     </AppShell>
   );
 }

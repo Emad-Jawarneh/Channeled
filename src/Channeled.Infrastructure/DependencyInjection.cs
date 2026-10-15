@@ -133,6 +133,9 @@ public static class DependencyInjection
         services.AddScoped<ChannelWriteGuard>();
         services.AddScoped<ITeamService, TeamService>();
         services.AddScoped<IFileService, FileService>();
+        services.Configure<DownloadOptions>(configuration.GetSection(DownloadOptions.SectionName));
+        services.AddSingleton<IDownloadSlots, DownloadSlots>();
+        services.AddScoped<IDownloadTicketService, DownloadTicketService>();
         services.AddScoped<IFileReferenceService, FileReferenceService>();
         services.AddScoped<IPersonalService, PersonalService>();
         services.AddScoped<Channeled.Application.Clipboard.IClipboardService, Clipboard.ClipboardService>();

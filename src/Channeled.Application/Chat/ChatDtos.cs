@@ -24,7 +24,9 @@ public sealed record ChannelMessageDto(
     DateTimeOffset CreatedAt,
     MessageReplyPreviewDto? ReplyTo,
     IReadOnlyList<MessageMentionDto> Mentions,
-    IReadOnlyList<Guid> FileIds);
+    IReadOnlyList<Guid> FileIds,
+    /// <summary>Same value as <c>UserSummary.AvatarVersion</c>; null when the author has no avatar.</summary>
+    long? AuthorAvatarVersion = null);
 
 /// <summary>Newest-first page. <c>NextCursor</c> pages toward older messages.</summary>
 public sealed record MessageListResponse(IReadOnlyList<ChannelMessageDto> Items, string? NextCursor);

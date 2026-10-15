@@ -23,11 +23,8 @@ import {
 import { ApiError } from "../../api/http";
 import { useAuth } from "../../auth/AuthContext";
 import { AppShell } from "../../components/AppShell";
-import { UserChip } from "../../components/UserChip";
-import { formatFileType } from "../../lib/describeFileKind";
-import { formatBytes } from "../../lib/formatBytes";
-import { ModifiedAt } from "../../lib/formatModified";
-import { triggerDownload, triggerDownloads } from "../../lib/triggerDownload";
+import { useAnnounce } from "../../components/liveAnnouncerContext";
+import { describeDownloadError, downloadItems, summarizeDownloadOutcome } from "../../lib/triggerDownload";
 import { TABLET_MQ, useMediaQuery } from "../../lib/useMediaQuery";
 import { useChannelFilesChanged } from "../../realtime/useChannelHub";
 import { DropOverlay } from "../../uploads/DropOverlay";
@@ -47,10 +44,9 @@ import {
   getDraggedItemIds,
   setDraggedItemIds,
 } from "./dragItems";
-import { FileThumb } from "./FileThumb";
 import { FilePreviewPanel } from "./FilePreviewPanel";
-import { FilesSearchField } from "./FilesSearchField";
 import { FolderBreadcrumbs } from "./FolderBreadcrumbs";
+import { PreviewToggle } from "./PreviewToggle";
 import {
   MoveProgress,
   MoveSummary,
@@ -61,8 +57,12 @@ import { moveBatch, summarizeMoveResult, type MoveBatchPrior } from "./moveBatch
 import { PickListDialog } from "./PickListDialog";
 import { SelectionControls } from "./SelectionControls";
 import { ShareLinkDialog } from "./ShareLinkDialog";
+import { FileRow, type FileRowHandlers } from "./FileRow";
+import { mergePages, selectionLabel, sortParam } from "./pagedItems";
+import { useStableCallback } from "../../lib/useStableCallback";
 import { nextSortState, SortableTh, type SortColumn } from "./SortableTh";
-import { compareFileItems } from "./sortItems";
+import { useLocatedItem } from "./useLocatedItem";
+import { usePagedItems } from "./usePagedItems";
 import { UploadButton } from "./UploadButton";
 import { useFolderNav } from "./useFolderNav";
 import styles from "./FileBrowser.module.css";
@@ -87,6 +87,14 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
       goToRoot({ replace: true });
     }
   }, [trash, goToRoot]);
+
+  // Channel switches move focus to the page heading and announce the channel (not folder moves).
+  const announce = useAnnounce();
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    headingRef.current?.focus({ preventScroll: true });
+    announce(trash ? `Trash, #${channelName}` : `#${channelName}, file channel`);
+  }, [teamSlug, channelName, trash, announce]);
 
   const team = useQuery({
     queryKey: ["team", teamSlug],
@@ -124,7 +132,6 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
   }, [previewOpen]);
   const [sort, setSort] = useState<SortColumn>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const [nameQuery, setNameQuery] = useState("");
   const [menu, setMenu] = useState<MenuState | null>(null);
   const menuRef = useRef<HTMLUListElement | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -204,15 +211,14 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
     setMenu(null);
   }
 
-  const listKey = ["items", teamSlug, channelName, folderId, trash] as const;
-  const list = useQuery({
-    queryKey: listKey,
-    queryFn: () => filesApi.list(teamSlug, channelName, { folderId, trash }),
-    retry: (count, err) => {
-      if (err instanceof ApiError && err.status === 404) return false;
-      return count < 2;
-    },
-  });
+  // Server-side sort and cursor paging; the client never re-sorts loaded rows.
+  const serverSort = sortParam(sort, sortDir);
+  const paged = usePagedItems(
+    ["items", teamSlug, channelName, folderId, trash, serverSort],
+    (cursor, signal) =>
+      filesApi.list(teamSlug, channelName, { folderId, trash, sort: serverSort, cursor }, signal),
+  );
+  const list = paged.query;
 
   useEffect(() => {
     if (!folderId) return;
@@ -228,11 +234,12 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
     }
   }, [list.isSuccess, folderId]);
 
+  // Selection never survives a change of what is listed (folder, sort): no acting on unseen rows.
   useEffect(() => {
     setChecked(new Set());
     setSelected(null);
     setMoveSummary(null);
-  }, [folderId, trash, teamSlug, channelName]);
+  }, [folderId, trash, teamSlug, channelName, serverSort]);
 
   const seenDone = useRef(new Set<string>());
   useEffect(() => {
@@ -272,23 +279,15 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["items", teamSlug, channelName] }),
   });
 
+  const visibleItems = paged.items;
   const folders = useMemo(
-    () => (list.data?.items ?? []).filter((i) => i.kind === ItemKind.Folder && !i.deletedAt),
-    [list.data],
+    () => visibleItems.filter((i) => i.kind === ItemKind.Folder && !i.deletedAt),
+    [visibleItems],
   );
 
-  const path =
-    list.data?.path ?? (list.data as { Path?: FolderPathSegment[] } | undefined)?.Path ?? null;
+  const path: FolderPathSegment[] | null = paged.path ?? null;
   const currentFolderName = path?.at(-1)?.name ?? folderNameHint ?? undefined;
-
-  const visibleItems = useMemo(() => {
-    let items = list.data?.items ?? [];
-    const q = nameQuery.trim().toLowerCase();
-    if (q) {
-      items = items.filter((i) => i.name.toLowerCase().includes(q));
-    }
-    return [...items].sort((a, b) => compareFileItems(a, b, sort, sortDir));
-  }, [list.data, nameQuery, sort, sortDir]);
+  const loadedCount = visibleItems.length;
 
   function onSortColumn(column: SortColumn) {
     const next = nextSortState(sort, sortDir, column);
@@ -321,6 +320,7 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
     listedIds,
     listedItems: visibleItems,
     selectedIds,
+    listReady: list.isSuccess,
     enabled: !trash,
     onError: (message) => setError(message),
     onPasteResult: (res) => {
@@ -350,20 +350,44 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
     visibleItems.length > 0 && visibleItems.every((i) => checked.has(i.id));
   const someVisibleChecked = checkedItems.length > 0 && !allVisibleChecked;
 
-  // Deep-link from chat file chips: ?item=<id> selects the row once the list loads.
+  // Deep links (`?item=`, from /open/:id): select the row even when it is not on a loaded page yet — it is
+  // pinned above the list until a later page loads it.
+  const [focusId, setFocusId] = useState<string | null>(null);
   useEffect(() => {
-    if (!highlightItemId || list.isLoading) return;
-    const match = (list.data?.items ?? []).find((i) => i.id === highlightItemId);
-    if (!match) return;
-    setSelected(match);
-    requestAnimationFrame(() => {
-      document.querySelector(`[data-item-id="${match.id}"]`)?.scrollIntoView({ block: "nearest" });
-    });
-    if (!searchParams.has("item")) return;
+    setFocusId(null);
+  }, [folderId, trash, teamSlug, channelName]);
+  useEffect(() => {
+    if (!highlightItemId) return;
+    setFocusId(highlightItemId);
     const next = new URLSearchParams(searchParams);
     next.delete("item");
     setSearchParams(next, { replace: true });
-  }, [highlightItemId, list.isLoading, list.data?.items, searchParams, setSearchParams]);
+  }, [highlightItemId, searchParams, setSearchParams]);
+  const located = useLocatedItem({
+    focusId,
+    loadedItems: visibleItems,
+    listReady: list.isSuccess,
+    view: { scope: "channel", teamSlug, channelName, folderId: folderId ?? null, trash },
+  });
+  const pinned = located.pinned;
+  const focusTarget = located.target;
+  useEffect(() => {
+    if (!focusTarget) return;
+    setSelected(focusTarget);
+    requestAnimationFrame(() => {
+      const row = document.querySelector<HTMLElement>(`[data-item-id="${focusTarget.id}"]`);
+      row?.scrollIntoView({ block: "nearest" });
+      row?.focus({ preventScroll: true });
+    });
+  }, [focusTarget]);
+  const rows = pinned ? [pinned, ...visibleItems] : visibleItems;
+
+  async function loadMore() {
+    const before = loadedCount;
+    const result = await paged.loadMore();
+    const after = mergePages(result.data?.pages).length;
+    announce(`Loaded ${Math.max(0, after - before)} more items. ${after} shown.`);
+  }
 
   const movePickerOptions = useMemo(() => {
     const exclude = new Set(checked);
@@ -545,30 +569,26 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
     return filesApi.contentUrl(teamSlug, channelName, item.id, opts);
   }
 
-  async function downloadItem(item: FileItem) {
-    const url = contentUrlFor(item, { download: true });
-    if (!url) return;
+  async function download(items: FileItem[]) {
+    const files = items.filter((i) => i.kind === ItemKind.File);
+    if (files.length === 0) return;
     try {
       setError(null);
-      await triggerDownload(url, item.name);
+      const outcome = await downloadItems(
+        files.map((i) => ({ scope: "channel" as const, teamSlug, channelName, id: i.id, name: i.name })),
+      );
+      setError(summarizeDownloadOutcome(outcome));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Download failed.");
+      setError(describeDownloadError(e));
     }
   }
 
-  async function downloadChecked() {
-    const items = visibleItems
-      .filter((i) => checked.has(i.id) && i.kind === ItemKind.File)
-      .map((i) => ({
-        url: filesApi.contentUrl(teamSlug, channelName, i.id, { download: true }),
-        fileName: i.name,
-      }));
-    try {
-      setError(null);
-      await triggerDownloads(items);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Download failed.");
-    }
+  function downloadItem(item: FileItem) {
+    void download([item]);
+  }
+
+  function downloadChecked() {
+    void download(visibleItems.filter((i) => checked.has(i.id)));
   }
 
   const details = (
@@ -591,7 +611,30 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
     }
   }
 
-  const menuItem = menu ? visibleItems.find((i) => i.id === menu.id) ?? null : null;
+  const menuItem = menu ? rows.find((i) => i.id === menu.id) ?? null : null;
+
+  // Stable row callbacks: memoized FileRows re-render only when their own props change.
+  const onSelectRow = useStableCallback((item: FileItem) => setSelected(item));
+  const onToggleRow = useStableCallback((id: string) => toggleChecked(id));
+  const onOpenFolderRow = useStableCallback((item: FileItem) => openFolder(item.id, item.name));
+  const onOpenMenuRow = useStableCallback((id: string, trigger: HTMLElement) => openMenu(id, trigger));
+  const onContextMenuRow = useStableCallback((id: string, e: ReactMouseEvent) => openContextMenu(id, e));
+  const onDragStartRow = useStableCallback((e: DragEvent, item: FileItem) => onRowDragStart(e, item));
+  const onDragEndRow = useStableCallback(() => onRowDragEnd());
+  const folderDropRow = useStableCallback((id: string) => bindFolderDrop(id));
+  const rowHandlers = useMemo<FileRowHandlers>(
+    () => ({
+      onSelect: onSelectRow,
+      onToggleCheck: onToggleRow,
+      onOpenFolder: onOpenFolderRow,
+      onOpenMenu: onOpenMenuRow,
+      onContextMenu: onContextMenuRow,
+      onDragStart: onDragStartRow,
+      onDragEnd: onDragEndRow,
+      folderDrop: folderDropRow,
+    }),
+    [onSelectRow, onToggleRow, onOpenFolderRow, onOpenMenuRow, onContextMenuRow, onDragStartRow, onDragEndRow, folderDropRow],
+  );
 
   function enqueueChannelFiles(files: File[]) {
     uploads.enqueueChannel(files, teamSlug, channelName, folderId);
@@ -705,15 +748,17 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
       sidebar={<ChannelSidebar teamSlug={teamSlug} channelName={channelName} trash={trash} />}
       details={showPreview ? details : undefined}
       topbarExtra={
-        <FilesSearchField value={nameQuery} onChange={setNameQuery} placeholder="Filter files…" />
+        !isTablet ? (
+          <PreviewToggle open={previewOpen} onToggle={() => setPreviewOpen((v) => !v)} />
+        ) : undefined
       }
       contentKey={`files:${teamSlug}/${channelName}${trash ? "/trash" : ""}`}
     >
       <DropOverlay active={dropActive} label={`Drop files to upload to #${channelName}`} />
       <div className={styles.headingBar} data-testid="dropzone">
-        <div>
+        <div className={styles.headingMeta}>
           <div className={styles.headingRow}>
-            <h2 className={styles.heading}>
+            <h2 className={styles.heading} ref={headingRef} tabIndex={-1}>
               {trash ? "Trash" : (currentFolderName ?? channelName)}
             </h2>
             {!trash && <span className={styles.pill}>File channel</span>}
@@ -734,7 +779,7 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
             {trash
               ? `Items removed from #${channelName}`
               : folderId
-                ? `Contents of this folder in #${channelName}`
+                ? `In #${channelName}`
                 : `Files in #${channelName}`}
           </p>
         </div>
@@ -758,17 +803,6 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
               >
                 New folder
               </Button>
-              {!isTablet && (
-                <Button
-                  type="button"
-                  data-testid="toggle-preview"
-                  aria-pressed={previewOpen}
-                  title={previewOpen ? "Hide preview" : "Show preview"}
-                  onClick={() => setPreviewOpen((v) => !v)}
-                >
-                  {previewOpen ? "Hide preview" : "Preview"}
-                </Button>
-              )}
               <UploadButton testId="file-input" onFiles={enqueueChannelFiles} />
             </>
           )}
@@ -792,6 +826,7 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
       {!trash && (
         <BulkBar
           count={checked.size}
+          label={selectionLabel(checked.size, paged.hasMore)}
           busy={bulkBusy || creatingFolder}
           downloadEnabled={visibleItems.some((i) => checked.has(i.id) && i.kind === ItemKind.File)}
           moveEnabled={movableChecked.length > 0}
@@ -814,12 +849,16 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
         />
       )}
 
-      {error && <p className={styles.error}>{error}</p>}
+      {error && (
+        <p className={styles.error} role="alert" data-testid="browser-error">
+          {error}
+        </p>
+      )}
       {list.isLoading && <SkeletonList rows={8} />}
       {list.isError && !(list.error instanceof ApiError && list.error.status === 404) && (
         <p className={styles.error}>Failed to load items.</p>
       )}
-      {!list.isLoading && (list.data?.items.length ?? 0) === 0 && (
+      {list.isSuccess && rows.length === 0 && (
         <div data-testid="empty-state">
           <p>{folderId ? "This folder is empty" : `No files in #${channelName} yet`}</p>
           {!trash && clipboard.clip && (
@@ -833,11 +872,7 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
           )}
         </div>
       )}
-      {!list.isLoading && (list.data?.items.length ?? 0) > 0 && visibleItems.length === 0 && (
-        <p data-testid="filter-empty">No items match these filters</p>
-      )}
-
-      {(list.data?.items.length ?? 0) > 0 && (
+      {rows.length > 0 && (
         <div className={styles.tableWrap}>
           <table className={styles.table} data-testid="file-table">
             <thead>
@@ -892,126 +927,39 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
               </tr>
             </thead>
             <tbody>
-              {visibleItems.map((item) => {
-                const movable = !trash && itemMovable(item);
-                const isFolder = item.kind === ItemKind.Folder;
-                return (
-                  <tr
-                    key={item.id}
-                    data-testid={`row-${item.name}`}
-                    data-item-id={item.id}
-                    data-selected={
-                      selected?.id === item.id || checked.has(item.id) ? "true" : "false"
-                    }
-                    data-cut={clipboard.isCutId(item.id) ? "true" : undefined}
-                    data-drop-active={
-                      isFolder && dropTargetId === item.id ? "true" : undefined
-                    }
-                    draggable={movable}
-                    onDragStart={(e) => onRowDragStart(e, item)}
-                    onDragEnd={onRowDragEnd}
-                    onClick={() => setSelected(item)}
-                    onContextMenu={(e) => {
-                      if (trash) return;
-                      openContextMenu(item.id, e);
-                    }}
-                    {...(isFolder && !trash ? bindFolderDrop(item.id) : {})}
-                  >
-                    <td onClick={(e) => e.stopPropagation()}>
-                      {!trash && (
-                        <input
-                          type="checkbox"
-                          className={styles.check}
-                          data-testid={`check-${item.name}`}
-                          checked={checked.has(item.id)}
-                          aria-label={`Select ${item.name}`}
-                          onChange={() => toggleChecked(item.id)}
-                          onMouseDown={(e) => e.stopPropagation()}
-                        />
-                      )}
-                    </td>
-                    <td>
-                      <div className={styles.nameCell}>
-                        {isFolder && !trash ? (
-                          <span className={styles.folderGlyph} aria-hidden="true">
-                            ▦
-                          </span>
-                        ) : (
-                          <FileThumb item={item} contentUrl={contentUrlFor(item)} />
-                        )}
-                        <div className={styles.nameText}>
-                          {isFolder ? (
-                            <button
-                              type="button"
-                              className={styles.linkish}
-                              data-testid={`open-folder-${item.name}`}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openFolder(item.id, item.name);
-                              }}
-                              onDoubleClick={(e) => {
-                                e.stopPropagation();
-                                openFolder(item.id, item.name);
-                              }}
-                              onMouseDown={(e) => e.stopPropagation()}
-                            >
-                              {item.name}
-                            </button>
-                          ) : (
-                            <span className={styles.linkish}>{item.name}</span>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td>
-                      <span className={styles.typeCell}>{formatFileType(item)}</span>
-                    </td>
-                    <td>{isFolder ? "—" : formatBytes(item.sizeBytes)}</td>
-                    <td className={styles.uploaderCell} onClick={(e) => e.stopPropagation()}>
-                      {!isFolder && item.uploadedBy && item.uploadedByDisplayName ? (
-                        <UserChip
-                          userId={item.uploadedBy}
-                          displayName={item.uploadedByDisplayName}
-                          username={item.uploadedByUsername ?? undefined}
-                          avatarVersion={item.uploadedByAvatarVersion}
-                        />
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td>
-                      <ModifiedAt value={item.updatedAt} />
-                    </td>
-                    <td>
-                      <div className={styles.actionWrap}>
-                        <button
-                          type="button"
-                          className={styles.moreBtn}
-                          aria-label={`Actions for ${item.name}`}
-                          aria-haspopup="menu"
-                          aria-expanded={menu?.id === item.id}
-                          data-open={menu?.id === item.id ? "true" : undefined}
-                          data-menu-trigger={item.id}
-                          data-testid={`actions-${item.name}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openMenu(item.id, e.currentTarget);
-                          }}
-                          onMouseDown={(e) => e.stopPropagation()}
-                        >
-                          <span className={styles.moreDots} aria-hidden="true">
-                            <span />
-                            <span />
-                            <span />
-                          </span>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+              {rows.map((item) => (
+                <FileRow
+                  key={item.id}
+                  item={item}
+                  rowTestIdPrefix="row"
+                  openFolderTestIdPrefix="open-folder"
+                  contentUrl={contentUrlFor(item)}
+                  selected={selected?.id === item.id}
+                  checked={checked.has(item.id)}
+                  cut={clipboard.isCutId(item.id)}
+                  dropActive={dropTargetId === item.id}
+                  menuOpen={menu?.id === item.id}
+                  pinned={pinned?.id === item.id}
+                  showCheckbox={!trash}
+                  draggable={!trash && itemMovable(item)}
+                  contextMenu={!trash}
+                  folderNavigable={!trash}
+                  acceptsDrop={!trash}
+                  handlers={rowHandlers}
+                />
+              ))}
             </tbody>
           </table>
+        </div>
+      )}
+      {paged.hasMore && (
+        <div className={styles.loadMoreRow}>
+          <Button type="button" onClick={() => void loadMore()} disabled={paged.loadingMore} data-testid="load-more">
+            {paged.loadingMore ? "Loading…" : "Load more"}
+          </Button>
+          <span className={styles.loadMoreMeta} data-testid="loaded-count">
+            {loadedCount} loaded
+          </span>
         </div>
       )}
       {!trash && (
@@ -1059,7 +1007,7 @@ export function FileBrowser({ teamSlug, channelName, trash = false }: Props) {
               );
             }
             setCreateFolderOpen(false);
-            void qc.invalidateQueries({ queryKey: listKey });
+            void qc.invalidateQueries({ queryKey: ["items", teamSlug, channelName] });
           } catch (e) {
             setCreateFolderError(e instanceof Error ? e.message : "Could not create folder.");
           } finally {

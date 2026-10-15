@@ -24,6 +24,7 @@ import {
 import { ApiError } from "../../api/http";
 import { useAuth } from "../../auth/AuthContext";
 import { AppShell } from "../../components/AppShell";
+import { useAnnounce } from "../../components/liveAnnouncerContext";
 import { useChannelChat } from "../../realtime/useChannelHub";
 import { Button } from "../../ui/Button";
 import { ChannelSidebar } from "./ChannelSidebar";
@@ -34,15 +35,18 @@ import {
   initialChatState,
   type ResyncBuffer,
 } from "./chatState";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { findFileAttachQuery, type FileAttachQuery } from "./fileAttach";
 import {
   FileAttachPicker,
   type FileAttachPick,
   type FileAttachPickerHandle,
 } from "./FileAttachPicker";
-import { activeMentionIds, filterMembers, findMentionQuery, segmentBody, type MentionQuery } from "./mentions";
-import { MessageFileChips } from "./MessageFileChips";
+import { activeMentionIds, filterMembers, findMentionQuery, type MentionQuery } from "./mentions";
 import { addComposerFileIds, MAX_MESSAGE_FILE_REFS } from "./messageFileRefs";
+import { formatDay } from "./chatFormat";
+import { layoutMessages } from "./messageGrouping";
+import { MessageRow } from "./MessageRow";
 import local from "./TextChannelPage.module.css";
 
 const REPLY_PREVIEW_LENGTH = 140;
@@ -53,66 +57,11 @@ function previewOf(body: string): string {
   return chars.length > REPLY_PREVIEW_LENGTH ? `${chars.slice(0, REPLY_PREVIEW_LENGTH).join("")}…` : flat;
 }
 
-function authorInitial(name: string): string {
-  const ch = Array.from(name.trim())[0];
-  return (ch ?? "?").toUpperCase();
-}
-
-/** Stable pastel hue from an id — Discord-style avatar without new API fields. */
-function avatarHue(id: string): number {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  return h % 360;
-}
-
-function IconReply({ className }: { className?: string }) {
-  return (
-    <svg className={className} width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        fill="currentColor"
-        d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"
-      />
-    </svg>
-  );
-}
-
-function IconTrash({ className }: { className?: string }) {
-  return (
-    <svg className={className} width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        fill="currentColor"
-        d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6zm3.5-9h1v9h-1zm3 0h1v9h-1zM15.5 4l-1-1h-5l-1 1H5v2h14V4z"
-      />
-    </svg>
-  );
-}
-
 function IconPlus({ className }: { className?: string }) {
   return (
     <svg className={className} width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
       <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z" />
     </svg>
-  );
-}
-
-function MessageBody({ message, myId }: { message: ChannelMessage; myId: string | undefined }) {
-  const segments = segmentBody(message.body, message.mentions ?? []);
-  return (
-    <p className={local.body}>
-      {segments.map((segment, index) =>
-        segment.mention ? (
-          <span
-            key={index}
-            className={segment.mention.userId === myId ? `${local.mention} ${local.mentionSelf}` : local.mention}
-            data-testid="chat-mention"
-          >
-            {segment.text}
-          </span>
-        ) : (
-          segment.text
-        ),
-      )}
-    </p>
   );
 }
 
@@ -134,15 +83,6 @@ function describeError(error: unknown): string {
     return error.message;
   }
   return error instanceof Error ? error.message : "Something went wrong.";
-}
-
-function formatTime(iso: string): string {
-  const date = new Date(iso);
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
-function formatDay(iso: string): string {
-  return new Date(iso).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
 }
 
 export function TextChannelPage({ teamSlug, channelName }: Props) {
@@ -178,6 +118,14 @@ export function TextChannelPage({ teamSlug, channelName }: Props) {
   const [composerFileLabels, setComposerFileLabels] = useState<Record<string, string>>({});
   const [attachLimitError, setAttachLimitError] = useState<string | null>(null);
   const attachPickerRef = useRef<FileAttachPickerHandle>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<ChannelMessage | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const announce = useAnnounce();
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const focusOnArrival = useRef(true);
+  const messagesRef = useRef<ChannelMessage[]>([]);
+  messagesRef.current = state.messages;
 
   const members = useQuery({
     queryKey: ["members", teamSlug],
@@ -211,8 +159,12 @@ export function TextChannelPage({ teamSlug, channelName }: Props) {
     setComposerFileIds([]);
     setComposerFileLabels({});
     setAttachLimitError(null);
+    setActiveId(null);
+    setPendingDelete(null);
     stickToBottom.current = true;
-  }, [teamSlug, channelName]);
+    focusOnArrival.current = true;
+    announce(`#${channelName}, text channel`);
+  }, [teamSlug, channelName, announce]);
 
   /** Refetch the latest page (+ presence) and reconcile; events that land mid-fetch are buffered and replayed. */
   const resync = useCallback(async () => {
@@ -324,6 +276,14 @@ export function TextChannelPage({ teamSlug, channelName }: Props) {
   const canPost = canPostMessage(teamRole, archived);
   const canSend =
     canPost && !sending && !tooLong && (draft.trim().length > 0 || composerFileIds.length > 0);
+
+  // Arriving in a channel: writers land in the composer, read-only viewers on the channel heading.
+  useEffect(() => {
+    if (!focusOnArrival.current || !channel || !team.data) return;
+    focusOnArrival.current = false;
+    if (canPost) inputRef.current?.focus();
+    else headingRef.current?.focus();
+  }, [channel, team.data, canPost]);
 
   async function send(event?: FormEvent) {
     event?.preventDefault();
@@ -446,16 +406,125 @@ export function TextChannelPage({ teamSlug, channelName }: Props) {
     }
   }, [draft]);
 
-  function startReply(message: ChannelMessage) {
+  // Stable callbacks so memoized MessageRows skip re-rendering while the composer changes.
+  const startReply = useCallback((message: ChannelMessage) => {
     setReplyToId(message.id);
     inputRef.current?.focus();
-  }
+  }, []);
 
-  function jumpToMessage(id: string) {
+  const jumpToMessage = useCallback((id: string) => {
     const el = document.getElementById(`msg-${id}`);
     if (el) {
       stickToBottom.current = false;
+      setActiveId(id);
       el.scrollIntoView({ block: "center", behavior: "smooth" });
+      el.focus({ preventScroll: true });
+    }
+  }, []);
+
+  const remove = useCallback(
+    async (messageId: string): Promise<boolean> => {
+      setActionError(null);
+      try {
+        await messagesApi.remove(teamSlug, channelName, messageId);
+        dispatch({ type: "deleted", messageId });
+        return true;
+      } catch (error) {
+        setActionError(describeError(error));
+        return false;
+      }
+    },
+    [teamSlug, channelName],
+  );
+
+  /** Deletes, then moves focus to the next message (or the previous one, or the composer). */
+  const deleteAndRefocus = useCallback(
+    async (message: ChannelMessage): Promise<boolean> => {
+      const list = messagesRef.current;
+      const index = list.findIndex((m) => m.id === message.id);
+      const neighbor = list[index + 1] ?? list[index - 1] ?? null;
+      const ok = await remove(message.id);
+      if (ok) {
+        window.setTimeout(() => {
+          if (neighbor) {
+            setActiveId(neighbor.id);
+            document.getElementById(`msg-${neighbor.id}`)?.focus();
+          } else {
+            inputRef.current?.focus();
+          }
+        }, 0);
+      }
+      return ok;
+    },
+    [remove],
+  );
+
+  const requestDelete = useCallback(
+    (message: ChannelMessage, skipConfirm: boolean) => {
+      if (skipConfirm) void deleteAndRefocus(message);
+      else setPendingDelete(message);
+    },
+    [deleteAndRefocus],
+  );
+
+  async function confirmDelete() {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    const ok = await deleteAndRefocus(pendingDelete);
+    setDeleting(false);
+    if (ok) setPendingDelete(null);
+  }
+
+  const layouts = useMemo(() => layoutMessages(state.messages, formatDay), [state.messages]);
+  const activeMessageId =
+    activeId && state.messages.some((m) => m.id === activeId) ? activeId : (state.messages.at(-1)?.id ?? null);
+
+  /** Roving focus inside the log: arrows/Home/End move, R replies, Delete deletes (Shift skips confirm). */
+  function onListKeyDown(event: KeyboardEvent<HTMLUListElement>) {
+    const id = (event.target as HTMLElement).dataset.messageId;
+    if (!id || event.ctrlKey || event.metaKey || event.altKey) return;
+    const list = state.messages;
+    const index = list.findIndex((m) => m.id === id);
+    if (index < 0) return;
+    const focusAt = (i: number) => {
+      const target = list[i];
+      if (!target) return;
+      setActiveId(target.id);
+      document.getElementById(`msg-${target.id}`)?.focus();
+    };
+    const message = list[index]!;
+    switch (event.key) {
+      case "ArrowUp":
+        event.preventDefault();
+        focusAt(Math.max(0, index - 1));
+        break;
+      case "ArrowDown":
+        event.preventDefault();
+        if (index === list.length - 1) inputRef.current?.focus();
+        else focusAt(index + 1);
+        break;
+      case "Home":
+        event.preventDefault();
+        focusAt(0);
+        break;
+      case "End":
+        event.preventDefault();
+        focusAt(list.length - 1);
+        break;
+      case "r":
+      case "R":
+        if (canPost) {
+          event.preventDefault();
+          startReply(message);
+        }
+        break;
+      case "Delete":
+      case "Backspace":
+        if (canDeleteMessage({ isAuthor: message.authorId === user?.id, teamRole })) {
+          event.preventDefault();
+          requestDelete(message, event.shiftKey);
+        }
+        break;
     }
   }
 
@@ -516,18 +585,7 @@ export function TextChannelPage({ teamSlug, channelName }: Props) {
     }
   }
 
-  async function remove(messageId: string) {
-    setActionError(null);
-    try {
-      await messagesApi.remove(teamSlug, channelName, messageId);
-      dispatch({ type: "deleted", messageId });
-    } catch (error) {
-      setActionError(describeError(error));
-    }
-  }
-
   const sortedOnline = [...online].sort((a, b) => a.displayName.localeCompare(b.displayName));
-  let lastDay = "";
 
   return (
     <AppShell
@@ -538,7 +596,9 @@ export function TextChannelPage({ teamSlug, channelName }: Props) {
       <section className={local.chat} aria-label={`Messages in ${channelName}`} data-testid="text-channel-home">
         <header className={local.chatHead}>
           <div>
-            <h2 className={local.chatTitle}>#{channelName}</h2>
+            <h2 className={local.chatTitle} ref={headingRef} tabIndex={-1}>
+              #{channelName}
+            </h2>
             <p className={local.chatMeta}>
               {channel?.visibility === ChannelVisibility.Restricted ? "Restricted" : "Everyone"} text channel
               {channel?.description?.trim() ? ` · ${channel.description}` : ""}
@@ -590,98 +650,24 @@ export function TextChannelPage({ teamSlug, channelName }: Props) {
             </p>
           )}
 
-          <ul className={local.messageList}>
-            {state.messages.map((message) => {
-              const day = formatDay(message.createdAt);
-              const showDay = day !== lastDay;
-              lastDay = day;
-              const mine = message.authorId === user?.id;
-              const canDelete = canDeleteMessage({ isAuthor: mine, teamRole });
-              const mentionsMe = message.mentions?.some((m) => m.userId === user?.id);
-              return (
-                <li key={message.id} className={local.messageItem} data-testid="chat-message">
-                  {showDay && (
-                    <div className={local.day} role="separator" aria-label={day}>
-                      <span className={local.dayLine} aria-hidden="true" />
-                      <span className={local.dayLabel}>{day}</span>
-                      <span className={local.dayLine} aria-hidden="true" />
-                    </div>
-                  )}
-                  <div
-                    id={`msg-${message.id}`}
-                    className={mentionsMe ? `${local.message} ${local.messageMentionsMe}` : local.message}
-                  >
-                    {(canPost || canDelete) && (
-                      <div className={local.hoverBar} role="toolbar" aria-label="Message actions">
-                        {canPost && (
-                          <button
-                            type="button"
-                            className={local.iconButton}
-                            onClick={() => startReply(message)}
-                            aria-label={`Reply to ${message.authorDisplayName} at ${formatTime(message.createdAt)}`}
-                            data-testid="chat-reply"
-                            title="Reply"
-                          >
-                            <IconReply />
-                          </button>
-                        )}
-                        {canDelete && (
-                          <button
-                            type="button"
-                            className={`${local.iconButton} ${local.iconButtonDanger}`}
-                            onClick={() => void remove(message.id)}
-                            aria-label={`Delete message from ${message.authorDisplayName} at ${formatTime(message.createdAt)}`}
-                            data-testid="chat-delete"
-                            title="Delete"
-                          >
-                            <IconTrash />
-                          </button>
-                        )}
-                      </div>
-                    )}
-                    <div
-                      className={local.avatar}
-                      style={{ backgroundColor: `hsl(${avatarHue(message.authorId)} 42% 42%)` }}
-                      aria-hidden="true"
-                    >
-                      {authorInitial(message.authorDisplayName)}
-                    </div>
-                    <div className={local.messageBody}>
-                      {message.replyTo &&
-                        (message.replyTo.deleted ? (
-                          <p className={`${local.quote} ${local.quoteDeleted}`} data-testid="chat-reply-quote">
-                            Replying to a deleted message
-                          </p>
-                        ) : (
-                          <button
-                            type="button"
-                            className={local.quote}
-                            onClick={() => jumpToMessage(message.replyTo!.id)}
-                            aria-label={`Replying to ${message.replyTo.authorDisplayName}: ${message.replyTo.bodyPreview}`}
-                            data-testid="chat-reply-quote"
-                          >
-                            <span className={local.quoteAuthor}>{message.replyTo.authorDisplayName}</span>
-                            <span className={local.quoteText}>{message.replyTo.bodyPreview}</span>
-                          </button>
-                        ))}
-                      <div className={local.messageHead}>
-                        <span className={local.author}>{message.authorDisplayName}</span>
-                        <time
-                          className={local.time}
-                          dateTime={message.createdAt}
-                          title={new Date(message.createdAt).toLocaleString()}
-                        >
-                          {formatTime(message.createdAt)}
-                        </time>
-                      </div>
-                      {/* Plain text only: React escapes it and pre-wrap keeps line breaks. */}
-                      <MessageBody message={message} myId={user?.id} />
-                      <MessageFileChips teamSlug={teamSlug} fileIds={message.fileIds ?? []} />
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
+          <ul className={local.messageList} onKeyDown={onListKeyDown}>
+            {state.messages.map((message, index) => (
+              <MessageRow
+                key={message.id}
+                message={message}
+                teamSlug={teamSlug}
+                myId={user?.id}
+                grouped={layouts[index]?.grouped ?? false}
+                dayLabel={layouts[index]?.dayLabel ?? null}
+                canReply={canPost}
+                canDelete={canDeleteMessage({ isAuthor: message.authorId === user?.id, teamRole })}
+                active={message.id === activeMessageId}
+                onReply={startReply}
+                onDelete={requestDelete}
+                onJumpTo={jumpToMessage}
+                onActivate={setActiveId}
+              />
+            ))}
           </ul>
         </div>
 
@@ -802,7 +788,6 @@ export function TextChannelPage({ teamSlug, channelName }: Props) {
                 onKeyDown={onComposerKeyDown}
                 aria-controls={fileAttachOpen ? "file-attach-listbox" : mentionOpen ? "mention-listbox" : undefined}
                 aria-autocomplete="list"
-                aria-expanded={fileAttachOpen || mentionOpen}
                 aria-activedescendant={
                   mentionOpen && mentionCandidates[mentionIndex]
                     ? `mention-option-${mentionCandidates[mentionIndex]!.userId}`
@@ -846,6 +831,29 @@ export function TextChannelPage({ teamSlug, channelName }: Props) {
           )}
         </form>
       </section>
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Delete message?"
+        confirmLabel="Delete"
+        busy={deleting}
+        error={pendingDelete ? actionError : null}
+        testId="chat-delete-dialog"
+        onClose={() => {
+          if (!deleting) setPendingDelete(null);
+        }}
+        onConfirm={confirmDelete}
+      >
+        <p>
+          This removes the message for everyone in #{channelName}.
+          {pendingDelete && (
+            <>
+              {" "}
+              <strong>{pendingDelete.authorDisplayName}:</strong> {previewOf(pendingDelete.body) || "[file]"}
+            </>
+          )}
+        </p>
+        <p>Tip: hold Shift while clicking delete to skip this confirmation.</p>
+      </ConfirmDialog>
     </AppShell>
   );
 }

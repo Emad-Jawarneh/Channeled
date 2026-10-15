@@ -80,10 +80,12 @@ public sealed class ChatService(
                 $"Message body must be at most {ChatOptions.MaxBodyLength} characters.");
         }
 
-        var author = await db.Users.AsNoTracking()
+        var authorRow = await db.Users.AsNoTracking()
             .Where(u => u.Id == userId)
-            .Select(u => u.DisplayName)
-            .FirstOrDefaultAsync(ct) ?? "Unknown user";
+            .Select(u => new { u.DisplayName, u.AvatarUpdatedAt })
+            .FirstOrDefaultAsync(ct);
+        var author = authorRow?.DisplayName ?? "Unknown user";
+        var authorAvatarVersion = authorRow?.AvatarUpdatedAt?.ToUnixTimeMilliseconds();
 
         ChannelMessageEntity? parent = null;
         if (request.ReplyToMessageId is Guid replyId)
@@ -161,7 +163,7 @@ public sealed class ChatService(
             .OrderBy(m => m.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        var dto = ToDto(message, author, replyDto, mentionDtos, attachedFileIds);
+        var dto = ToDto(message, author, authorAvatarVersion, replyDto, mentionDtos, attachedFileIds);
         notifier.NotifyMessageCreated(channel.Channel.Id, dto);
 
         var actorName = author;
@@ -248,9 +250,11 @@ public sealed class ChatService(
             .Distinct()
             .ToList();
 
-        var names = await db.Users.AsNoTracking()
+        var authors = await db.Users.AsNoTracking()
             .Where(u => authorIds.Contains(u.Id))
-            .ToDictionaryAsync(u => u.Id, u => u.DisplayName, ct);
+            .Select(u => new { u.Id, u.DisplayName, u.AvatarUpdatedAt })
+            .ToDictionaryAsync(u => u.Id, ct);
+        var names = authors.ToDictionary(a => a.Key, a => a.Value.DisplayName);
 
         var mentions = messageIds.Count == 0
             ? new List<MessageMentionEntity>()
@@ -287,7 +291,8 @@ public sealed class ChatService(
                 .ToList();
 
             var msgFileIds = fileIdsByMessage.GetValueOrDefault(r.Id, []);
-            return ToDto(r, names.GetValueOrDefault(r.AuthorId, "Deleted user"), reply, msgMentions, msgFileIds);
+            var avatarVersion = authors.TryGetValue(r.AuthorId, out var a) ? a.AvatarUpdatedAt?.ToUnixTimeMilliseconds() : null;
+            return ToDto(r, names.GetValueOrDefault(r.AuthorId, "Deleted user"), avatarVersion, reply, msgMentions, msgFileIds);
         }).ToList();
 
         return AppResult<MessageListResponse>.Ok(new MessageListResponse(items, next));
@@ -450,10 +455,11 @@ public sealed class ChatService(
     private static ChannelMessageDto ToDto(
         ChannelMessageEntity m,
         string authorDisplayName,
+        long? authorAvatarVersion,
         MessageReplyPreviewDto? replyTo,
         IReadOnlyList<MessageMentionDto> mentions,
         IReadOnlyList<Guid> fileIds) =>
-        new(m.Id, m.ChannelId, m.AuthorId, authorDisplayName, m.Body, m.CreatedAt, replyTo, mentions, fileIds);
+        new(m.Id, m.ChannelId, m.AuthorId, authorDisplayName, m.Body, m.CreatedAt, replyTo, mentions, fileIds, authorAvatarVersion);
 
     private static MessageReplyPreviewDto ToReplyPreview(ChannelMessageEntity parent, string authorDisplayName)
     {

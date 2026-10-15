@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router-dom";
 import { App } from "./App";
 import { AuthProvider } from "./auth/AuthContext";
+import { LiveAnnouncerProvider } from "./components/LiveAnnouncer";
 import { ThemeProvider } from "./theme/ThemeContext";
 import { UploadProvider } from "./uploads/UploadContext";
 import "./styles/tokens.css";
@@ -26,7 +27,9 @@ createRoot(root).render(
         <ThemeProvider>
           <AuthProvider>
             <UploadProvider>
-              <App />
+              <LiveAnnouncerProvider>
+                <App />
+              </LiveAnnouncerProvider>
             </UploadProvider>
           </AuthProvider>
         </ThemeProvider>

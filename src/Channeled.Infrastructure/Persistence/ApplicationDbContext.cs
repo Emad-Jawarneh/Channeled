@@ -279,6 +279,7 @@ public sealed class ApplicationDbContext : IdentityDbContext<AppUser, AppRole, G
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
             entity.HasOne(x => x.Parent).WithMany().HasForeignKey(x => x.ParentId).OnDelete(DeleteBehavior.Restrict);
+            entity.Property(x => x.ContainerId).HasComputedColumnSql("COALESCE(\"ChannelId\", \"OwnerUserId\")", stored: true);
             entity.HasIndex(x => new { x.ChannelId, x.ParentId, x.Name });
             entity.HasIndex(x => new { x.OwnerUserId, x.ParentId, x.Name });
             entity.ToTable(t => t.HasCheckConstraint(
@@ -295,6 +296,7 @@ public sealed class ApplicationDbContext : IdentityDbContext<AppUser, AppRole, G
             entity.Property(x => x.Sha256).HasMaxLength(64).IsRequired();
             entity.Property(x => x.StorageKey).HasMaxLength(512).IsRequired();
             entity.HasOne(x => x.Folder).WithMany().HasForeignKey(x => x.FolderId).OnDelete(DeleteBehavior.Restrict);
+            entity.Property(x => x.ContainerId).HasComputedColumnSql("COALESCE(\"ChannelId\", \"OwnerUserId\")", stored: true);
             entity.HasIndex(x => new { x.ChannelId, x.FolderId, x.Name });
             entity.HasIndex(x => new { x.OwnerUserId, x.FolderId, x.Name });
             entity.HasIndex(x => x.UploadedBy);

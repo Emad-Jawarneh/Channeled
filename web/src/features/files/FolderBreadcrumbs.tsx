@@ -40,6 +40,11 @@ export function FolderBreadcrumbs({
   const visible = useMemo(() => collapsePath(segments), [segments]);
   const currentId = folderId ?? null;
 
+  // At channel/personal root the trail is just the root label — same as the page heading.
+  if (!folderId) {
+    return null;
+  }
+
   function bindDrop(targetId: string | null) {
     if (!onDropItems) return {};
     const key = targetId ?? "root";

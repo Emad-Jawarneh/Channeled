@@ -36,4 +36,7 @@ public static class ErrorCodes
     public const string OpenJoinConfirmationRequired = "open_join_confirmation_required";
     public const string OpenJoinTooManyPending = "open_join_too_many_pending";
     public const string OwnerMustTransfer = "owner_must_transfer";
+    /// <summary>A download ticket was used for a fresh (non-resume) request after its start window.</summary>
+    public const string DownloadTicketExpired = "download_ticket_expired";
+    public const string TooManyDownloads = "too_many_downloads";
 }

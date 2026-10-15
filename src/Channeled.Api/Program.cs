@@ -510,6 +510,7 @@ app.MapAccountEndpoints();
 app.MapAccountMailEndpoints();
 app.MapTeamEndpoints();
 app.MapFileEndpoints();
+app.MapDownloadEndpoints();
 app.MapClipboardEndpoints();
 app.MapChatEndpoints();
 app.MapNotificationEndpoints();

@@ -31,6 +31,89 @@
   transform: scale(0.96);
 }
 
+.trigger[data-tutorial="true"] {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 35%, transparent);
+  animation: clipboard-tutorial-pulse 1.4s var(--ease-soft) infinite;
+}
+
+@keyframes clipboard-tutorial-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 28%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-accent) 12%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trigger[data-tutorial="true"] {
+    animation: none;
+  }
+}
+
+.tutorial {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 60;
+  width: min(17.5rem, calc(100vw - 1.5rem));
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+  animation: motion-fade-scale-in var(--dur-fast) var(--ease-out) both;
+  transform-origin: top right;
+}
+
+.tutorial::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  right: 14px;
+  width: 10px;
+  height: 10px;
+  border-left: 1px solid var(--color-border);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+  transform: rotate(45deg);
+}
+
+.tutorialTitle {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 800;
+  color: var(--color-text);
+}
+
+.tutorialBody {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: var(--color-text-muted);
+}
+
+.tutorialBtn {
+  appearance: none;
+  margin-top: var(--space-3);
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: 700 0.8rem var(--font-sans);
+  cursor: pointer;
+}
+
+.tutorialBtn:hover,
+.tutorialBtn:focus-visible {
+  background: var(--color-soft);
+  border-color: color-mix(in srgb, var(--color-accent) 40%, var(--color-border));
+  outline: none;
+}
+
 .badge {
   position: absolute;
   top: -6px;

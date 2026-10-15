@@ -34,6 +34,8 @@ export function MembersPage({ teamSlug }: { teamSlug: string }) {
   const myRole = team.data?.myRole ?? MemberRole.Viewer;
   const isOwner = myRole === MemberRole.Owner;
   const isAdmin = myRole === MemberRole.Admin;
+  // Members and viewers cannot remove anyone — hide the empty Actions column.
+  const showActions = isOwner || isAdmin;
 
   function canRemove(m: TeamMember): boolean {
     if (m.userId === user?.id) return false;
@@ -98,7 +100,7 @@ export function MembersPage({ teamSlug }: { teamSlug: string }) {
               <th scope="col">Member</th>
               <th scope="col">Role</th>
               {isOwner && <th scope="col">Change role</th>}
-              <th scope="col">Actions</th>
+              {showActions && <th scope="col">Actions</th>}
             </tr>
           </thead>
           <tbody>
@@ -136,21 +138,23 @@ export function MembersPage({ teamSlug }: { teamSlug: string }) {
                     )}
                   </td>
                 )}
-                <td className={styles.actions} data-label="Actions">
-                  {canRemove(m) && (
-                    <Button
-                      type="button"
-                      data-testid={`remove-${m.email}`}
-                      aria-label={`Remove ${m.email}`}
-                      onClick={() => {
-                        setError(null);
-                        setConfirm({ kind: "remove", member: m });
-                      }}
-                    >
-                      Remove
-                    </Button>
-                  )}
-                </td>
+                {showActions && (
+                  <td className={styles.actions} data-label="Actions">
+                    {canRemove(m) && (
+                      <Button
+                        type="button"
+                        data-testid={`remove-${m.email}`}
+                        aria-label={`Remove ${m.email}`}
+                        onClick={() => {
+                          setError(null);
+                          setConfirm({ kind: "remove", member: m });
+                        }}
+                      >
+                        Remove
+                      </Button>
+                    )}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

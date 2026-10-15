@@ -1,10 +1,8 @@
-// @ts-nocheck — Node fs used only in Vitest; app tsconfig omits @types/node.
-import { readFileSync } from "fs";
-import { dirname, join } from "path";
-import { fileURLToPath } from "url";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const tokensCss = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "tokens.css"), "utf8");
+// Vitest serves CSS imports as empty strings, so read the file from disk (cwd is the web/ project root).
+const tokensCss = readFileSync("src/styles/tokens.css", "utf8");
 
 describe("motion tokens", () => {
   it("defines duration and easing variables", () => {

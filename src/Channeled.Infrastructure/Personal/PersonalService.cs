@@ -103,7 +103,6 @@ public sealed class PersonalService(
             return AppResult<ItemListResponse>.Fail(ErrorCodes.NotFound, "Not found.");
         }
 
-        var limit = Math.Clamp(query.Limit <= 0 ? 50 : query.Limit, 1, 200);
         var trashOnly = query.TrashOnly;
         var folderId = trashOnly ? null : query.FolderId;
 
@@ -119,46 +118,39 @@ public sealed class PersonalService(
             path = pathResult.Value;
         }
 
-        var folders = await db.Folders.AsNoTracking()
-            .Where(f => f.OwnerUserId == userId)
-            .Where(f => trashOnly ? f.DeletedAt != null : f.DeletedAt == null)
-            .Where(f => trashOnly || f.ParentId == folderId)
-            .ToListAsync(ct);
-
-        var filesQuery = db.Files.AsNoTracking()
-            .Where(f => f.OwnerUserId == userId)
-            .Where(f => trashOnly ? f.DeletedAt != null : f.DeletedAt == null)
-            .Where(f => trashOnly || f.FolderId == folderId);
-
-        if (!string.IsNullOrWhiteSpace(query.Type))
+        // Personal listings never filter by uploader (it is always the owner).
+        var page = await ItemListing.PageAsync(db, userId, folderId, query with { UploaderId = null }, ct);
+        if (!page.Succeeded)
         {
-            var type = query.Type.Trim().ToLowerInvariant();
-            filesQuery = filesQuery.Where(f => f.ContentType.ToLower().StartsWith(type));
+            return AppResult<ItemListResponse>.Fail(page.Code!, page.Message!);
         }
 
-        var files = await filesQuery.ToListAsync(ct);
-        var starred = await db.FileStars.AsNoTracking()
-            .Where(s => s.UserId == userId)
-            .Select(s => s.FileId)
-            .ToListAsync(ct);
-        var starredSet = starred.ToHashSet();
-        var uploaders = await LoadUploadersAsync(files.Select(f => (Guid?)f.UploadedBy), ct);
+        var rows = page.Value!.Rows;
+        var folderIds = rows.Where(r => r.Rank == 0).Select(r => r.Id).ToList();
+        var fileIds = rows.Where(r => r.Rank == 1).Select(r => r.Id).ToList();
+        var folders = await db.Folders.AsNoTracking().Where(f => folderIds.Contains(f.Id)).ToDictionaryAsync(f => f.Id, ct);
+        var files = await db.Files.AsNoTracking().Where(f => fileIds.Contains(f.Id)).ToDictionaryAsync(f => f.Id, ct);
+        var starredSet = (await db.FileStars.AsNoTracking()
+                .Where(s => s.UserId == userId && fileIds.Contains(s.FileId))
+                .Select(s => s.FileId)
+                .ToListAsync(ct))
+            .ToHashSet();
+        var uploaders = await LoadUploadersAsync(files.Values.Select(f => (Guid?)f.UploadedBy), ct);
 
-        IEnumerable<FileItemDto> items = folders.Select(ToFolderDto)
-            .Concat(files.Select(f => ToFileDto(f, starredSet.Contains(f.Id), uploaders.GetValueOrDefault(f.UploadedBy))));
-
-        items = SortItems(items, query.Sort);
-        items = ApplyCursor(items, query.Cursor);
-
-        var page = items.Take(limit + 1).ToList();
-        string? next = null;
-        if (page.Count > limit)
+        var items = new List<FileItemDto>(rows.Count);
+        foreach (var row in rows)
         {
-            page = page.Take(limit).ToList();
-            next = EncodeCursor(page[^1].UpdatedAt, page[^1].Id);
+            if (row.Rank == 0 && folders.TryGetValue(row.Id, out var folder))
+            {
+                items.Add(ToFolderDto(folder));
+            }
+            else if (row.Rank == 1 && files.TryGetValue(row.Id, out var file))
+            {
+                items.Add(ToFileDto(file, starredSet.Contains(file.Id), uploaders.GetValueOrDefault(file.UploadedBy)));
+            }
         }
 
-        return AppResult<ItemListResponse>.Ok(new ItemListResponse(page, next, path));
+        return AppResult<ItemListResponse>.Ok(new ItemListResponse(items, page.Value.NextCursor, path));
     }
 
     public async Task<AppResult<ItemListResponse>> ListRecentAsync(
@@ -443,54 +435,74 @@ public sealed class PersonalService(
         return AppResult<FileItemDto>.Ok(ToFolderDto(folder));
     }
 
-    public async Task<AppResult<DownloadResult>> OpenDownloadAsync(
+    public async Task<AppResult<ItemLocationDto>> LocateItemAsync(Guid userId, Guid itemId, CancellationToken ct = default)
+    {
+        var notFound = AppResult<ItemLocationDto>.Fail(ErrorCodes.NotFound, "Item not found.");
+        if (!AllowPersonal(userId, AuthAction.AccessPersonal))
+        {
+            return notFound;
+        }
+
+        var file = await db.Files.AsNoTracking().FirstOrDefaultAsync(f => f.Id == itemId && f.OwnerUserId == userId, ct);
+        var folder = file is null
+            ? await db.Folders.AsNoTracking().FirstOrDefaultAsync(f => f.Id == itemId && f.OwnerUserId == userId, ct)
+            : null;
+        if (file is null && folder is null)
+        {
+            return notFound;
+        }
+
+        var parentId = file is not null ? file.FolderId : folder!.ParentId;
+        var chain = await FolderChain.LoadAsync(db, parentId, ct);
+        FileItemDto item;
+        if (file is not null)
+        {
+            var starred = await db.FileStars.AsNoTracking().AnyAsync(s => s.UserId == userId && s.FileId == file.Id, ct);
+            var uploaders = await LoadUploadersAsync([file.UploadedBy], ct);
+            item = ToFileDto(file, starred, uploaders.GetValueOrDefault(file.UploadedBy));
+        }
+        else
+        {
+            item = ToFolderDto(folder!);
+        }
+
+        return AppResult<ItemLocationDto>.Ok(FolderChain.Locate(
+            "personal",
+            null,
+            null,
+            item,
+            parentId,
+            file is not null ? file.DeletedAt : folder!.DeletedAt,
+            chain));
+    }
+
+    public async Task<AppResult<DownloadTarget>> ResolveDownloadAsync(
         Guid userId,
         Guid fileId,
-        long? rangeStart,
-        long? rangeEndInclusive,
         CancellationToken ct = default)
     {
         if (!AllowPersonal(userId, AuthAction.AccessPersonal))
         {
-            return AppResult<DownloadResult>.Fail(ErrorCodes.NotFound, "Not found.");
+            return AppResult<DownloadTarget>.Fail(ErrorCodes.NotFound, "Not found.");
         }
 
         var file = await db.Files.AsNoTracking()
             .FirstOrDefaultAsync(f => f.Id == fileId && f.OwnerUserId == userId && f.DeletedAt == null, ct);
         if (file is null)
         {
-            return AppResult<DownloadResult>.Fail(ErrorCodes.NotFound, "Not found.");
+            return AppResult<DownloadTarget>.Fail(ErrorCodes.NotFound, "Not found.");
         }
 
-        var start = rangeStart ?? 0;
-        var end = rangeEndInclusive ?? (file.SizeBytes - 1);
-        if (file.SizeBytes == 0)
-        {
-            start = 0;
-            end = -1;
-        }
-        else
-        {
-            if (start < 0 || start >= file.SizeBytes || end < start)
-            {
-                return AppResult<DownloadResult>.Fail(ErrorCodes.Validation, "Invalid byte range.");
-            }
-
-            end = Math.Min(end, file.SizeBytes - 1);
-        }
-
-        Stream content = file.SizeBytes == 0
-            ? new MemoryStream([])
-            : await store.OpenReadAsync(file.StorageKey, start, end, ct);
-
-        return AppResult<DownloadResult>.Ok(new DownloadResult(
-            content,
+        return AppResult<DownloadTarget>.Ok(new DownloadTarget(
+            file.Id,
+            file.StorageKey,
             file.Name,
             file.ContentType,
             file.SizeBytes,
-            start,
-            Math.Max(end, 0),
-            rangeStart is not null || rangeEndInclusive is not null));
+            file.Sha256,
+            file.CreatedAt,
+            file.ChannelId,
+            file.OwnerUserId));
     }
 
     public async Task<AppResult<StartUploadResponse>> StartUploadAsync(
@@ -974,17 +986,6 @@ public sealed class PersonalService(
         });
         await Task.CompletedTask;
     }
-
-    private static IEnumerable<FileItemDto> SortItems(IEnumerable<FileItemDto> items, string? sort) =>
-        (sort?.ToLowerInvariant()) switch
-        {
-            "name" or "name_asc" => items.OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase),
-            "name_desc" => items.OrderByDescending(i => i.Name, StringComparer.OrdinalIgnoreCase),
-            "size" or "size_asc" => items.OrderBy(i => i.SizeBytes ?? -1),
-            "size_desc" => items.OrderByDescending(i => i.SizeBytes ?? -1),
-            "created" or "created_asc" => items.OrderBy(i => i.CreatedAt),
-            _ => items.OrderByDescending(i => i.UpdatedAt).ThenBy(i => i.Id),
-        };
 
     private static IEnumerable<FileItemDto> ApplyCursor(IEnumerable<FileItemDto> items, string? cursor)
     {

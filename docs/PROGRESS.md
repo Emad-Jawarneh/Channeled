@@ -15,6 +15,7 @@
 | M15 Chat file refs (Phase 3) | ✅ Complete | `message_file_refs` + resolve API; MessageFileRefsApiTests; TextChannelPage attach/# + FileBrowser “Share to chat…” |
 | M16 Motion tokens | ✅ Complete | `--dur-*` / reduced-motion; skeletons; Playwright reducedMotion; bundle budget script |
 | M17 File clipboard | ✅ Complete | `POST /api/v1/clipboard/paste`; client chip + shortcuts; ClipboardPasteApiTests + e2e smoke |
+| M18 Test foundation + chat polish | ✅ Complete | `web/e2e/fixtures.ts`, 2 workers, Firefox `@xbrowser`; `a11y-themes.spec.ts` (58 axe checks, light+dark) green after contrast fixes; `visual.spec.ts` baselines; `perf-probe.spec.ts` chat 1,000 msgs interaction p95 760→56 ms after memoized `MessageRow`; avatars/grouping/delete confirm/roving keys (`chat-a11y.spec.ts`, `MessageRow.test.tsx`, `messageGrouping.test.ts`, ChatHubTests avatar test) |
 
 ## M9–M12 notes
 

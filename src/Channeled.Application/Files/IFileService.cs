@@ -61,13 +61,15 @@ public interface IFileService
         RequestContext context,
         CancellationToken ct = default);
 
-    Task<AppResult<DownloadResult>> OpenDownloadAsync(
+    /// <summary>Locates a channel file or folder the caller can browse (live or trashed); 404 otherwise.</summary>
+    Task<AppResult<ItemLocationDto>> LocateItemAsync(Guid userId, Guid itemId, CancellationToken ct = default);
+
+    /// <summary>ACL + liveness check for downloading one channel file; does not open the object stream.</summary>
+    Task<AppResult<DownloadTarget>> ResolveDownloadAsync(
         Guid userId,
         string teamSlug,
         string channelName,
         Guid fileId,
-        long? rangeStart,
-        long? rangeEndInclusive,
         CancellationToken ct = default);
 
     Task<AppResult<StartUploadResponse>> StartUploadAsync(

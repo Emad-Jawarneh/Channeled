@@ -9,6 +9,7 @@ import { TeamMark } from "../features/teams/TeamMark";
 import { UploadTray } from "../uploads/UploadTray";
 import { ThemeToggle } from "../theme/ThemeToggle";
 import { ClipboardShelf } from "../features/files/ClipboardShelf";
+import { GlobalSearch } from "../features/search/GlobalSearch";
 import { NotificationBell } from "./NotificationBell";
 import styles from "./AppShell.module.css";
 
@@ -17,7 +18,7 @@ type AppShellProps = {
   sidebar?: ReactNode;
   details?: ReactNode;
   title?: string;
-  /** Placed in the top bar before the theme toggle (e.g. files search). */
+  /** Placed in the top-bar actions, just before notifications. */
   topbarExtra?: ReactNode;
   /** Remounts the main pane (triggers enter motion) e.g. on channel switches. */
   contentKey?: string;
@@ -140,18 +141,6 @@ export function AppShell({ children, sidebar, details, title, topbarExtra, conte
           </button>
         </nav>
         <div className={styles.railFooter}>
-          <NavLink
-            to="/search"
-            className={() =>
-              [styles.railItem, pathUnder(location.pathname, "/search") ? styles.railItemActive : ""]
-                .filter(Boolean)
-                .join(" ")
-            }
-            aria-current={pathUnder(location.pathname, "/search") ? "page" : undefined}
-            title="Search"
-          >
-            ⌕
-          </NavLink>
           {user?.isPlatformAdmin && (
             <NavLink
               to="/admin/dashboard"
@@ -254,14 +243,18 @@ export function AppShell({ children, sidebar, details, title, topbarExtra, conte
           <h1 className={styles.pageTitle}>
             <strong>{title ?? "Channeled"}</strong>
           </h1>
+          <div className={styles.topSearch}>
+            <GlobalSearch />
+          </div>
           <div className={styles.topActions}>
-            {topbarExtra}
             <ThemeToggle compact />
             <ClipboardShelf />
+            {topbarExtra}
             <NotificationBell />
           </div>
         </header>
-        <div className={styles.content}>
+        {/* Scroll container must be keyboard-reachable when a page has no focusable content (admin tables). */}
+        <div className={styles.content} tabIndex={0} aria-label="Page content" role="region">
           <div key={contentKey ?? "page"} className={styles.contentPane}>
             {children}
           </div>

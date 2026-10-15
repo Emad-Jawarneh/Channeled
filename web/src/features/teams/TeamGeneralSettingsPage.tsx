@@ -283,6 +283,7 @@ export function TeamGeneralSettingsPage({ teamSlug }: { teamSlug: string }) {
     onSuccess: async (result) => {
       qc.setQueryData(["team", teamSlug], result.team);
       await qc.invalidateQueries({ queryKey: ["teams"] });
+      await qc.invalidateQueries({ queryKey: ["search"] });
       await qc.invalidateQueries({ queryKey: ["join-requests", teamSlug] });
       await qc.invalidateQueries({ queryKey: ["members", teamSlug] });
       await qc.invalidateQueries({ queryKey: ["notifications"] });

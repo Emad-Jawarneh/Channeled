@@ -53,39 +53,23 @@ describe("labelForResolvedFile", () => {
 });
 
 describe("hrefForResolvedFile", () => {
-  it("links live files into their channel folder with item highlight", () => {
+  it("opens live and trashed files through the locate route (handles moves and later pages)", () => {
     expect(
-      hrefForResolvedFile("acme", {
+      hrefForResolvedFile({
         fileId: "f1",
         accessible: true,
         channelName: "docs",
         folderId: "11111111-1111-1111-1111-111111111111",
         state: "live",
       }),
-    ).toBe(
-      "/t/acme/c/docs?folder=11111111-1111-1111-1111-111111111111&item=f1",
+    ).toBe("/open/f1");
+    expect(hrefForResolvedFile({ fileId: "f2", accessible: true, channelName: "docs", state: "trashed" })).toBe(
+      "/open/f2",
     );
   });
 
-  it("links trashed files to channel trash", () => {
-    expect(
-      hrefForResolvedFile("acme", {
-        fileId: "f1",
-        accessible: true,
-        channelName: "docs",
-        state: "trashed",
-      }),
-    ).toBe("/t/acme/c/docs/trash?item=f1");
-  });
-
   it("returns null when inaccessible or missing", () => {
-    expect(
-      hrefForResolvedFile("acme", {
-        fileId: "f1",
-        accessible: false,
-        channelName: "docs",
-        state: "missing",
-      }),
-    ).toBeNull();
+    expect(hrefForResolvedFile({ fileId: "f1", accessible: false, channelName: "docs", state: "missing" })).toBeNull();
+    expect(hrefForResolvedFile({ fileId: "f1", accessible: true, channelName: "docs", state: "missing" })).toBeNull();
   });
 });

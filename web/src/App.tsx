@@ -10,6 +10,7 @@ import { ConfirmEmailPage } from "./features/account/ConfirmEmailPage";
 import { CancelEmailChangePage } from "./features/account/CancelEmailChangePage";
 import { SharePage } from "./features/share/SharePage";
 import { FileBrowser } from "./features/files/FileBrowser";
+import { OpenItemPage } from "./features/files/OpenItemPage";
 import { PersonalFilesPage } from "./features/personal/PersonalFilesPage";
 import { SearchPage } from "./features/search/SearchPage";
 import { MembersPage } from "./features/teams/MembersPage";
@@ -201,6 +202,14 @@ export function App() {
         element={
           <RequireAuth>
             <SearchPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/open/:itemId"
+        element={
+          <RequireAuth>
+            <OpenItemPage />
           </RequireAuth>
         }
       />

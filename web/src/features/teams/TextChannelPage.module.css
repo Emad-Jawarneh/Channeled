@@ -141,6 +141,49 @@
   background: color-mix(in srgb, var(--color-row-hover) 85%, transparent);
 }
 
+.message:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
+
+/* Continuation rows: no avatar/name header, tighter spacing, time shown in the gutter on hover/focus. */
+.messageGrouped {
+  padding-top: 0.08rem;
+  padding-bottom: 0.08rem;
+}
+
+.gutter {
+  min-width: 0;
+}
+
+.gutterTime {
+  display: block;
+  padding-top: 0.2rem;
+  font-size: 0.65rem;
+  font-weight: 500;
+  line-height: 1.2;
+  text-align: right;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.message:hover .gutterTime,
+.message:focus-within .gutterTime {
+  opacity: 1;
+}
+
+.chatTitle:focus {
+  outline: none;
+}
+
+.chatTitle:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 .messageMentionsMe {
   background: color-mix(in srgb, var(--color-soft) 55%, transparent);
   box-shadow: inset 2px 0 0 var(--color-accent);
@@ -165,6 +208,7 @@
   letter-spacing: -0.02em;
   user-select: none;
   line-height: 1;
+  object-fit: cover;
 }
 
 .messageBody {
@@ -290,7 +334,7 @@ button.quote:focus-visible {
   padding: 0 0.2rem;
   border-radius: 4px;
   background: color-mix(in srgb, var(--color-accent) 22%, transparent);
-  color: var(--color-focus);
+  color: var(--color-mention-text);
   font-weight: 700;
 }
 

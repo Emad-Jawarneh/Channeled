@@ -62,13 +62,13 @@ public sealed class BenchFileSeeder(ApplicationDbContext db)
                         {channel.Id},
                         NULL,
                         'bench-file-' || g || '.dat',
-                        'application/octet-stream',
-                        100,
+                        (ARRAY['application/octet-stream', 'text/plain', 'image/png', 'application/pdf'])[1 + g % 4],
+                        100 + (g * 7919) % 10000000,
                         repeat('0', 64),
                         'objects/bench/' || g,
                         {userId},
-                        NOW(),
-                        NOW(),
+                        NOW() - make_interval(secs => g),
+                        NOW() - make_interval(secs => (g * 31) % 1000000),
                         NULL
                  FROM generate_series({start}, {end}) AS g
                  """,
@@ -85,7 +85,7 @@ public sealed class BenchFileSeeder(ApplicationDbContext db)
              """,
             ct);
 
-        team.UsageBytes = 100L * count;
+        team.UsageBytes = await db.Files.Where(f => f.ChannelId == channel.Id).SumAsync(f => f.SizeBytes, ct);
         await db.SaveChangesAsync(ct);
 
         return (team.Id, slug, channel.Id, userId, inserted);

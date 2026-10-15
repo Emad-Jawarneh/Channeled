@@ -7,7 +7,6 @@ import {
   ensureFreshTeam,
   openRowActions,
   uiLogin,
-  waitForUploadDone,
   waitForUploadedRow,
 } from "./helpers";
 

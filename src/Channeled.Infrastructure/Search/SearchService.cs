@@ -91,7 +91,7 @@ public sealed class SearchService(
             .ThenByDescending(f => f.UpdatedAt)
             .ToList();
 
-        return PageHits(rows.Select(f => ToHit(f, null, null)), query.Cursor, limit);
+        return PageHits(rows.Select(f => ToHit(f, null, null, null)), query.Cursor, limit);
     }
 
     private async Task<AppResult<SearchResponse>> SearchChannelAsync(
@@ -136,7 +136,7 @@ public sealed class SearchService(
             .ToListAsync(ct);
 
         return PageHits(
-            rows.Select(f => ToHit(f, access.Channel.Name, access.Team.Slug)),
+            rows.Select(f => ToHit(f, access.Channel.Name, access.Team.Slug, access.Team.Name)),
             query.Cursor,
             limit);
     }
@@ -216,7 +216,11 @@ public sealed class SearchService(
         var combined = files
             .OrderByDescending(f => TrigramScore(f.Name, q))
             .ThenByDescending(f => f.UpdatedAt)
-            .Select(f => ToHit(f, f.ChannelId is Guid cid ? channelNameById.GetValueOrDefault(cid) : null, team.Slug))
+            .Select(f => ToHit(
+                f,
+                f.ChannelId is Guid cid ? channelNameById.GetValueOrDefault(cid) : null,
+                team.Slug,
+                team.Name))
             .Concat(
                 channels
                     .Where(c => visibleChannelIds.Contains(c.Id)
@@ -233,7 +237,8 @@ public sealed class SearchService(
                         null,
                         c.CreatedAt,
                         c.Name,
-                        team.Slug)))
+                        team.Slug,
+                        team.Name)))
             .ToList();
 
         return PageHits(combined, query.Cursor, limit);
@@ -284,7 +289,8 @@ public sealed class SearchService(
                         f."UploadedBy" AS "UploadedBy",
                         f."UpdatedAt" AS "UpdatedAt",
                         c."Name" AS "ChannelName",
-                        t."Slug" AS "TeamSlug"
+                        t."Slug" AS "TeamSlug",
+                        t."Name" AS "TeamName"
                  FROM team_members AS tm
                  JOIN teams AS t ON t."Id" = tm."TeamId"
                  JOIN channels AS c ON c."TeamId" = t."Id"
@@ -320,7 +326,8 @@ public sealed class SearchService(
             r.UploadedBy,
             r.UpdatedAt,
             r.ChannelName,
-            r.TeamSlug)).ToList();
+            r.TeamSlug,
+            r.TeamName)).ToList();
 
         string? next = rows.Count > limit && page.Count > 0
             ? EncodeCursor(page[^1].UpdatedAt, page[^1].Id)
@@ -340,6 +347,7 @@ public sealed class SearchService(
         public DateTimeOffset UpdatedAt { get; set; }
         public string ChannelName { get; set; } = "";
         public string TeamSlug { get; set; } = "";
+        public string TeamName { get; set; } = "";
     }
 
     private bool AllowBrowse(Guid userId, ChannelAccess access) =>
@@ -407,8 +415,8 @@ public sealed class SearchService(
         return AppResult<SearchResponse>.Ok(new SearchResponse(page, next));
     }
 
-    private static SearchHitDto ToHit(FileEntity f, string? channelName, string? teamSlug) =>
-        new(f.Id, ItemKind.File, f.Name, f.ChannelId, f.OwnerUserId, f.ContentType, f.SizeBytes, f.UploadedBy, f.UpdatedAt, channelName, teamSlug);
+    private static SearchHitDto ToHit(FileEntity f, string? channelName, string? teamSlug, string? teamName) =>
+        new(f.Id, ItemKind.File, f.Name, f.ChannelId, f.OwnerUserId, f.ContentType, f.SizeBytes, f.UploadedBy, f.UpdatedAt, channelName, teamSlug, teamName);
 
     /// <summary>Lightweight trigram-ish score for ranking filtered rows.</summary>
     public static double TrigramScore(string name, string query)

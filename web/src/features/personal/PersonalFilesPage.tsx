@@ -1,5 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import { createPortal } from "react-dom";
 import {
   ChannelKind,
@@ -11,11 +19,7 @@ import {
 } from "../../api/channeled";
 import { ApiError } from "../../api/http";
 import { AppShell } from "../../components/AppShell";
-import { UserChip } from "../../components/UserChip";
-import { formatFileType } from "../../lib/describeFileKind";
-import { formatBytes } from "../../lib/formatBytes";
-import { ModifiedAt } from "../../lib/formatModified";
-import { triggerDownload, triggerDownloads } from "../../lib/triggerDownload";
+import { describeDownloadError, downloadItems, summarizeDownloadOutcome } from "../../lib/triggerDownload";
 import { TABLET_MQ, useMediaQuery } from "../../lib/useMediaQuery";
 import { DropOverlay } from "../../uploads/DropOverlay";
 import { useFileDrop } from "../../uploads/useFileDrop";
@@ -32,10 +36,9 @@ import {
   getDraggedItemIds,
   setDraggedItemIds,
 } from "../files/dragItems";
-import { FileThumb } from "../files/FileThumb";
 import { FilePreviewPanel } from "../files/FilePreviewPanel";
-import { FilesSearchField } from "../files/FilesSearchField";
 import { FolderBreadcrumbs } from "../files/FolderBreadcrumbs";
+import { PreviewToggle } from "../files/PreviewToggle";
 import {
   MoveProgress,
   MoveSummary,
@@ -45,10 +48,16 @@ import {
 import { moveBatch, summarizeMoveResult, type MoveBatchPrior } from "../files/moveBatch";
 import { PickListDialog } from "../files/PickListDialog";
 import { SelectionControls } from "../files/SelectionControls";
+import { FileRow, type FileRowHandlers } from "../files/FileRow";
+import { mergePages, selectionLabel, sortParam } from "../files/pagedItems";
+import { useStableCallback } from "../../lib/useStableCallback";
 import { nextSortState, SortableTh, type SortColumn } from "../files/SortableTh";
-import { compareFileItems } from "../files/sortItems";
 import { UploadButton } from "../files/UploadButton";
 import { useFolderNav } from "../files/useFolderNav";
+import { useLocatedItem } from "../files/useLocatedItem";
+import { usePagedItems } from "../files/usePagedItems";
+import { useAnnounce } from "../../components/liveAnnouncerContext";
+import { useSearchParams } from "react-router-dom";
 import styles from "../files/FileBrowser.module.css";
 import { PersonalSidebar } from "./PersonalSidebar";
 
@@ -102,7 +111,6 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [folderUnavailable, setFolderUnavailable] = useState(false);
-  const [nameQuery, setNameQuery] = useState("");
   const [sort, setSort] = useState<SortColumn>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [menu, setMenu] = useState<MenuState | null>(null);
@@ -123,11 +131,16 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
   const menuRef = useRef<HTMLUListElement | null>(null);
   const dropDepth = useRef(0);
 
+  // Recent and Starred have a fixed server order; folder and trash listings sort on the server.
+  const serverSortable = mode === "files" || mode === "trash";
+  const serverSort = sortParam(sort, sortDir);
+
+  // Selection never survives a change of what is listed (folder, sort): no acting on unseen rows.
   useEffect(() => {
     setChecked(new Set());
     setSelected(null);
     setMoveSummary(null);
-  }, [folderId, mode]);
+  }, [folderId, mode, serverSort]);
 
   useEffect(() => {
     if (!menu) return;
@@ -166,23 +179,18 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
     setMenu(null);
   }
 
-  const listKey = useMemo(
-    () => ["personal", mode, canBrowseFolders ? folderId : null] as const,
-    [mode, canBrowseFolders, folderId],
+  const paged = usePagedItems(
+    ["personal", mode, canBrowseFolders ? folderId : null, serverSortable ? serverSort : null],
+    (cursor, signal) => {
+      if (mode === "recent") return personalApi.recent(cursor, signal);
+      if (mode === "starred") return personalApi.starred(cursor, signal);
+      return personalApi.list(
+        { trash, folderId: canBrowseFolders ? folderId : undefined, sort: serverSort, cursor },
+        signal,
+      );
+    },
   );
-
-  const list = useQuery({
-    queryKey: listKey,
-    queryFn: async () => {
-      if (mode === "recent") return personalApi.recent();
-      if (mode === "starred") return personalApi.starred();
-      return personalApi.list({ trash, folderId: canBrowseFolders ? folderId : undefined });
-    },
-    retry: (count, err) => {
-      if (err instanceof ApiError && err.status === 404) return false;
-      return count < 2;
-    },
-  });
+  const list = paged.query;
 
   useEffect(() => {
     if (!folderId || !canBrowseFolders) return;
@@ -235,21 +243,50 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
     onSuccess: () => setCopySuccess(true),
   });
 
-  const foldersHere = useMemo(
-    () => (list.data?.items ?? []).filter((i) => i.kind === ItemKind.Folder),
-    [list.data?.items],
-  );
-  const path =
-    list.data?.path ?? (list.data as { Path?: FolderPathSegment[] } | undefined)?.Path ?? null;
+  const visibleItems = paged.items;
+  const foldersHere = useMemo(() => visibleItems.filter((i) => i.kind === ItemKind.Folder), [visibleItems]);
+  const path: FolderPathSegment[] | null = paged.path ?? null;
+  const loadedCount = paged.items.length;
 
-  const visibleItems = useMemo(() => {
-    let items = list.data?.items ?? [];
-    const q = nameQuery.trim().toLowerCase();
-    if (q) {
-      items = items.filter((i) => i.name.toLowerCase().includes(q));
-    }
-    return [...items].sort((a, b) => compareFileItems(a, b, sort, sortDir));
-  }, [list.data, nameQuery, sort, sortDir]);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const highlightItemId = searchParams.get("item");
+  const [focusId, setFocusId] = useState<string | null>(null);
+  useEffect(() => {
+    setFocusId(null);
+  }, [folderId, mode]);
+  useEffect(() => {
+    if (!highlightItemId) return;
+    setFocusId(highlightItemId);
+    const next = new URLSearchParams(searchParams);
+    next.delete("item");
+    setSearchParams(next, { replace: true });
+  }, [highlightItemId, searchParams, setSearchParams]);
+  const located = useLocatedItem({
+    focusId: mode === "files" || mode === "trash" ? focusId : null,
+    loadedItems: paged.items,
+    listReady: list.isSuccess,
+    view: { scope: "personal", folderId: canBrowseFolders ? (folderId ?? null) : null, trash },
+  });
+  const pinned = located.pinned;
+  const focusTarget = located.target;
+  useEffect(() => {
+    if (!focusTarget) return;
+    setSelected(focusTarget);
+    requestAnimationFrame(() => {
+      const row = document.querySelector<HTMLElement>(`[data-item-id="${focusTarget.id}"]`);
+      row?.scrollIntoView({ block: "nearest" });
+      row?.focus({ preventScroll: true });
+    });
+  }, [focusTarget]);
+  const rows = pinned ? [pinned, ...visibleItems] : visibleItems;
+
+  const announce = useAnnounce();
+  async function loadMore() {
+    const before = loadedCount;
+    const result = await paged.loadMore();
+    const after = mergePages(result.data?.pages).length;
+    announce(`Loaded ${Math.max(0, after - before)} more items. ${after} shown.`);
+  }
 
   function onSortColumn(column: SortColumn) {
     const next = nextSortState(sort, sortDir, column);
@@ -271,6 +308,7 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
     listedIds,
     listedItems: visibleItems,
     selectedIds,
+    listReady: list.isSuccess,
     enabled: mode === "files",
     onError: (message) => setError(message),
     onPasteResult: (res) => {
@@ -451,40 +489,63 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
     }
   }
 
-  const menuItem = menu ? visibleItems.find((i) => i.id === menu.id) ?? null : null;
+  const menuItem = menu ? rows.find((i) => i.id === menu.id) ?? null : null;
+
+  // Stable row callbacks: memoized FileRows re-render only when their own props change.
+  const onSelectRow = useStableCallback((item: FileItem) => setSelected(item));
+  const onToggleRow = useStableCallback((id: string) => toggleChecked(id));
+  const onOpenFolderRow = useStableCallback((item: FileItem) => openFolder(item.id, item.name));
+  const onOpenMenuRow = useStableCallback((id: string, trigger: HTMLElement) => openMenu(id, trigger));
+  const onContextMenuRow = useStableCallback((id: string, e: ReactMouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const width = 160;
+    const left = Math.min(Math.max(8, e.clientX), window.innerWidth - width - 8);
+    setMenu({ id, top: Math.min(Math.max(8, e.clientY), window.innerHeight - 8), left });
+  });
+  const onDragStartRow = useStableCallback((e: DragEvent, item: FileItem) => onRowDragStart(e, item));
+  const onDragEndRow = useStableCallback(() => onRowDragEnd());
+  const folderDropRow = useStableCallback((id: string) => bindFolderDrop(id));
+  const rowHandlers = useMemo<FileRowHandlers>(
+    () => ({
+      onSelect: onSelectRow,
+      onToggleCheck: onToggleRow,
+      onOpenFolder: onOpenFolderRow,
+      onOpenMenu: onOpenMenuRow,
+      onContextMenu: onContextMenuRow,
+      onDragStart: onDragStartRow,
+      onDragEnd: onDragEndRow,
+      folderDrop: folderDropRow,
+    }),
+    [onSelectRow, onToggleRow, onOpenFolderRow, onOpenMenuRow, onContextMenuRow, onDragStartRow, onDragEndRow, folderDropRow],
+  );
   const currentFolderName = path?.at(-1)?.name ?? folderNameHint ?? undefined;
   const heading = mode === "files" && currentFolderName ? currentFolderName : titles[mode];
-  const rawCount = list.data?.items.length ?? 0;
+  const rawCount = rows.length;
 
   function contentUrlFor(item: FileItem, opts?: { download?: boolean }) {
     if (item.kind === ItemKind.Folder) return null;
     return personalApi.contentUrl(item.id, opts);
   }
 
-  async function downloadItem(item: FileItem) {
-    const url = contentUrlFor(item, { download: true });
-    if (!url) return;
+  async function download(items: FileItem[]) {
+    const files = items.filter((i) => i.kind === ItemKind.File);
+    if (files.length === 0) return;
     try {
       setError(null);
-      await triggerDownload(url, item.name);
+      const outcome = await downloadItems(files.map((i) => ({ scope: "personal" as const, id: i.id, name: i.name })));
+      setError(summarizeDownloadOutcome(outcome));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Download failed.");
+      setError(describeDownloadError(e));
     }
   }
 
-  async function downloadChecked() {
-    const items = visibleItems
-      .filter((i) => checked.has(i.id) && i.kind === ItemKind.File)
-      .map((i) => ({
-        url: personalApi.contentUrl(i.id, { download: true }),
-        fileName: i.name,
-      }));
-    try {
-      setError(null);
-      await triggerDownloads(items);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Download failed.");
-    }
+  function downloadItem(item: FileItem) {
+    void download([item]);
+  }
+
+  function downloadChecked() {
+    void download(visibleItems.filter((i) => checked.has(i.id)));
   }
 
   const details = (
@@ -594,13 +655,15 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
       sidebar={<PersonalSidebar />}
       details={showPreview ? details : undefined}
       topbarExtra={
-        <FilesSearchField value={nameQuery} onChange={setNameQuery} placeholder="Filter files…" />
+        !isTablet ? (
+          <PreviewToggle open={previewOpen} onToggle={() => setPreviewOpen((v) => !v)} />
+        ) : undefined
       }
     >
       <DropOverlay active={dropActive} label="Drop files to upload to My files" />
 
       <div className={styles.headingBar} data-testid="dropzone">
-        <div>
+        <div className={styles.headingMeta}>
           <div className={styles.headingRow}>
             <h2 className={styles.heading}>{heading}</h2>
             {!trash && <span className={styles.pill}>Personal</span>}
@@ -643,17 +706,6 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
               >
                 New folder
               </Button>
-              {!isTablet && (
-                <Button
-                  type="button"
-                  data-testid="toggle-preview"
-                  aria-pressed={previewOpen}
-                  title={previewOpen ? "Hide preview" : "Show preview"}
-                  onClick={() => setPreviewOpen((v) => !v)}
-                >
-                  {previewOpen ? "Hide preview" : "Preview"}
-                </Button>
-              )}
               <UploadButton testId="personal-file-input" onFiles={enqueue} />
             </>
           )}
@@ -674,6 +726,7 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
       {canBulk && (
         <BulkBar
           count={checked.size}
+          label={selectionLabel(checked.size, paged.hasMore)}
           busy={bulkBusy || creatingFolder}
           downloadEnabled={visibleItems.some((i) => checked.has(i.id) && i.kind === ItemKind.File)}
           onCut={() => clipboard.cutOrCopy("cut")}
@@ -696,7 +749,7 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
       )}
 
       {error && (
-        <p className={styles.error} role="alert">
+        <p className={styles.error} role="alert" data-testid="browser-error">
           {error}
         </p>
       )}
@@ -705,7 +758,7 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
         <ClipboardChip onPaste={() => void clipboard.paste()} pasteDisabled={bulkBusy} />
       )}
       {list.isLoading && <SkeletonList rows={8} />}
-      {!list.isLoading && rawCount === 0 && (
+      {list.isSuccess && rawCount === 0 && (
         <div data-testid="personal-empty">
           <p>
             {canBrowseFolders && folderId
@@ -721,10 +774,6 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
           )}
         </div>
       )}
-      {!list.isLoading && rawCount > 0 && visibleItems.length === 0 && (
-        <p>No items match these filters</p>
-      )}
-
       {rawCount > 0 && (
         <div className={styles.tableWrap}>
           <table className={styles.table} data-testid="personal-table">
@@ -745,165 +794,66 @@ export function PersonalFilesPage({ mode = "files" }: { mode?: Mode }) {
                     />
                   )}
                 </th>
-                <SortableTh
-                  column="name"
-                  label="Name"
-                  sort={sort}
-                  sortDir={sortDir}
-                  onSort={onSortColumn}
-                />
-                <SortableTh
-                  column="type"
-                  label="Type"
-                  sort={sort}
-                  sortDir={sortDir}
-                  onSort={onSortColumn}
-                />
-                <SortableTh
-                  column="size"
-                  label="Size"
-                  sort={sort}
-                  sortDir={sortDir}
-                  onSort={onSortColumn}
-                />
+                {serverSortable ? (
+                  <>
+                    <SortableTh column="name" label="Name" sort={sort} sortDir={sortDir} onSort={onSortColumn} />
+                    <SortableTh column="type" label="Type" sort={sort} sortDir={sortDir} onSort={onSortColumn} />
+                    <SortableTh column="size" label="Size" sort={sort} sortDir={sortDir} onSort={onSortColumn} />
+                  </>
+                ) : (
+                  <>
+                    <th scope="col">Name</th>
+                    <th scope="col">Type</th>
+                    <th scope="col">Size</th>
+                  </>
+                )}
                 <th scope="col">Uploaded by</th>
-                <SortableTh
-                  column="updated"
-                  label="Modified"
-                  sort={sort}
-                  sortDir={sortDir}
-                  onSort={onSortColumn}
-                />
+                {serverSortable ? (
+                  <SortableTh column="updated" label="Modified" sort={sort} sortDir={sortDir} onSort={onSortColumn} />
+                ) : (
+                  <th scope="col" aria-sort="descending">
+                    Modified
+                  </th>
+                )}
                 <th scope="col">
                   <span className="visually-hidden">Actions</span>
                 </th>
               </tr>
             </thead>
             <tbody>
-              {visibleItems.map((item) => {
-                const isFolder = item.kind === ItemKind.Folder;
-                return (
-                  <tr
-                    key={item.id}
-                    data-testid={`personal-row-${item.name}`}
-                    data-selected={
-                      selected?.id === item.id || checked.has(item.id) ? "true" : "false"
-                    }
-                    data-cut={clipboard.isCutId(item.id) ? "true" : undefined}
-                    data-drop-active={
-                      isFolder && dropTargetId === item.id ? "true" : undefined
-                    }
-                    draggable={canBulk}
-                    onDragStart={(e) => onRowDragStart(e, item)}
-                    onDragEnd={onRowDragEnd}
-                    onClick={() => setSelected(item)}
-                    onContextMenu={(e) => {
-                      if (!canBulk) return;
-                      e.preventDefault();
-                      e.stopPropagation();
-                      const width = 160;
-                      const left = Math.min(Math.max(8, e.clientX), window.innerWidth - width - 8);
-                      setMenu({
-                        id: item.id,
-                        top: Math.min(Math.max(8, e.clientY), window.innerHeight - 8),
-                        left,
-                      });
-                    }}
-                    {...(isFolder && canBrowseFolders ? bindFolderDrop(item.id) : {})}
-                  >
-                    <td onClick={(e) => e.stopPropagation()}>
-                      {canBulk && (
-                        <input
-                          type="checkbox"
-                          className={styles.check}
-                          data-testid={`check-${item.name}`}
-                          checked={checked.has(item.id)}
-                          aria-label={`Select ${item.name}`}
-                          onChange={() => toggleChecked(item.id)}
-                          onMouseDown={(e) => e.stopPropagation()}
-                        />
-                      )}
-                    </td>
-                    <td>
-                      <div className={styles.nameCell}>
-                        {isFolder && canBrowseFolders ? (
-                          <span className={styles.folderGlyph} aria-hidden="true">
-                            ▦
-                          </span>
-                        ) : (
-                          <FileThumb item={item} contentUrl={contentUrlFor(item)} />
-                        )}
-                        <div className={styles.nameText}>
-                          {isFolder && canBrowseFolders && !trash ? (
-                            <button
-                              type="button"
-                              className={styles.linkish}
-                              data-testid={`personal-open-folder-${item.name}`}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openFolder(item.id, item.name);
-                              }}
-                              onMouseDown={(e) => e.stopPropagation()}
-                            >
-                              {item.name}
-                            </button>
-                          ) : (
-                            <span className={styles.linkish}>
-                              {isFolder ? `${item.name}/` : item.name}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td>
-                      <span className={styles.typeCell}>{formatFileType(item)}</span>
-                    </td>
-                    <td>{isFolder ? "—" : formatBytes(item.sizeBytes)}</td>
-                    <td className={styles.uploaderCell} onClick={(e) => e.stopPropagation()}>
-                      {!isFolder && item.uploadedBy && item.uploadedByDisplayName ? (
-                        <UserChip
-                          userId={item.uploadedBy}
-                          displayName={item.uploadedByDisplayName}
-                          username={item.uploadedByUsername ?? undefined}
-                          avatarVersion={item.uploadedByAvatarVersion}
-                        />
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td>
-                      <ModifiedAt value={item.updatedAt} />
-                    </td>
-                    <td>
-                      <div className={styles.actionWrap}>
-                        <button
-                          type="button"
-                          className={styles.moreBtn}
-                          aria-label={`Actions for ${item.name}`}
-                          aria-haspopup="menu"
-                          aria-expanded={menu?.id === item.id}
-                          data-open={menu?.id === item.id ? "true" : undefined}
-                          data-menu-trigger={item.id}
-                          data-testid={`actions-${item.name}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openMenu(item.id, e.currentTarget);
-                          }}
-                          onMouseDown={(e) => e.stopPropagation()}
-                        >
-                          <span className={styles.moreDots} aria-hidden="true">
-                            <span />
-                            <span />
-                            <span />
-                          </span>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+              {rows.map((item) => (
+                <FileRow
+                  key={item.id}
+                  item={item}
+                  rowTestIdPrefix="personal-row"
+                  openFolderTestIdPrefix="personal-open-folder"
+                  contentUrl={contentUrlFor(item)}
+                  selected={selected?.id === item.id}
+                  checked={checked.has(item.id)}
+                  cut={clipboard.isCutId(item.id)}
+                  dropActive={dropTargetId === item.id}
+                  menuOpen={menu?.id === item.id}
+                  pinned={pinned?.id === item.id}
+                  showCheckbox={canBulk}
+                  draggable={canBulk}
+                  contextMenu={canBulk}
+                  folderNavigable={canBrowseFolders}
+                  acceptsDrop={canBrowseFolders}
+                  handlers={rowHandlers}
+                />
+              ))}
             </tbody>
           </table>
+        </div>
+      )}
+      {paged.hasMore && (
+        <div className={styles.loadMoreRow}>
+          <Button type="button" onClick={() => void loadMore()} disabled={paged.loadingMore} data-testid="load-more">
+            {paged.loadingMore ? "Loading…" : "Load more"}
+          </Button>
+          <span className={styles.loadMoreMeta} data-testid="loaded-count">
+            {loadedCount} loaded
+          </span>
         </div>
       )}
 

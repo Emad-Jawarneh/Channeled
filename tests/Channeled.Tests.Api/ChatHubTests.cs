@@ -172,6 +172,52 @@ public class ChatHubTests : IClassFixture<ChatWorldFixture>, IAsyncLifetime
         await presence.ExpectNoneAsync(Quiet);
     }
 
+    [Fact]
+    public async Task Author_avatar_version_is_in_list_and_realtime_and_follows_avatar_changes()
+    {
+        var ch = await _w.CreateChannelAsync(ChannelKind.Text);
+        var png = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+        using (var content = new ByteArrayContent(png))
+        {
+            content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/png");
+            (await _w.Member.Client.PutAsync("/api/v1/account/avatar", content)).EnsureSuccessStatusCode();
+        }
+
+        try
+        {
+            var me = await _w.Member.Client.GetFromJsonAsync<System.Text.Json.JsonElement>("/api/v1/auth/me");
+            var version = me.GetProperty("avatarVersion").GetInt64();
+
+            await using var listener = await ConnectAsync(_w.Viewer);
+            var created = listener.Listen<ChannelMessageDto>("messageCreated");
+            await listener.Connection.InvokeAsync("JoinChannel", ch.Id);
+
+            var posted = await _w.PostOkAsync(_w.Member, ch, "with avatar");
+            posted.AuthorAvatarVersion.Should().Be(version);
+            (await created.NextAsync()).AuthorAvatarVersion.Should().Be(version);
+            (await _w.PostOkAsync(_w.Owner, ch, "no avatar")).AuthorAvatarVersion.Should().BeNull();
+
+            var listed = await _w.ListOkAsync(_w.Viewer, ch);
+            listed.Items.Single(i => i.Id == posted.Id).AuthorAvatarVersion.Should().Be(version);
+
+            // Teammates can load the image; people outside the team still get 404.
+            (await _w.Viewer.Client.GetAsync($"/api/v1/users/{_w.Member.Id}/avatar?v={version}"))
+                .StatusCode.Should().Be(HttpStatusCode.OK);
+            (await _w.Outsider.Client.GetAsync($"/api/v1/users/{_w.Member.Id}/avatar?v={version}"))
+                .StatusCode.Should().Be(HttpStatusCode.NotFound);
+        }
+        finally
+        {
+            (await _w.Member.Client.DeleteAsync("/api/v1/account/avatar")).EnsureSuccessStatusCode();
+        }
+
+        // The version is read at list time, so removing the avatar updates old messages too.
+        (await _w.ListOkAsync(_w.Viewer, ch)).Items
+            .Where(i => i.AuthorId == _w.Member.Id)
+            .Should().OnlyContain(i => i.AuthorAvatarVersion == null);
+    }
+
     // ---------- plumbing ----------
 
     private async Task<HubSession> ConnectAsync(ChatWorld.Actor actor)

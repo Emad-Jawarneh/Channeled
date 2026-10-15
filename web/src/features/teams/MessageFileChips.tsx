@@ -32,7 +32,7 @@ export function MessageFileChips({ teamSlug, fileIds }: Props) {
         const item = byId.get(id);
         const label = item ? labelForResolvedFile(item) : "File";
         const muted = item && (!item.accessible || item.state !== "live");
-        const href = item ? hrefForResolvedFile(teamSlug, item) : null;
+        const href = item ? hrefForResolvedFile(item) : null;
         const className = muted ? `${local.fileChip} ${local.fileChipMuted}` : local.fileChip;
         return (
           <li key={id}>

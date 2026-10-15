@@ -24,7 +24,8 @@ public sealed record SearchHitDto(
     Guid? UploadedBy,
     DateTimeOffset UpdatedAt,
     string? ChannelName,
-    string? TeamSlug);
+    string? TeamSlug,
+    string? TeamName = null);
 
 public sealed record SearchResponse(
     IReadOnlyList<SearchHitDto> Hits,

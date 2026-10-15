@@ -162,6 +162,11 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("ChannelId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid>("ContainerId")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("uuid")
+                        .HasComputedColumnSql("COALESCE(\"ChannelId\", \"OwnerUserId\")", true);
+
                     b.Property<string>("ContentType")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -249,6 +254,11 @@ namespace Channeled.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid?>("ChannelId")
                         .HasColumnType("uuid");
+
+                    b.Property<Guid>("ContainerId")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("uuid")
+                        .HasComputedColumnSql("COALESCE(\"ChannelId\", \"OwnerUserId\")", true);
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");

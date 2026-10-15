@@ -59,11 +59,13 @@ public interface IPersonalService
         RequestContext context,
         CancellationToken ct = default);
 
-    Task<AppResult<DownloadResult>> OpenDownloadAsync(
+    /// <summary>Locates one of the caller's own personal items (live or trashed); 404 for anyone else, admins included.</summary>
+    Task<AppResult<ItemLocationDto>> LocateItemAsync(Guid userId, Guid itemId, CancellationToken ct = default);
+
+    /// <summary>Owner-only download check for one personal file; does not open the object stream.</summary>
+    Task<AppResult<DownloadTarget>> ResolveDownloadAsync(
         Guid userId,
         Guid fileId,
-        long? rangeStart,
-        long? rangeEndInclusive,
         CancellationToken ct = default);
 
     Task<AppResult<StartUploadResponse>> StartUploadAsync(

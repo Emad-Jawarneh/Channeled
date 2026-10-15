@@ -4,8 +4,10 @@ using Channeled.Application.Files;
 using Channeled.Application.Identity;
 using Channeled.Application.Personal;
 using Channeled.Domain.Errors;
+using Channeled.Api.Files;
+using Channeled.Application.Abstractions.Storage;
 using Channeled.Infrastructure.Files;
-using Microsoft.Net.Http.Headers;
+using Microsoft.Extensions.Options;
 
 namespace Channeled.Api.Personal;
 
@@ -51,6 +53,7 @@ public static class PersonalEndpoints
             string? sort,
             string? type,
             bool? trash,
+            string? q,
             CancellationToken ct) =>
         {
             if (!TryUser(principal, out var userId))
@@ -58,9 +61,14 @@ public static class PersonalEndpoints
                 return Unauthorized();
             }
 
+            if (q is { Length: > 200 })
+            {
+                return Problem(ErrorCodes.Validation, "q must be at most 200 characters.", StatusCodes.Status400BadRequest);
+            }
+
             return ToHttp(await personal.ListItemsAsync(
                 userId,
-                new ListItemsQuery(folderId, cursor, limit ?? 50, sort, type, null, trash ?? false),
+                new ListItemsQuery(folderId, cursor, limit ?? 50, sort, type, null, trash ?? false, q),
                 ct));
         });
 
@@ -220,6 +228,9 @@ public static class PersonalEndpoints
             Guid itemId,
             bool? download,
             IPersonalService personal,
+            IFileStore store,
+            IDownloadSlots slots,
+            IOptionsMonitor<DownloadOptions> downloadOptions,
             ClaimsPrincipal principal,
             HttpContext http,
             CancellationToken ct) =>
@@ -229,46 +240,23 @@ public static class PersonalEndpoints
                 return Unauthorized();
             }
 
-            long? rangeStart = null;
-            long? rangeEnd = null;
-            if (http.Request.Headers.TryGetValue(HeaderNames.Range, out var rangeHeader)
-                && RangeHeaderValue.TryParse(rangeHeader.ToString(), out var range)
-                && range.Ranges.Count == 1)
-            {
-                var r = range.Ranges.First();
-                rangeStart = r.From;
-                rangeEnd = r.To;
-            }
-
-            var result = await personal.OpenDownloadAsync(userId, itemId, rangeStart, rangeEnd, ct);
+            var result = await personal.ResolveDownloadAsync(userId, itemId, ct);
             if (!result.Succeeded || result.Value is null)
             {
                 return ToHttp(result);
             }
 
-            var d = result.Value;
-            var asAttachment = download == true || !ContentTypeDetector.AllowInline(d.ContentType);
-            http.Response.Headers.Append("X-Content-Type-Options", "nosniff");
-
-            if (d.IsPartial && d.SizeBytes > 0)
-            {
-                var disposition = asAttachment ? "attachment" : "inline";
-                http.Response.StatusCode = StatusCodes.Status206PartialContent;
-                http.Response.Headers.ContentDisposition =
-                    $"{disposition}; filename=\"{d.FileName.Replace("\"", "")}\"";
-                http.Response.Headers.ContentRange = $"bytes {d.RangeStart}-{d.RangeEndInclusive}/{d.SizeBytes}";
-                http.Response.ContentType = d.ContentType;
-                http.Response.ContentLength = d.RangeEndInclusive - d.RangeStart + 1;
-                await d.Content.CopyToAsync(http.Response.Body, ct);
-                await d.Content.DisposeAsync();
-                return Results.Empty;
-            }
-
-            return Results.File(
-                d.Content,
-                d.ContentType,
-                fileDownloadName: asAttachment ? d.FileName : null,
-                enableRangeProcessing: false);
+            var target = result.Value;
+            var asAttachment = download == true || !ContentTypeDetector.AllowInline(target.ContentType);
+            return await ContentResponder.WriteAsync(
+                http,
+                target,
+                ContentResponder.Evaluate(http.Request, target),
+                new ContentResponseOptions(asAttachment, CountTowardsLimit: download == true, NoStore: false, userId),
+                store,
+                slots,
+                downloadOptions.CurrentValue.PerStreamBytesPerSecond,
+                ct);
         });
 
         files.MapPost("/uploads", async Task<IResult> (

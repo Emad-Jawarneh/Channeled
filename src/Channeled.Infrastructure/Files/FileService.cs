@@ -123,7 +123,6 @@ public sealed class FileService(
             return AppResult<ItemListResponse>.Fail(ErrorCodes.Validation, "Text channels do not store files.");
         }
 
-        var limit = Math.Clamp(query.Limit <= 0 ? 50 : query.Limit, 1, 200);
         var trashOnly = query.TrashOnly;
         var folderId = trashOnly ? null : query.FolderId;
 
@@ -139,64 +138,34 @@ public sealed class FileService(
             path = pathResult.Value;
         }
 
-        var folders = await db.Folders.AsNoTracking()
-            .Where(f => f.ChannelId == channel.Channel.Id)
-            .Where(f => trashOnly ? f.DeletedAt != null : f.DeletedAt == null)
-            .Where(f => trashOnly || f.ParentId == folderId)
-            .ToListAsync(ct);
-
-        var filesQuery = db.Files.AsNoTracking()
-            .Where(f => f.ChannelId == channel.Channel.Id)
-            .Where(f => trashOnly ? f.DeletedAt != null : f.DeletedAt == null)
-            .Where(f => trashOnly || f.FolderId == folderId);
-
-        if (query.UploaderId is Guid uploader)
+        var page = await ItemListing.PageAsync(db, channel.Channel.Id, folderId, query, ct);
+        if (!page.Succeeded)
         {
-            filesQuery = filesQuery.Where(f => f.UploadedBy == uploader);
+            return AppResult<ItemListResponse>.Fail(page.Code!, page.Message!);
         }
 
-        if (!string.IsNullOrWhiteSpace(query.Type))
+        var rows = page.Value!.Rows;
+        var folderIds = rows.Where(r => r.Rank == 0).Select(r => r.Id).ToList();
+        var fileIds = rows.Where(r => r.Rank == 1).Select(r => r.Id).ToList();
+        var folders = await db.Folders.AsNoTracking().Where(f => folderIds.Contains(f.Id)).ToDictionaryAsync(f => f.Id, ct);
+        var files = await db.Files.AsNoTracking().Where(f => fileIds.Contains(f.Id)).ToDictionaryAsync(f => f.Id, ct);
+        var uploaders = await LoadUploadersAsync(files.Values.Select(f => (Guid?)f.UploadedBy), ct);
+
+        // Rows removed between the page query and this load are skipped rather than failing the page.
+        var items = new List<FileItemDto>(rows.Count);
+        foreach (var row in rows)
         {
-            var type = query.Type.Trim().ToLowerInvariant();
-            filesQuery = filesQuery.Where(f => f.ContentType.ToLower().StartsWith(type));
+            if (row.Rank == 0 && folders.TryGetValue(row.Id, out var folder))
+            {
+                items.Add(ToFolderDto(folder));
+            }
+            else if (row.Rank == 1 && files.TryGetValue(row.Id, out var file))
+            {
+                items.Add(ToFileDto(file, uploaders.GetValueOrDefault(file.UploadedBy)));
+            }
         }
 
-        var files = await filesQuery.ToListAsync(ct);
-        var uploaders = await LoadUploadersAsync(files.Select(f => (Guid?)f.UploadedBy), ct);
-
-        IEnumerable<FileItemDto> items = folders.Select(ToFolderDto)
-            .Concat(files.Select(f => ToFileDto(f, uploaders.GetValueOrDefault(f.UploadedBy))));
-
-        items = (query.Sort?.ToLowerInvariant()) switch
-        {
-            "name" or "name_asc" => items.OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase),
-            "name_desc" => items.OrderByDescending(i => i.Name, StringComparer.OrdinalIgnoreCase),
-            "size" or "size_asc" => items.OrderBy(i => i.SizeBytes ?? -1),
-            "size_desc" => items.OrderByDescending(i => i.SizeBytes ?? -1),
-            "created" or "created_asc" => items.OrderBy(i => i.CreatedAt),
-            "created_desc" => items.OrderByDescending(i => i.CreatedAt),
-            "updated" or "updated_asc" => items.OrderBy(i => i.UpdatedAt).ThenBy(i => i.Id),
-            "updated_desc" => items.OrderByDescending(i => i.UpdatedAt).ThenByDescending(i => i.Id),
-            _ => items.OrderByDescending(i => i.UpdatedAt).ThenBy(i => i.Id),
-        };
-
-        if (!string.IsNullOrWhiteSpace(query.Cursor) && TryDecodeCursor(query.Cursor, out var cursorTime, out var cursorId))
-        {
-            items = items.Where(i =>
-                i.UpdatedAt < cursorTime
-                || (i.UpdatedAt == cursorTime && i.Id.CompareTo(cursorId) < 0));
-        }
-
-        var page = items.Take(limit + 1).ToList();
-        string? next = null;
-        if (page.Count > limit)
-        {
-            page = page.Take(limit).ToList();
-            var last = page[^1];
-            next = EncodeCursor(last.UpdatedAt, last.Id);
-        }
-
-        return AppResult<ItemListResponse>.Ok(new ItemListResponse(page, next, path));
+        return AppResult<ItemListResponse>.Ok(new ItemListResponse(items, page.Value.NextCursor, path));
     }
 
     public async Task<AppResult<FileItemDto>> GetItemAsync(
@@ -546,63 +515,88 @@ public sealed class FileService(
         return AppResult<FileItemDto>.Ok(ToFolderDto(folder));
     }
 
-    public async Task<AppResult<DownloadResult>> OpenDownloadAsync(
+    public async Task<AppResult<ItemLocationDto>> LocateItemAsync(Guid userId, Guid itemId, CancellationToken ct = default)
+    {
+        var notFound = AppResult<ItemLocationDto>.Fail(ErrorCodes.NotFound, "Item not found.");
+        var file = await db.Files.AsNoTracking().FirstOrDefaultAsync(f => f.Id == itemId && f.ChannelId != null, ct);
+        var folder = file is null
+            ? await db.Folders.AsNoTracking().FirstOrDefaultAsync(f => f.Id == itemId && f.ChannelId != null, ct)
+            : null;
+        var channelId = file?.ChannelId ?? folder?.ChannelId;
+        if (channelId is null)
+        {
+            return notFound;
+        }
+
+        var location = await db.Channels.AsNoTracking()
+            .Where(c => c.Id == channelId)
+            .Join(db.Teams.AsNoTracking(), c => c.TeamId, t => t.Id, (c, t) => new { t.Slug, c.Name })
+            .FirstOrDefaultAsync(ct);
+        if (location is null)
+        {
+            return notFound;
+        }
+
+        // Same browse rule as listing the channel; every failure looks identical (no existence leak).
+        var channel = await LoadChannelAsync(userId, location.Slug, location.Name, ct);
+        if (channel is null || !Allow(userId, AuthAction.BrowseFiles, channel))
+        {
+            return notFound;
+        }
+
+        var parentId = file is not null ? file.FolderId : folder!.ParentId;
+        var chain = await FolderChain.LoadAsync(db, parentId, ct);
+        FileItemDto item;
+        if (file is not null)
+        {
+            var uploaders = await LoadUploadersAsync([file.UploadedBy], ct);
+            item = ToFileDto(file, uploaders.GetValueOrDefault(file.UploadedBy));
+        }
+        else
+        {
+            item = ToFolderDto(folder!);
+        }
+
+        return AppResult<ItemLocationDto>.Ok(FolderChain.Locate(
+            "channel",
+            channel.Team.Slug,
+            channel.Channel.Name,
+            item,
+            parentId,
+            file is not null ? file.DeletedAt : folder!.DeletedAt,
+            chain));
+    }
+
+    public async Task<AppResult<DownloadTarget>> ResolveDownloadAsync(
         Guid userId,
         string teamSlug,
         string channelName,
         Guid fileId,
-        long? rangeStart,
-        long? rangeEndInclusive,
         CancellationToken ct = default)
     {
         var channel = await LoadChannelAsync(userId, teamSlug, channelName, ct);
-        if (channel is null)
+        if (channel is null || !Allow(userId, AuthAction.DownloadFile, channel))
         {
-            return NotFoundChannel<DownloadResult>();
-        }
-
-        if (!Allow(userId, AuthAction.DownloadFile, channel))
-        {
-            return NotFoundChannel<DownloadResult>();
+            return NotFoundChannel<DownloadTarget>();
         }
 
         var file = await db.Files.AsNoTracking()
             .FirstOrDefaultAsync(f => f.Id == fileId && f.ChannelId == channel.Channel.Id && f.DeletedAt == null, ct);
         if (file is null)
         {
-            return AppResult<DownloadResult>.Fail(ErrorCodes.NotFound, "File not found.");
+            return AppResult<DownloadTarget>.Fail(ErrorCodes.NotFound, "File not found.");
         }
 
-        var start = rangeStart ?? 0;
-        var end = rangeEndInclusive ?? (file.SizeBytes - 1);
-        if (file.SizeBytes == 0)
-        {
-            start = 0;
-            end = -1;
-        }
-        else
-        {
-            if (start < 0 || start >= file.SizeBytes || end < start)
-            {
-                return AppResult<DownloadResult>.Fail(ErrorCodes.Validation, "Invalid byte range.");
-            }
-
-            end = Math.Min(end, file.SizeBytes - 1);
-        }
-
-        Stream content = file.SizeBytes == 0
-            ? new MemoryStream([])
-            : await store.OpenReadAsync(file.StorageKey, start, end, ct);
-
-        var partial = rangeStart is not null || rangeEndInclusive is not null;
-        return AppResult<DownloadResult>.Ok(new DownloadResult(
-            content,
+        return AppResult<DownloadTarget>.Ok(new DownloadTarget(
+            file.Id,
+            file.StorageKey,
             file.Name,
             file.ContentType,
             file.SizeBytes,
-            start,
-            Math.Max(end, 0),
-            partial));
+            file.Sha256,
+            file.CreatedAt,
+            file.ChannelId,
+            file.OwnerUserId));
     }
 
     public async Task<AppResult<StartUploadResponse>> StartUploadAsync(
@@ -1407,44 +1401,6 @@ public sealed class FileService(
 
     private static AppResult<T> NotFoundChannel<T>() =>
         AppResult<T>.Fail(ErrorCodes.NotFound, "Channel not found.");
-
-    private static string EncodeCursor(DateTimeOffset updatedAt, Guid id)
-    {
-        var raw = $"{updatedAt.UtcTicks}:{id:N}";
-        return Convert.ToBase64String(Encoding.UTF8.GetBytes(raw));
-    }
-
-    private static bool TryDecodeCursor(string cursor, out DateTimeOffset updatedAt, out Guid id)
-    {
-        updatedAt = default;
-        id = default;
-        try
-        {
-            var raw = Encoding.UTF8.GetString(Convert.FromBase64String(cursor));
-            var parts = raw.Split(':', 2);
-            if (parts.Length != 2)
-            {
-                return false;
-            }
-
-            if (!long.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var ticks))
-            {
-                return false;
-            }
-
-            if (!Guid.TryParseExact(parts[1], "N", out id))
-            {
-                return false;
-            }
-
-            updatedAt = new DateTimeOffset(ticks, TimeSpan.Zero);
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
-    }
 
     private static string NormalizeHex(string hex) => hex.Trim().Replace("-", "", StringComparison.Ordinal).ToLowerInvariant();
 

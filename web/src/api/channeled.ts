@@ -431,6 +431,8 @@ export type ChannelMessage = {
   replyTo?: ReplyPreview | null;
   mentions: MessageMention[];
   fileIds: string[];
+  /** Same as `UserSummary.avatarVersion`; absent/null when the author has no avatar. */
+  authorAvatarVersion?: number | null;
 };
 
 export type ReplyPreview = {
@@ -618,15 +620,52 @@ export const publicShareApi = {
     }),
 };
 
+/**
+ * Folder listing options. `sort` is `name|size|created|updated|type` with `_asc`/`_desc` (server default
+ * `updated_desc`); `q` filters names literally; `cursor` comes from the previous page's `nextCursor` and only
+ * works with the same sort/folder/trash/q.
+ */
+export type ListOptions = {
+  folderId?: string;
+  trash?: boolean;
+  sort?: string;
+  q?: string;
+  cursor?: string | null;
+  limit?: number;
+};
+
+function listQueryString(opts: ListOptions): string {
+  const q = new URLSearchParams();
+  if (opts.folderId) q.set("folderId", opts.folderId);
+  if (opts.trash) q.set("trash", "true");
+  if (opts.sort) q.set("sort", opts.sort);
+  if (opts.q?.trim()) q.set("q", opts.q.trim());
+  if (opts.cursor) q.set("cursor", opts.cursor);
+  if (opts.limit) q.set("limit", String(opts.limit));
+  const qs = q.toString();
+  return qs ? `?${qs}` : "";
+}
+
+/** Where an item lives (see `GET /api/v1/items/{id}/locate`); `folderPath` runs root → parent. */
+export type ItemLocation = {
+  state: "live" | "trashed";
+  scope: "channel" | "personal";
+  teamSlug?: string | null;
+  channelName?: string | null;
+  folderId?: string | null;
+  folderPath: FolderPathSegment[];
+  item: FileItem;
+  trashEntryId?: string | null;
+};
+
+export const itemsApi = {
+  locate: (id: string, signal?: AbortSignal) =>
+    api<ItemLocation>(`/api/v1/items/${encodeURIComponent(id)}/locate`, { signal }),
+};
+
 export const filesApi = {
-  list: (slug: string, channel: string, opts: { folderId?: string; trash?: boolean; sort?: string } = {}) => {
-    const q = new URLSearchParams();
-    if (opts.folderId) q.set("folderId", opts.folderId);
-    if (opts.trash) q.set("trash", "true");
-    if (opts.sort) q.set("sort", opts.sort);
-    const qs = q.toString();
-    return api<ItemList>(`/api/v1/teams/${slug}/channels/${channel}/items${qs ? `?${qs}` : ""}`);
-  },
+  list: (slug: string, channel: string, opts: ListOptions = {}, signal?: AbortSignal) =>
+    api<ItemList>(`/api/v1/teams/${slug}/channels/${channel}/items${listQueryString(opts)}`, { signal }),
   contentUrl: (slug: string, channel: string, id: string, opts?: { download?: boolean }) => {
     const base = `/api/v1/teams/${encodeURIComponent(slug)}/channels/${encodeURIComponent(channel)}/items/${encodeURIComponent(id)}/content`;
     // ASP.NET Core bool query binding rejects "1"; must be "true"/"false".
@@ -726,20 +765,17 @@ export const filesApi = {
 };
 
 export const personalApi = {
-  list: (opts: { folderId?: string; trash?: boolean } = {}) => {
-    const q = new URLSearchParams();
-    if (opts.folderId) q.set("folderId", opts.folderId);
-    if (opts.trash) q.set("trash", "true");
-    const qs = q.toString();
-    return api<ItemList>(`/api/v1/me/files/items${qs ? `?${qs}` : ""}`);
-  },
+  list: (opts: ListOptions = {}, signal?: AbortSignal) =>
+    api<ItemList>(`/api/v1/me/files/items${listQueryString(opts)}`, { signal }),
   contentUrl: (id: string, opts?: { download?: boolean }) => {
     const base = `/api/v1/me/files/items/${encodeURIComponent(id)}/content`;
     // ASP.NET Core bool query binding rejects "1"; must be "true"/"false".
     return opts?.download ? `${base}?download=true` : base;
   },
-  recent: () => api<ItemList>("/api/v1/me/files/recent"),
-  starred: () => api<ItemList>("/api/v1/me/files/starred"),
+  recent: (cursor?: string | null, signal?: AbortSignal) =>
+    api<ItemList>(`/api/v1/me/files/recent${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`, { signal }),
+  starred: (cursor?: string | null, signal?: AbortSignal) =>
+    api<ItemList>(`/api/v1/me/files/starred${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`, { signal }),
   createFolder: (name: string, parentFolderId?: string | null) =>
     api<FileItem>(`/api/v1/me/files/folders`, {
       method: "POST",
@@ -792,6 +828,8 @@ export type SearchHit = {
   updatedAt: string;
   channelName?: string | null;
   teamSlug?: string | null;
+  /** Current display name; prefer over teamSlug in UI (slug stays stable after rename). */
+  teamName?: string | null;
 };
 
 export type SearchResponse = { hits: SearchHit[]; nextCursor?: string | null };
@@ -801,6 +839,7 @@ export const searchApi = {
     q: string,
     scope: number | string = SearchScope.Accessible,
     opts: { teamSlug?: string; channelName?: string; cursor?: string | null; limit?: number } = {},
+    signal?: AbortSignal,
   ) => {
     const scopeName = typeof scope === "number" ? SEARCH_SCOPE_NAMES[scope] : scope;
     const params = new URLSearchParams({ q, scope: scopeName });
@@ -808,7 +847,7 @@ export const searchApi = {
     if (opts.channelName) params.set("channelName", opts.channelName);
     if (opts.cursor) params.set("cursor", opts.cursor);
     if (opts.limit) params.set("limit", String(opts.limit));
-    return api<SearchResponse>(`/api/v1/search?${params}`);
+    return api<SearchResponse>(`/api/v1/search?${params}`, { signal });
   },
 };
 

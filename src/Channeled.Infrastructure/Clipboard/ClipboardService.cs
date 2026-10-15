@@ -190,6 +190,14 @@ public sealed class ClipboardService(
             return Fail(itemId, ErrorCodes.NotFound, "Item not found.");
         }
 
+        if (source.Kind != target.Kind)
+        {
+            return Fail(
+                itemId,
+                ErrorCodes.Validation,
+                "Folders cannot be cut between personal and team storage. Copy them instead.");
+        }
+
         if (source.Kind == ScopeKind.Channel
             && target.Kind == ScopeKind.Channel
             && source.Channel!.Channel.Id != target.Channel!.Channel.Id)

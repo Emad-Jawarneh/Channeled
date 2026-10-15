@@ -3,6 +3,8 @@ import styles from "./FileBrowser.module.css";
 
 type Props = {
   count: number;
+  /** Overrides "N selected" (e.g. "· loaded items only" while more pages exist). */
+  label?: string;
   busy?: boolean;
   downloadEnabled?: boolean;
   moveEnabled?: boolean;
@@ -16,6 +18,7 @@ type Props = {
 
 export function BulkBar({
   count,
+  label,
   busy = false,
   downloadEnabled = false,
   moveEnabled = true,
@@ -31,7 +34,7 @@ export function BulkBar({
   return (
     <div className={styles.bulkBar} data-testid="bulk-bar" role="toolbar" aria-label="Selection actions">
       <span className={styles.bulkCount} data-testid="bulk-count">
-        {count} selected
+        {label ?? `${count} selected`}
       </span>
       <div className={styles.bulkActions}>
         {onCut && (

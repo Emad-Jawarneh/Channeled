@@ -58,6 +58,8 @@ public sealed record ItemListResponse(
     string? NextCursor,
     IReadOnlyList<FolderPathSegmentDto>? Path = null);
 
+/// <param name="Sort">name | size | created | updated | type, optionally _asc/_desc (default updated_desc).</param>
+/// <param name="NameContains">Case-insensitive literal name filter (folders and files).</param>
 public sealed record ListItemsQuery(
     Guid? FolderId,
     string? Cursor,
@@ -65,13 +67,5 @@ public sealed record ListItemsQuery(
     string? Sort,
     string? Type,
     Guid? UploaderId,
-    bool TrashOnly);
-
-public sealed record DownloadResult(
-    Stream Content,
-    string FileName,
-    string ContentType,
-    long SizeBytes,
-    long RangeStart,
-    long RangeEndInclusive,
-    bool IsPartial);
+    bool TrashOnly,
+    string? NameContains = null);

@@ -1,9 +1,6 @@
 .nav {
   min-width: 0;
-  margin: 0.35rem 0 0.15rem;
-  padding: 0.35rem 0.5rem;
-  border-radius: 8px;
-  background: var(--color-soft);
+  margin: 0;
 }
 
 .list {
@@ -25,9 +22,10 @@
 }
 
 .sep {
-  margin: 0 0.35rem;
+  margin: 0 0.3rem;
   color: var(--color-text-muted);
   flex-shrink: 0;
+  font-size: 0.85rem;
 }
 
 .crumb,
@@ -39,7 +37,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font: inherit;
-  font-size: 0.9rem;
+  font-size: 0.8125rem;
 }
 
 .crumb {
@@ -47,13 +45,13 @@
   border-radius: 6px;
   background: transparent;
   color: var(--color-text-muted);
-  padding: 0.15rem 0.35rem;
+  padding: 0.1rem 0.25rem;
   cursor: pointer;
 }
 
 .crumb:hover {
   color: var(--color-text);
-  background: var(--color-soft);
+  background: color-mix(in srgb, var(--color-soft) 70%, transparent);
 }
 
 .crumb[data-drop-active="true"] {
@@ -64,12 +62,12 @@
 }
 
 .current {
-  padding: 0.15rem 0.35rem;
+  padding: 0.1rem 0.25rem;
   font-weight: 700;
   color: var(--color-text);
 }
 
 .ellipsis {
-  padding: 0.15rem 0.25rem;
+  padding: 0.1rem 0.2rem;
   color: var(--color-text-muted);
 }

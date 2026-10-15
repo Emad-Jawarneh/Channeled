@@ -274,7 +274,8 @@
   height: 68px;
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(14rem, 28rem) minmax(0, 1fr);
   align-items: center;
   gap: 12px;
   padding: 0 24px;
@@ -283,11 +284,14 @@
 
 .pageTitle {
   margin: 0;
-  flex: 1;
   min-width: 0;
+  justify-self: start;
   font-size: 13px;
   font-weight: 500;
   color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pageTitle strong {
@@ -295,10 +299,19 @@
   font-weight: 700;
 }
 
+.topSearch {
+  min-width: 0;
+  width: 100%;
+  justify-self: center;
+}
+
 .topActions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 12px;
+  justify-self: end;
+  min-width: 0;
 }
 
 .user {
@@ -318,6 +331,11 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
+}
+
+.content:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
 }
 
 /* Keyed pane so channel→channel (and route) switches can replay enter motion. */
@@ -467,12 +485,25 @@
   }
 
   .topbar {
-    padding: 0 16px;
+    display: flex;
+    flex-wrap: wrap;
+    padding: 10px 16px;
     height: auto;
     min-height: 56px;
-    flex-wrap: wrap;
-    padding-top: 10px;
-    padding-bottom: 10px;
+  }
+
+  .pageTitle {
+    flex: 1 1 auto;
+  }
+
+  .topSearch {
+    flex: 1 1 100%;
+    order: 3;
+  }
+
+  .topActions {
+    flex: 0 0 auto;
+    margin-left: auto;
   }
 
   .content {

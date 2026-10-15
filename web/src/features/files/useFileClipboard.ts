@@ -69,6 +69,8 @@ export function useFileClipboard(opts: {
   /** Full list rows so cut/copy can capture names for the shelf. */
   listedItems: FileItem[];
   selectedIds: string[];
+  /** When false (query still loading), skip prune so a remount does not clear the clipboard. */
+  listReady?: boolean;
   enabled?: boolean;
   onPasteResult?: (res: ClipboardPasteResponse, mode: ClipboardMode) => void;
   onError?: (message: string) => void;
@@ -76,9 +78,10 @@ export function useFileClipboard(opts: {
 }) {
   const clip = useSyncExternalStore(subscribeFileClipboard, getFileClipboard, () => null);
   const enabled = opts.enabled !== false;
+  const listReady = opts.listReady !== false;
 
   useEffect(() => {
-    if (!enabled || !clip) return;
+    if (!enabled || !clip || !listReady) return;
     const sameSource =
       clip.source.scope === opts.currentSource.scope &&
       (clip.source.scope === "personal"
@@ -90,7 +93,7 @@ export function useFileClipboard(opts: {
           clip.source.folderId === opts.currentSource.folderId);
     if (!sameSource) return;
     pruneFileClipboard(opts.listedIds);
-  }, [enabled, clip, opts.currentSource, opts.listedIds.join("|")]);
+  }, [enabled, clip, listReady, opts.currentSource, opts.listedIds.join("|")]);
 
   const cutOrCopy = useCallback(
     (mode: ClipboardMode, ids?: string[]) => {

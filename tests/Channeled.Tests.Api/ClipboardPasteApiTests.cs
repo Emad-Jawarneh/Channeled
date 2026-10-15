@@ -68,6 +68,83 @@ public class ClipboardPasteApiTests(AuthApiFactory factory) : TeamPrivacyTestBas
     }
 
     [Fact]
+    public async Task Copy_folder_into_another_folder_succeeds()
+    {
+        var src = await CreateFolderAsync("CopyMe", null);
+        var dest = await CreateFolderAsync("PasteHere", null);
+        var body = new ClipboardPasteRequest(
+            "copy",
+            [src.Id],
+            Scope("channel", Slug, "files", null),
+            Scope("channel", Slug, "files", dest.Id));
+
+        var resp = await Owner.Client.PostAsJsonAsync("/api/v1/clipboard/paste", body);
+        resp.EnsureSuccessStatusCode();
+        var result = await resp.Content.ReadFromJsonAsync<ClipboardPasteResponse>();
+        result!.Succeeded.Should().Be(1);
+        result.Failed.Should().Be(0);
+        result.Results[0].NewItemId.Should().NotBeNull().And.NotBe(src.Id);
+
+        var list = await Owner.Client.GetFromJsonAsync<ItemListResponse>(
+            $"/api/v1/teams/{Slug}/channels/files/items?folderId={dest.Id}");
+        list!.Items.Should().Contain(i => i.Id == result.Results[0].NewItemId && i.Name == "CopyMe");
+    }
+
+    [Fact]
+    public async Task Copy_nested_folder_tree_succeeds()
+    {
+        var src = await CreateFolderAsync("TreeRoot", null);
+        var child = await CreateFolderAsync("TreeChild", src.Id);
+        var dest = await CreateFolderAsync("TreeDest", null);
+        var body = new ClipboardPasteRequest(
+            "copy",
+            [src.Id],
+            Scope("channel", Slug, "files", null),
+            Scope("channel", Slug, "files", dest.Id));
+
+        var resp = await Owner.Client.PostAsJsonAsync("/api/v1/clipboard/paste", body);
+        resp.EnsureSuccessStatusCode();
+        var result = await resp.Content.ReadFromJsonAsync<ClipboardPasteResponse>();
+        result!.Succeeded.Should().Be(1);
+        result.Failed.Should().Be(0);
+
+        var copiedRootId = result.Results[0].NewItemId!;
+        var underDest = await Owner.Client.GetFromJsonAsync<ItemListResponse>(
+            $"/api/v1/teams/{Slug}/channels/files/items?folderId={dest.Id}");
+        underDest!.Items.Should().Contain(i => i.Id == copiedRootId && i.Name == "TreeRoot");
+
+        var underCopy = await Owner.Client.GetFromJsonAsync<ItemListResponse>(
+            $"/api/v1/teams/{Slug}/channels/files/items?folderId={copiedRootId}");
+        underCopy!.Items.Should().Contain(i => i.Name == "TreeChild" && i.Id != child.Id);
+    }
+
+    [Fact]
+    public async Task Cut_folder_into_another_folder_succeeds()
+    {
+        var src = await CreateFolderAsync("MoveMeFolder", null);
+        var dest = await CreateFolderAsync("MoveDest", null);
+        var body = new ClipboardPasteRequest(
+            "cut",
+            [src.Id],
+            Scope("channel", Slug, "files", null),
+            Scope("channel", Slug, "files", dest.Id));
+
+        var resp = await Owner.Client.PostAsJsonAsync("/api/v1/clipboard/paste", body);
+        resp.EnsureSuccessStatusCode();
+        var result = await resp.Content.ReadFromJsonAsync<ClipboardPasteResponse>();
+        result!.Succeeded.Should().Be(1);
+        result.Failed.Should().Be(0);
+
+        var root = await Owner.Client.GetFromJsonAsync<ItemListResponse>(
+            $"/api/v1/teams/{Slug}/channels/files/items");
+        root!.Items.Should().NotContain(i => i.Id == src.Id);
+
+        var inside = await Owner.Client.GetFromJsonAsync<ItemListResponse>(
+            $"/api/v1/teams/{Slug}/channels/files/items?folderId={dest.Id}");
+        inside!.Items.Should().Contain(i => i.Id == src.Id && i.Name == "MoveMeFolder");
+    }
+
+    [Fact]
     public async Task Over_50_items_returns_validation_error()
     {
         var ids = Enumerable.Range(0, 51).Select(_ => Guid.NewGuid()).ToList();
@@ -98,6 +175,29 @@ public class ClipboardPasteApiTests(AuthApiFactory factory) : TeamPrivacyTestBas
         var result = await resp.Content.ReadFromJsonAsync<ClipboardPasteResponse>();
         result!.Failed.Should().Be(1);
         result.Results[0].ErrorCode.Should().Be("validation_error");
+    }
+
+    [Fact]
+    public async Task Cut_folder_personal_to_channel_is_rejected()
+    {
+        var folderResp = await Owner.Client.PostAsJsonAsync(
+            "/api/v1/me/files/folders",
+            new CreateFolderRequest("PersonalFolder", null));
+        folderResp.EnsureSuccessStatusCode();
+        var folder = (await folderResp.Content.ReadFromJsonAsync<FileItemDto>())!;
+
+        var body = new ClipboardPasteRequest(
+            "cut",
+            [folder.Id],
+            Scope("personal", null, null, null),
+            Scope("channel", Slug, "files", null));
+
+        var resp = await Owner.Client.PostAsJsonAsync("/api/v1/clipboard/paste", body);
+        resp.EnsureSuccessStatusCode();
+        var result = await resp.Content.ReadFromJsonAsync<ClipboardPasteResponse>();
+        result!.Failed.Should().Be(1);
+        result.Results[0].ErrorCode.Should().Be("validation_error");
+        result.Results[0].Message.Should().Contain("Copy them instead");
     }
 
     [Fact]

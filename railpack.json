@@ -16,10 +16,12 @@
       ]
     },
     "build": {
-      // Default Dotnet provider copies install→obj/ at repo root. Nested projects
-      // never create /app/obj, so take the full install layer instead.
+      // Base the build on install (not packages:mise). Using mise as the first
+      // input let BuildKit run npm before /app/web existed. Install already
+      // chains from mise and has source + node_modules + NuGet restore.
+      // First input cannot use include filters; a full install layer also avoids
+      // the default Dotnet filter that copies missing root /app/obj.
       "inputs": [
-        { "step": "packages:mise" },
         { "step": "install" }
       ],
       "commands": [

@@ -336,6 +336,9 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
 });
 
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
 app.Use(async (context, next) =>
 {
     // Token links must not leak via Referer (fragment still preferred for tokens).
@@ -522,6 +525,8 @@ app.MapHub<ChannelHub>("/hubs/channel", options =>
 {
     options.Transports = HttpTransportType.WebSockets;
 });
+
+app.MapFallbackToFile("index.html");
 
 app.Run();
 return 0;

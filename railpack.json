@@ -1,0 +1,35 @@
+{
+  "$schema": "https://schema.railpack.com",
+  // Overlay: there is no *.csproj at the repo root (API lives in src/Channeled.Api),
+  // so Railpack would otherwise miss the .NET provider. Node is required to build the SPA.
+  "provider": "dotnet",
+  "packages": {
+    "dotnet": "10.0.100",
+    "node": "22"
+  },
+  "steps": {
+    "install": {
+      "commands": [
+        { "src": ".", "dest": "." },
+        "dotnet restore src/Channeled.Api/Channeled.Api.csproj",
+        "npm ci --prefix web"
+      ]
+    },
+    "build": {
+      "commands": [
+        "npm run build --prefix web",
+        "dotnet publish src/Channeled.Api -c Release --no-restore -o out",
+        "mkdir -p out/wwwroot && cp -a web/dist/. out/wwwroot/"
+      ]
+    }
+  },
+  "deploy": {
+    "startCommand": "ASPNETCORE_URLS=http://0.0.0.0:${PORT:-3000} ./out/Channeled.Api",
+    "variables": {
+      // Runtime secrets (Postgres, HMAC, SMTP) stay in the host env — never here.
+      "MigrateOnStartup": "true",
+      "FileStore__RootPath": "/app/data/object-store",
+      "Backup__RootPath": "/app/data/backups"
+    }
+  }
+}

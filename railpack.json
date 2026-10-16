@@ -32,13 +32,12 @@
     }
   },
   "deploy": {
-    "startCommand": "ASPNETCORE_URLS=http://0.0.0.0:${PORT:-3000} ./out/Channeled.Api",
+    // Prefer Railway-injected DATABASE_URL (link a Postgres service). Falls back to PG*.
+    "startCommand": "sh -c 'export ConnectionStrings__Postgres=\"${DATABASE_URL:-Host=$PGHOST;Port=${PGPORT:-5432};Database=$PGDATABASE;Username=$PGUSER;Password=$PGPASSWORD}\"; export ASPNETCORE_URLS=\"http://0.0.0.0:${PORT:-3000}\"; exec ./out/Channeled.Api'",
     "variables": {
       "ASPNETCORE_ENVIRONMENT": "Production",
       "MigrateOnStartup": "true",
       "Maintenance__Enabled": "false",
-
-      "ConnectionStrings__Postgres": "Host=postgres.railway.internal;Port=5432;Database=channeled;Username=postgres;Password=changeme",
 
       "FileStore__Kind": "FileSystem",
       "FileStore__RootPath": "/app/data/object-store",

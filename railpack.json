@@ -32,16 +32,15 @@
     }
   },
   "deploy": {
-    // DATABASE_URL (if Railway injects it) wins; otherwise use ConnectionStrings__Postgres below.
-    "startCommand": "sh -c 'if [ -n \"$DATABASE_URL\" ]; then export ConnectionStrings__Postgres=\"$DATABASE_URL\"; fi; case \"$ConnectionStrings__Postgres\" in \"\"|REPLACE_WITH_YOUR_RAILWAY_POSTGRES_URL|Host=*) echo \"ConnectionStrings__Postgres is unset or still a placeholder. In Railway: add Postgres, open Connect, paste the private URL into railpack.json deploy.variables.ConnectionStrings__Postgres (postgresql://...).\" >&2; exit 1;; esac; export ASPNETCORE_URLS=\"http://0.0.0.0:${PORT:-3000}\"; exec ./out/Channeled.Api'",
+    "startCommand": "ASPNETCORE_URLS=http://0.0.0.0:${PORT:-3000} ./out/Channeled.Api",
     "variables": {
       "ASPNETCORE_ENVIRONMENT": "Production",
       "MigrateOnStartup": "true",
       "Maintenance__Enabled": "false",
 
-      // Paste from Railway Postgres → Connect (private URL works as-is for Npgsql).
-      // Example: postgresql://postgres:PASS@postgres.railway.internal:5432/railway
-      "ConnectionStrings__Postgres": "postgresql://postgres:UgZojuIgJFiQHQzmPWdsGlQHfbtIoCxi@postgres.railway.internal:5432/railway",
+      // Keyword form (not postgresql://) — ADO.NET rejects URI at index 0 on this EF path.
+      // Values from Railway Postgres → Connect (private network).
+      "ConnectionStrings__Postgres": "Host=postgres.railway.internal;Port=5432;Database=railway;Username=postgres;Password=UgZojuIgJFiQHQzmPWdsGlQHfbtIoCxi;SSL Mode=Disable",
 
       "FileStore__Kind": "FileSystem",
       "FileStore__RootPath": "/app/data/object-store",

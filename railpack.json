@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.railpack.com",
-  // Overlay: there is no *.csproj at the repo root (API lives in src/Channeled.Api),
-  // so Railpack would otherwise miss the .NET provider. Node is required to build the SPA.
+  // Experimental single-file deploy overlay. No root *.csproj → force Dotnet;
+  // Node builds the SPA into out/wwwroot for the API to serve.
   "provider": "dotnet",
   "packages": {
     "dotnet": "10.0.100",
@@ -16,6 +16,12 @@
       ]
     },
     "build": {
+      // Default Dotnet provider copies install→obj/ at repo root. Nested projects
+      // never create /app/obj, so take the full install layer instead.
+      "inputs": [
+        { "step": "packages:mise" },
+        { "step": "install" }
+      ],
       "commands": [
         "npm run build --prefix web",
         "dotnet publish src/Channeled.Api -c Release --no-restore -o out",
@@ -26,10 +32,28 @@
   "deploy": {
     "startCommand": "ASPNETCORE_URLS=http://0.0.0.0:${PORT:-3000} ./out/Channeled.Api",
     "variables": {
-      // Runtime secrets (Postgres, HMAC, SMTP) stay in the host env — never here.
+      "ASPNETCORE_ENVIRONMENT": "Production",
       "MigrateOnStartup": "true",
+      "Maintenance__Enabled": "false",
+
+      "ConnectionStrings__Postgres": "Host=postgres.railway.internal;Port=5432;Database=channeled;Username=postgres;Password=changeme",
+
+      "FileStore__Kind": "FileSystem",
       "FileStore__RootPath": "/app/data/object-store",
-      "Backup__RootPath": "/app/data/backups"
+      "Backup__RootPath": "/app/data/backups",
+      "Backup__AlertEmail": "ops@example.com",
+      "Backup__LowDiskBytes": "1073741824",
+
+      "Operations__PublicUrl": "https://channeled.up.railway.app",
+      "Realtime__AllowedOrigins__0": "https://channeled.up.railway.app",
+
+      "Account__SelfServiceMail": "Auto",
+      "Account__SessionCacheTtlSeconds": "5",
+
+      "PublicFileLinks__Enabled": "false",
+      "PublicFileLinks__HmacKey": "experimental-hmac-key-not-for-production-use-32b",
+
+      "Chat__PostsPerMinutePerUser": "30"
     }
   }
 }

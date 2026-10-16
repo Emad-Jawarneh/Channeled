@@ -60,8 +60,9 @@ public static class DependencyInjection
         services.Configure<ChannelDeleteOptions>(configuration.GetSection(ChannelDeleteOptions.SectionName));
         services.Configure<TeamJoinOptions>(configuration.GetSection(TeamJoinOptions.SectionName));
 
-        var connectionString = configuration.GetConnectionString("Postgres")
-            ?? throw new InvalidOperationException("Connection string 'Postgres' is required.");
+        var connectionString = ResolvePostgresConnectionString(configuration);
+        // So backups / other GetConnectionString("Postgres") callers see the same value.
+        configuration["ConnectionStrings:Postgres"] = connectionString;
 
         services.AddDbContext<ApplicationDbContext>(options =>
             options.UseNpgsql(connectionString));
@@ -195,5 +196,42 @@ public static class DependencyInjection
             services.AddSingleton<IEmailSender, LoggingEmailSender>();
             services.AddSingleton<IEmailSenderMarker>(_ => new EmailSenderMarker(false));
         }
+    }
+
+    /// <summary>
+    /// Railway / libpq often supply <c>postgresql://...</c> (or <c>DATABASE_URL</c>).
+    /// Npgsql's EF path rejects URI form with "Format ... index 0"; convert to keyword form.
+    /// </summary>
+    internal static string ResolvePostgresConnectionString(IConfiguration configuration)
+    {
+        var raw = configuration.GetConnectionString("Postgres")
+                  ?? configuration["DATABASE_URL"]
+                  ?? throw new InvalidOperationException(
+                      "Connection string 'Postgres' (or DATABASE_URL) is required.");
+
+        return NormalizeNpgsqlConnectionString(raw);
+    }
+
+    internal static string NormalizeNpgsqlConnectionString(string connectionString)
+    {
+        var cs = connectionString.Trim().Trim('"');
+        if (!cs.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase)
+            && !cs.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase))
+        {
+            return cs;
+        }
+
+        // Uri requires a scheme it knows; postgres:// works. Keep postgresql:// as-is for Uri.
+        var parseable = cs.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase)
+            ? cs
+            : "postgres://" + cs["postgresql://".Length..];
+        var uri = new Uri(parseable);
+        var userInfo = uri.UserInfo.Split(':', 2);
+        var user = Uri.UnescapeDataString(userInfo[0]);
+        var password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : "";
+        var database = Uri.UnescapeDataString(uri.AbsolutePath.TrimStart('/'));
+        var port = uri.IsDefaultPort ? 5432 : uri.Port;
+
+        return $"Host={uri.Host};Port={port};Database={database};Username={user};Password={password};SslMode=Disable";
     }
 }

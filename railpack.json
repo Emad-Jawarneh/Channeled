@@ -38,8 +38,6 @@
       "MigrateOnStartup": "true",
       "Maintenance__Enabled": "false",
 
-      // Keyword form (not postgresql://) — ADO.NET rejects URI at index 0 on this EF path.
-      // Values from Railway Postgres → Connect (private network).
       "ConnectionStrings__Postgres": "Host=postgres.railway.internal;Port=5432;Database=railway;Username=postgres;Password=UgZojuIgJFiQHQzmPWdsGlQHfbtIoCxi;SSL Mode=Disable",
 
       "FileStore__Kind": "FileSystem",

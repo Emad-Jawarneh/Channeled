@@ -62,14 +62,20 @@ public static class TeamEndpoints
             return ToHttp(await teamsSvc.ArchiveTeamAsync(userId, slug, Ctx(http), ct));
         });
 
-        teams.MapDelete("/{slug}", async Task<IResult> (string slug, ITeamService teamsSvc, ClaimsPrincipal principal, HttpContext http, CancellationToken ct) =>
+        teams.MapPost("/{slug}/delete", async Task<IResult> (
+            string slug,
+            DeleteTeamRequest? body,
+            ITeamService teamsSvc,
+            ClaimsPrincipal principal,
+            HttpContext http,
+            CancellationToken ct) =>
         {
             if (!TryUser(principal, out var userId))
             {
                 return Unauthorized();
             }
 
-            return ToHttp(await teamsSvc.DeleteTeamAsync(userId, slug, Ctx(http), ct));
+            return ToHttp(await teamsSvc.DeleteTeamAsync(userId, slug, body ?? new DeleteTeamRequest(), Ctx(http), ct));
         });
 
         teams.MapPost("/{slug}/transfer-ownership/{newOwnerUserId:guid}", async Task<IResult> (string slug, Guid newOwnerUserId, ITeamService teamsSvc, ClaimsPrincipal principal, HttpContext http, CancellationToken ct) =>

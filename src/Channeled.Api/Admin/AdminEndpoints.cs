@@ -37,9 +37,18 @@ public static class AdminEndpoints
             Guid id, IAdminService svc, ClaimsPrincipal p, HttpContext http, CancellationToken ct) =>
             await RequireUser(p, async userId => ToHttp(await svc.DisableUserAsync(userId, id, Ctx(http), ct))));
 
-        admin.MapDelete("/users/{id:guid}", async Task<IResult> (
+        admin.MapPost("/users/{id:guid}/enable", async Task<IResult> (
             Guid id, IAdminService svc, ClaimsPrincipal p, HttpContext http, CancellationToken ct) =>
-            await RequireUser(p, async userId => ToHttp(await svc.DeleteUserAsync(userId, id, Ctx(http), ct))));
+            await RequireUser(p, async userId => ToHttp(await svc.EnableUserAsync(userId, id, Ctx(http), ct))));
+
+        admin.MapGet("/users/{id:guid}/delete-preview", async Task<IResult> (
+            Guid id, IAdminService svc, ClaimsPrincipal p, CancellationToken ct) =>
+            await RequireUser(p, async userId => ToHttp(await svc.GetUserDeletePreviewAsync(userId, id, ct))));
+
+        admin.MapPost("/users/{id:guid}/delete", async Task<IResult> (
+            Guid id, DeleteUserRequest? body, IAdminService svc, ClaimsPrincipal p, HttpContext http, CancellationToken ct) =>
+            await RequireUser(p, async userId => ToHttp(await svc.DeleteUserAsync(
+                userId, id, body ?? new DeleteUserRequest(""), Ctx(http), ct))));
 
         admin.MapPost("/users/{id:guid}/reset-password", async Task<IResult> (
             Guid id, ResetUserPasswordRequest body, IAdminService svc, ClaimsPrincipal p, HttpContext http, CancellationToken ct) =>

@@ -28,7 +28,19 @@ public interface IAdminService
 
     Task<AppResult> DisableUserAsync(Guid actorId, Guid userId, RequestContext context, CancellationToken ct = default);
 
-    Task<AppResult> DeleteUserAsync(Guid actorId, Guid userId, RequestContext context, CancellationToken ct = default);
+    Task<AppResult> EnableUserAsync(Guid actorId, Guid userId, RequestContext context, CancellationToken ct = default);
+
+    Task<AppResult<UserDeletePreviewDto>> GetUserDeletePreviewAsync(Guid actorId, Guid userId, CancellationToken ct = default);
+
+    Task<AppResult> DeleteUserAsync(
+        Guid actorId,
+        Guid userId,
+        DeleteUserRequest request,
+        RequestContext context,
+        CancellationToken ct = default);
+
+    /// <summary>Advances late-phase user deletes (hosted sweep).</summary>
+    Task<int> SweepStuckUserDeletesAsync(CancellationToken ct = default);
 
     Task<AppResult> ResetUserPasswordAsync(
         Guid actorId,

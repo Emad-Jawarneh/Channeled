@@ -7,6 +7,7 @@ using Channeled.Application.Abstractions.Time;
 using Channeled.Application.Files;
 using Channeled.Application.Identity;
 using Channeled.Application.Personal;
+using Channeled.Application.Teams;
 using Channeled.Domain.Audit;
 using Channeled.Domain.Authorization;
 using Channeled.Domain.Errors;
@@ -28,10 +29,12 @@ public sealed class PersonalService(
     IFileStore store,
     IClock clock,
     IOptions<UploadLimitsOptions> limitsOptions,
+    IOptions<ChannelDeleteOptions> deleteOptions,
     ChannelWriteGuard channelWriteGuard,
     IChannelNotifier channelNotifier) : IPersonalService
 {
     private readonly UploadLimitsOptions _limits = limitsOptions.Value;
+    private readonly ChannelDeleteOptions _deleteOpts = deleteOptions.Value;
 
     public async Task<AppResult<PersonalStorageDto>> GetStorageAsync(Guid userId, CancellationToken ct = default)
     {
@@ -371,8 +374,7 @@ public sealed class PersonalService(
         var file = await db.Files.FirstOrDefaultAsync(f => f.Id == itemId && f.OwnerUserId == userId && f.DeletedAt == null, ct);
         if (file is not null)
         {
-            file.DeletedAt = now;
-            file.UpdatedAt = now;
+            await TrashCascade.TrashSingleFileAsync(db, file, now, ct);
             await WriteAuditAsync(userId, AuditEventType.FileDelete, "file", file.Id.ToString(), null, context, ct);
             await db.SaveChangesAsync(ct);
             return AppResult.Ok();
@@ -384,8 +386,18 @@ public sealed class PersonalService(
             return AppResult.Fail(ErrorCodes.NotFound, "Not found.");
         }
 
-        folder.DeletedAt = now;
-        folder.UpdatedAt = now;
+        try
+        {
+            await TrashCascade.TrashFolderTreeAsync(
+                db, folder.Id, channelId: null, userId, now, _deleteOpts.MaxItemsPerTrash, ct);
+        }
+        catch (TrashCapExceededException ex)
+        {
+            return AppResult.Fail(
+                ErrorCodes.Validation,
+                $"Folder trash would touch {ex.Count:N0} items (max {ex.Max:N0}).");
+        }
+
         await WriteAuditAsync(userId, AuditEventType.FolderDelete, "folder", folder.Id.ToString(), null, context, ct);
         await db.SaveChangesAsync(ct);
         return AppResult.Ok();
@@ -405,15 +417,38 @@ public sealed class PersonalService(
         var file = await db.Files.FirstOrDefaultAsync(f => f.Id == itemId && f.OwnerUserId == userId && f.DeletedAt != null, ct);
         if (file is not null)
         {
-            if (await HasSiblingConflictAsync(userId, file.FolderId, file.Name, file.Id, null, ct))
+            if (await TrashCascade.HasTrashedAncestorAsync(db, file.FolderId, ct))
             {
-                return AppResult<FileItemDto>.Fail(ErrorCodes.NameConflict, "An item with that name already exists.");
+                return AppResult<FileItemDto>.Fail(ErrorCodes.ParentTrashed, "Restore the parent folder first.");
             }
 
+            if (await HasSiblingConflictAsync(userId, file.FolderId, file.Name, file.Id, null, ct))
+            {
+                var taken = await db.Files.AsNoTracking()
+                    .Where(f => f.OwnerUserId == userId && f.FolderId == file.FolderId && f.DeletedAt == null)
+                    .Select(f => f.Name.ToLower())
+                    .ToListAsync(ct);
+                var folders = await db.Folders.AsNoTracking()
+                    .Where(f => f.OwnerUserId == userId && f.ParentId == file.FolderId && f.DeletedAt == null)
+                    .Select(f => f.Name.ToLower())
+                    .ToListAsync(ct);
+                file.Name = TrashCascade.AllocateUniqueName(file.Name, taken.Concat(folders).ToHashSet(StringComparer.Ordinal));
+            }
+
+            var batchId = file.DeletedBatchId;
             file.DeletedAt = null;
+            file.DeletedBatchId = null;
             file.UpdatedAt = clock.UtcNow;
             await WriteAuditAsync(userId, AuditEventType.FileRestore, "file", file.Id.ToString(), null, context, ct);
+            // Clear FK before deleting the batch row (ON DELETE RESTRICT).
             await db.SaveChangesAsync(ct);
+            if (batchId is Guid bid
+                && !await db.Files.AnyAsync(f => f.DeletedBatchId == bid, ct)
+                && !await db.Folders.AnyAsync(f => f.DeletedBatchId == bid, ct))
+            {
+                await db.TrashBatches.Where(b => b.Id == bid).ExecuteDeleteAsync(ct);
+            }
+
             return AppResult<FileItemDto>.Ok(ToFileDto(file));
         }
 
@@ -423,13 +458,58 @@ public sealed class PersonalService(
             return NotFound();
         }
 
-        if (await HasSiblingConflictAsync(userId, folder.ParentId, folder.Name, null, folder.Id, ct))
+        if (await TrashCascade.HasTrashedAncestorAsync(db, folder.ParentId, ct))
         {
-            return AppResult<FileItemDto>.Fail(ErrorCodes.NameConflict, "An item with that name already exists.");
+            return AppResult<FileItemDto>.Fail(ErrorCodes.ParentTrashed, "Restore the parent folder first.");
         }
 
-        folder.DeletedAt = null;
-        folder.UpdatedAt = clock.UtcNow;
+        var batchIdFolder = folder.DeletedBatchId;
+        if (batchIdFolder is null)
+        {
+            return AppResult<FileItemDto>.Fail(ErrorCodes.Validation, "Folder trash batch is missing.");
+        }
+
+        var batchItemCount = await db.Files.CountAsync(f => f.DeletedBatchId == batchIdFolder, ct)
+            + await db.Folders.CountAsync(f => f.DeletedBatchId == batchIdFolder, ct);
+        if (batchItemCount > _deleteOpts.MaxItemsPerTrash)
+        {
+            return AppResult<FileItemDto>.Fail(
+                ErrorCodes.Validation,
+                $"Restore would touch {batchItemCount:N0} items (max {_deleteOpts.MaxItemsPerTrash:N0}).");
+        }
+
+        if (await HasSiblingConflictAsync(userId, folder.ParentId, folder.Name, null, folder.Id, ct))
+        {
+            var taken = await db.Files.AsNoTracking()
+                .Where(f => f.OwnerUserId == userId && f.FolderId == folder.ParentId && f.DeletedAt == null)
+                .Select(f => f.Name.ToLower())
+                .ToListAsync(ct);
+            var folders = await db.Folders.AsNoTracking()
+                .Where(f => f.OwnerUserId == userId && f.ParentId == folder.ParentId && f.DeletedAt == null && f.Id != folder.Id)
+                .Select(f => f.Name.ToLower())
+                .ToListAsync(ct);
+            folder.Name = TrashCascade.AllocateUniqueName(folder.Name, taken.Concat(folders).ToHashSet(StringComparer.Ordinal));
+        }
+
+        var now = clock.UtcNow;
+        await db.Folders
+            .Where(f => f.DeletedBatchId == batchIdFolder)
+            .ExecuteUpdateAsync(
+                s => s
+                    .SetProperty(f => f.DeletedAt, (DateTimeOffset?)null)
+                    .SetProperty(f => f.DeletedBatchId, (Guid?)null)
+                    .SetProperty(f => f.UpdatedAt, now),
+                ct);
+        await db.Files
+            .Where(f => f.DeletedBatchId == batchIdFolder)
+            .ExecuteUpdateAsync(
+                s => s
+                    .SetProperty(f => f.DeletedAt, (DateTimeOffset?)null)
+                    .SetProperty(f => f.DeletedBatchId, (Guid?)null)
+                    .SetProperty(f => f.UpdatedAt, now),
+                ct);
+        await db.TrashBatches.Where(b => b.Id == batchIdFolder).ExecuteDeleteAsync(ct);
+        await db.Entry(folder).ReloadAsync(ct);
         await WriteAuditAsync(userId, AuditEventType.FolderRestore, "folder", folder.Id.ToString(), null, context, ct);
         await db.SaveChangesAsync(ct);
         return AppResult<FileItemDto>.Ok(ToFolderDto(folder));
@@ -1021,8 +1101,10 @@ public sealed class PersonalService(
                 ct);
     }
 
-    private static FileItemDto ToFileDto(FileEntity f, bool starred = false, UploaderInfo? uploader = null) =>
-        new(
+    private static FileItemDto ToFileDto(FileEntity f, bool starred = false, UploaderInfo? uploader = null)
+    {
+        var deleted = uploader is null && f.UploadedBy != Guid.Empty;
+        return new(
             f.Id,
             ItemKind.File,
             f.Name,
@@ -1037,9 +1119,11 @@ public sealed class PersonalService(
             f.DeletedAt,
             f.OwnerUserId,
             starred,
-            uploader?.DisplayName,
-            uploader?.Username,
-            uploader?.AvatarVersion);
+            deleted ? "Deleted user" : uploader?.DisplayName,
+            deleted ? null : uploader?.Username,
+            deleted ? null : uploader?.AvatarVersion,
+            deleted ? "deleted" : uploader is null ? null : "ok");
+    }
 
     private static FileItemDto ToFolderDto(FolderEntity f) =>
         new(f.Id, ItemKind.Folder, f.Name, f.ParentId, f.ChannelId, null, null, null, null, f.CreatedAt, f.UpdatedAt, f.DeletedAt, f.OwnerUserId);

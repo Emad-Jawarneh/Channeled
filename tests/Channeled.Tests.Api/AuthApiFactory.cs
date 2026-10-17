@@ -41,6 +41,11 @@ public class AuthApiFactory : WebApplicationFactory<Program>
                 ["RateLimits:AuthPermitPerMinute"] = "100000",
                 ["ChannelDelete:MaxMessagesPerTxn"] = "50",
                 ["ChannelDelete:MaxFilesPerTxn"] = "10000",
+                ["ChannelDelete:MaxFilesPerTeamDelete"] = "100",
+                ["ChannelDelete:MaxMessagesPerTeamDelete"] = "100",
+                ["ChannelDelete:MaxItemsPerTrash"] = "100",
+                ["UserDelete:SweepIntervalSeconds"] = "3600",
+                ["UserDelete:LatePhaseGraceSeconds"] = "0",
             });
         });
 
@@ -75,6 +80,7 @@ public class AuthApiFactory : WebApplicationFactory<Program>
               "upload_sessions",
               "files",
               "folders",
+              "trash_batches",
               "channel_join_requests",
               "team_join_requests",
               "channel_members",

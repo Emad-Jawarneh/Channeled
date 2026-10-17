@@ -79,6 +79,11 @@ public sealed record UpdateChannelRequest(string? Name, string? Description);
 /// </summary>
 public sealed record DeleteChannelRequest(bool? DiscardFiles = null, string? MoveFilesToChannel = null);
 
+/// <summary>
+/// Hard-deletes a team after discarding all channel content. Requires <see cref="ConfirmDiscard"/> and the owner's password.
+/// </summary>
+public sealed record DeleteTeamRequest(bool ConfirmDiscard = false, string Password = "");
+
 public sealed record ChannelDto(Guid Id, Guid TeamId, string Name, string? Description, ChannelVisibility Visibility, ChannelKind Kind, DateTimeOffset? ArchivedAt);
 
 public sealed record SetChannelVisibilityRequest(ChannelVisibility Visibility);

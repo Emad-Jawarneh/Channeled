@@ -361,7 +361,7 @@ export function TeamGeneralSettingsPage({ teamSlug }: { teamSlug: string }) {
   }
 
   const deleteTeam = useMutation({
-    mutationFn: () => teamsApi.delete(teamSlug),
+    mutationFn: (password: string) => teamsApi.delete(teamSlug, password),
     onSuccess: async () => {
       setDeleteOpen(false);
       await qc.invalidateQueries({ queryKey: ["teams"] });
@@ -559,8 +559,8 @@ export function TeamGeneralSettingsPage({ teamSlug }: { teamSlug: string }) {
             <section className={`${styles.card} ${styles.dangerCard}`} data-testid="team-danger-zone">
               <h2 className={styles.cardTitle}>Danger zone</h2>
               <p className={styles.cardIntro}>
-                Deleting a team permanently removes its channels, files, chat, and membership. This
-                cannot be undone.
+                Deleting a team permanently discards every channel, file byte in object storage, chat
+                message, join link, and membership. This cannot be undone.
               </p>
               <div className={styles.actions}>
                 <Button
@@ -605,18 +605,20 @@ export function TeamGeneralSettingsPage({ teamSlug }: { teamSlug: string }) {
         requireTextLabel={
           team.data ? `Type "${team.data.name}" to confirm` : "Type the team name to confirm"
         }
+        requirePassword
+        passwordLabel="Your password"
         busy={deleteTeam.isPending}
         error={deleteError}
         testId="delete-team-dialog"
         onClose={() => {
           if (!deleteTeam.isPending) setDeleteOpen(false);
         }}
-        onConfirm={() => void deleteTeam.mutateAsync()}
+        onConfirm={(password) => void deleteTeam.mutateAsync(password ?? "")}
       >
         <p>
-          All channels, files, messages, and members for{" "}
-          <strong>{team.data?.name ?? teamSlug}</strong> will be permanently removed. Share links
-          stop working immediately.
+          All channels, file bytes in storage, messages, and members for{" "}
+          <strong>{team.data?.name ?? teamSlug}</strong> will be permanently discarded. Share links
+          and the join link stop working immediately. There is no restore.
         </p>
       </ConfirmDialog>
     </AppShell>

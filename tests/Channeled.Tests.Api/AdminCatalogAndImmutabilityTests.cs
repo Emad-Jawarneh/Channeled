@@ -260,7 +260,9 @@ public class AdminCatalogAndImmutabilityTests : IClassFixture<AuthApiFactory>, I
         (await _admin.PatchAsJsonAsync($"/api/v1/admin/teams/{team.Id}/quota", new UpdateTeamQuotaRequest(50L * 1024 * 1024 * 1024)))
             .EnsureSuccessStatusCode();
         (await _admin.PostAsync($"/api/v1/admin/users/{createdUser!.Id}/disable", null)).EnsureSuccessStatusCode();
-        (await _admin.DeleteAsync($"/api/v1/admin/users/{createdUser.Id}")).EnsureSuccessStatusCode();
+        (await _admin.PostAsJsonAsync(
+            $"/api/v1/admin/users/{createdUser.Id}/delete",
+            new DeleteUserRequest("AdminPassword3!", []))).EnsureSuccessStatusCode();
 
         var backup = await (await _admin.PostAsync("/api/v1/admin/backups/run", null)).Content.ReadFromJsonAsync<AdminBackupDto>();
         (await _admin.PostAsync($"/api/v1/admin/backups/{backup!.Id}/restore", null)).EnsureSuccessStatusCode();
@@ -272,7 +274,9 @@ public class AdminCatalogAndImmutabilityTests : IClassFixture<AuthApiFactory>, I
         // create another team to delete (archived can't delete? DeleteTeam should work for owner)
         var team2 = await (await _admin.PostAsJsonAsync("/api/v1/teams/", new CreateTeamRequest("ToDelete", null)))
             .Content.ReadFromJsonAsync<TeamDto>();
-        (await _admin.DeleteAsync($"/api/v1/teams/{team2!.Slug}")).EnsureSuccessStatusCode();
+        (await _admin.PostAsJsonAsync(
+            $"/api/v1/teams/{team2!.Slug}/delete",
+            new DeleteTeamRequest(ConfirmDiscard: true, Password: "AdminPassword3!"))).EnsureSuccessStatusCode();
 
         // --- Account / SMTP (EmailChange*, UsernameChange, AvatarChange, AdminEmailCorrection, SmtpTest, SmtpConfigChange) ---
         (await _admin.PostAsync("/api/v1/admin/operations/smtp/test?to=admin@example.com", null))

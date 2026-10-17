@@ -143,6 +143,7 @@ export const FileRow = memo(function FileRow({
             displayName={item.uploadedByDisplayName}
             username={item.uploadedByUsername ?? undefined}
             avatarVersion={item.uploadedByAvatarVersion}
+            status={item.uploadedByStatus === "deleted" ? "deleted" : "ok"}
           />
         ) : (
           "—"

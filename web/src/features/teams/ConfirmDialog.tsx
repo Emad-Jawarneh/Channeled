@@ -10,11 +10,14 @@ type Props = {
   /** When set, the confirm button stays disabled until this text is typed (case-insensitive). */
   requireText?: string;
   requireTextLabel?: string;
+  /** When true, requires a non-empty password; value is passed to onConfirm. */
+  requirePassword?: boolean;
+  passwordLabel?: string;
   busy?: boolean;
   error?: string | null;
   testId?: string;
   onClose: () => void;
-  onConfirm: () => void | Promise<void>;
+  onConfirm: (password?: string) => void | Promise<void>;
 };
 
 /** Small modal used for destructive/side-effecting confirmations (open join, channel visibility). */
@@ -25,6 +28,8 @@ export function ConfirmDialog({
   confirmLabel,
   requireText,
   requireTextLabel,
+  requirePassword = false,
+  passwordLabel = "Your password",
   busy = false,
   error = null,
   testId = "confirm-dialog",
@@ -34,12 +39,14 @@ export function ConfirmDialog({
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const [typed, setTyped] = useState("");
+  const [password, setPassword] = useState("");
 
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
     if (open && !dialog.open) {
       setTyped("");
+      setPassword("");
       dialog.showModal();
     } else if (!open && dialog.open) {
       dialog.close();
@@ -47,11 +54,12 @@ export function ConfirmDialog({
   }, [open]);
 
   const textOk = requireText === undefined || typed.trim().toLowerCase() === requireText.toLowerCase();
+  const passwordOk = !requirePassword || password.length > 0;
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
-    if (!textOk || busy) return;
-    await onConfirm();
+    if (!textOk || !passwordOk || busy) return;
+    await onConfirm(requirePassword ? password : undefined);
   }
 
   return (
@@ -87,6 +95,20 @@ export function ConfirmDialog({
             />
           </label>
         )}
+        {requirePassword && (
+          <label className={styles.label}>
+            {passwordLabel}
+            <input
+              className={styles.input}
+              type="password"
+              data-testid={`${testId}-password`}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              disabled={busy}
+            />
+          </label>
+        )}
         {error && (
           <p className={styles.error} role="alert" data-testid={`${testId}-error`}>
             {error}
@@ -99,7 +121,7 @@ export function ConfirmDialog({
           <Button
             type="submit"
             variant="primary"
-            disabled={busy || !textOk}
+            disabled={busy || !textOk || !passwordOk}
             data-testid={`${testId}-submit`}
           >
             {busy ? "Working…" : confirmLabel}

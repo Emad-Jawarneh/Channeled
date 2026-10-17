@@ -49,7 +49,9 @@ public sealed record FileItemDto(
     bool Starred = false,
     string? UploadedByDisplayName = null,
     string? UploadedByUsername = null,
-    long? UploadedByAvatarVersion = null);
+    long? UploadedByAvatarVersion = null,
+    /// <summary><c>ok</c> when the uploader exists; <c>deleted</c> when the user row is gone.</summary>
+    string? UploadedByStatus = null);
 
 public sealed record FolderPathSegmentDto(Guid Id, string Name);
 

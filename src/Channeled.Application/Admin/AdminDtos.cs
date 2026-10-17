@@ -90,3 +90,38 @@ public sealed record AdminBackupDto(
     long TotalBytes);
 
 public sealed record ResetUserPasswordRequest(string NewPassword);
+
+public sealed record DeleteUserTeamResolution(
+    Guid TeamId,
+    string Action,
+    Guid? NewOwnerUserId = null);
+
+public sealed record DeleteUserRequest(
+    string Password,
+    IReadOnlyList<DeleteUserTeamResolution>? TeamResolutions = null);
+
+public sealed record UserDeleteEligibleMemberDto(
+    Guid UserId,
+    string Email,
+    string DisplayName);
+
+public sealed record UserDeleteOwnedTeamDto(
+    Guid TeamId,
+    string Name,
+    string Slug,
+    int FileCount,
+    int MessageCount,
+    bool OverTeamDeleteCap,
+    bool TransferOnly,
+    IReadOnlyList<UserDeleteEligibleMemberDto> EligibleOwners);
+
+public sealed record UserDeletePreviewDto(
+    Guid UserId,
+    string Email,
+    string DeletePhase,
+    bool IsLastEnabledPlatformAdmin,
+    bool CanCancelByReenable,
+    long PersonalFileCount,
+    long PersonalBytes,
+    bool HasAvatar,
+    IReadOnlyList<UserDeleteOwnedTeamDto> SoleOwnedTeams);

@@ -39,4 +39,10 @@ public static class ErrorCodes
     /// <summary>A download ticket was used for a fresh (non-resume) request after its start window.</summary>
     public const string DownloadTicketExpired = "download_ticket_expired";
     public const string TooManyDownloads = "too_many_downloads";
+    public const string DeleteResolutionsStale = "delete_resolutions_stale";
+    public const string TeamDeleteCapExceeded = "team_delete_cap_exceeded";
+    public const string ParentTrashed = "parent_trashed";
+    public const string DeleteInProgress = "delete_in_progress";
+    public const string LastPlatformAdmin = "last_platform_admin";
+    public const string InvalidPassword = "invalid_password";
 }

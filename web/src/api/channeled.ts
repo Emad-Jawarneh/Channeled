@@ -81,6 +81,8 @@ export type FileItem = {
   uploadedByDisplayName?: string | null;
   uploadedByUsername?: string | null;
   uploadedByAvatarVersion?: number | null;
+  /** `ok` | `deleted` when the uploader chip should reflect a removed account. */
+  uploadedByStatus?: "ok" | "deleted" | null;
   createdAt: string;
   updatedAt: string;
   deletedAt?: string | null;
@@ -325,8 +327,11 @@ export const teamsApi = {
     api<void>(`/api/v1/teams/${encodeURIComponent(slug)}/leave`, { method: "POST" }),
   archive: (slug: string) =>
     api<void>(`/api/v1/teams/${encodeURIComponent(slug)}/archive`, { method: "POST" }),
-  delete: (slug: string) =>
-    api<void>(`/api/v1/teams/${encodeURIComponent(slug)}`, { method: "DELETE" }),
+  delete: (slug: string, password: string) =>
+    api<void>(`/api/v1/teams/${encodeURIComponent(slug)}/delete`, {
+      method: "POST",
+      json: { confirmDiscard: true, password },
+    }),
 
   updateSettings: (slug: string, input: UpdateTeamSettingsInput) =>
     api<UpdateTeamSettingsResult>(`/api/v1/teams/${encodeURIComponent(slug)}/settings`, {
@@ -906,6 +911,39 @@ export const adminApi = {
         isPlatformAdmin: boolean;
       }[]
     >("/api/v1/admin/users"),
+  disableUser: (id: string) =>
+    api<void>(`/api/v1/admin/users/${encodeURIComponent(id)}/disable`, { method: "POST" }),
+  enableUser: (id: string) =>
+    api<void>(`/api/v1/admin/users/${encodeURIComponent(id)}/enable`, { method: "POST" }),
+  deletePreview: (id: string) =>
+    api<{
+      userId: string;
+      email: string;
+      deletePhase: string;
+      isLastEnabledPlatformAdmin: boolean;
+      canCancelByReenable: boolean;
+      personalFileCount: number;
+      personalBytes: number;
+      hasAvatar: boolean;
+      soleOwnedTeams: {
+        teamId: string;
+        name: string;
+        slug: string;
+        fileCount: number;
+        messageCount: number;
+        overTeamDeleteCap: boolean;
+        transferOnly: boolean;
+        eligibleOwners: { userId: string; email: string; displayName: string }[];
+      }[];
+    }>(`/api/v1/admin/users/${encodeURIComponent(id)}/delete-preview`),
+  deleteUser: (
+    id: string,
+    body: {
+      password: string;
+      teamResolutions: { teamId: string; action: string; newOwnerUserId?: string | null }[];
+    },
+  ) =>
+    api<void>(`/api/v1/admin/users/${encodeURIComponent(id)}/delete`, { method: "POST", json: body }),
   teams: () =>
     api<{ id: string; name: string; slug: string; quotaBytes: number; usageBytes: number }[]>(
       "/api/v1/admin/teams",

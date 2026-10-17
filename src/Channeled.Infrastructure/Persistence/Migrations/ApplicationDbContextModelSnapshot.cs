@@ -178,6 +178,9 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("DeletedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("DeletedBatchId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid?>("FolderId")
                         .HasColumnType("uuid");
 
@@ -209,6 +212,8 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("DeletedBatchId");
 
                     b.HasIndex("FolderId");
 
@@ -266,6 +271,9 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("DeletedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("DeletedBatchId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -282,6 +290,8 @@ namespace Channeled.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("DeletedBatchId");
+
                     b.HasIndex("ParentId");
 
                     b.HasIndex("ChannelId", "ParentId", "Name");
@@ -292,6 +302,43 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("ck_folders_scope", "((\"ChannelId\" IS NOT NULL AND \"OwnerUserId\" IS NULL) OR (\"ChannelId\" IS NULL AND \"OwnerUserId\" IS NOT NULL))");
                         });
+                });
+
+            modelBuilder.Entity("Channeled.Infrastructure.Files.TrashBatchEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ChannelId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("ItemCount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("OwnerUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Scope")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DeletedAt");
+
+                    b.HasIndex("State", "DeletedAt");
+
+                    b.ToTable("trash_batches", (string)null);
                 });
 
             modelBuilder.Entity("Channeled.Infrastructure.Files.UploadPartEntity", b =>
@@ -462,6 +509,16 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("text");
 
+                    b.Property<string>("DeletePhase")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("none");
+
+                    b.Property<DateTimeOffset?>("DeletePhaseChangedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("DisplayName")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -538,6 +595,8 @@ namespace Channeled.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(30)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("DeletePhase");
 
                     b.HasIndex("NormalizedEmail")
                         .IsUnique()
@@ -1413,20 +1472,34 @@ namespace Channeled.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Channeled.Infrastructure.Files.FileEntity", b =>
                 {
+                    b.HasOne("Channeled.Infrastructure.Files.TrashBatchEntity", "DeletedBatch")
+                        .WithMany()
+                        .HasForeignKey("DeletedBatchId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Channeled.Infrastructure.Files.FolderEntity", "Folder")
                         .WithMany()
                         .HasForeignKey("FolderId")
                         .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("DeletedBatch");
 
                     b.Navigation("Folder");
                 });
 
             modelBuilder.Entity("Channeled.Infrastructure.Files.FolderEntity", b =>
                 {
+                    b.HasOne("Channeled.Infrastructure.Files.TrashBatchEntity", "DeletedBatch")
+                        .WithMany()
+                        .HasForeignKey("DeletedBatchId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Channeled.Infrastructure.Files.FolderEntity", "Parent")
                         .WithMany()
                         .HasForeignKey("ParentId")
                         .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("DeletedBatch");
 
                     b.Navigation("Parent");
                 });

@@ -58,6 +58,7 @@ public static class DependencyInjection
         services.Configure<PublicFileLinksOptions>(configuration.GetSection(PublicFileLinksOptions.SectionName));
         services.Configure<ChatOptions>(configuration.GetSection(ChatOptions.SectionName));
         services.Configure<ChannelDeleteOptions>(configuration.GetSection(ChannelDeleteOptions.SectionName));
+        services.Configure<UserDeleteOptions>(configuration.GetSection(UserDeleteOptions.SectionName));
         services.Configure<TeamJoinOptions>(configuration.GetSection(TeamJoinOptions.SectionName));
 
         var connectionString = ResolvePostgresConnectionString(configuration);
@@ -176,6 +177,7 @@ public static class DependencyInjection
             services.AddHostedService<ObjectDeleteHostedService>();
             services.AddHostedService<EmailSendHostedService>();
             services.AddHostedService<TrashPurgeHostedService>();
+            services.AddHostedService<UserDeleteSweepHostedService>();
             services.AddHostedService<UsernameReservationSweepHostedService>();
         }
 

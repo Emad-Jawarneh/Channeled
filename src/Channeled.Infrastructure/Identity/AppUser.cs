@@ -17,6 +17,10 @@ public sealed class AppUser : IdentityUser<Guid>
     public long PersonalUsageBytes { get; set; }
     public DateTimeOffset? LastLoginAt { get; set; }
     public string Status { get; set; } = "active";
+
+    /// <summary>none | disabled | teams | personal | memberships</summary>
+    public string DeletePhase { get; set; } = "none";
+    public DateTimeOffset? DeletePhaseChangedAt { get; set; }
 }
 
 public sealed class AppRole : IdentityRole<Guid>;

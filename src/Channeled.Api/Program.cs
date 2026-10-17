@@ -179,6 +179,58 @@ if (args.Contains("seed-operator", StringComparer.OrdinalIgnoreCase))
     return 0;
 }
 
+if (args.Contains("delete-user", StringComparer.OrdinalIgnoreCase))
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    await db.Database.MigrateAsync();
+    var admin = scope.ServiceProvider.GetRequiredService<Channeled.Application.Admin.IAdminService>();
+    var users = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+    var actorEmail = GetArg(args, "--actor-email")
+        ?? Environment.GetEnvironmentVariable("CHANNELED_OPERATOR_EMAIL")
+        ?? throw new InvalidOperationException("Provide --actor-email or CHANNELED_OPERATOR_EMAIL");
+    var actorPassword = GetArg(args, "--actor-password")
+        ?? Environment.GetEnvironmentVariable("CHANNELED_OPERATOR_PASSWORD")
+        ?? throw new InvalidOperationException("Provide --actor-password or CHANNELED_OPERATOR_PASSWORD");
+    var targetEmail = GetArg(args, "--email") ?? throw new InvalidOperationException("Provide --email");
+    var actor = await users.FindByEmailAsync(actorEmail)
+        ?? throw new InvalidOperationException("Actor not found");
+    var target = await users.FindByEmailAsync(targetEmail)
+        ?? throw new InvalidOperationException("Target not found");
+    var preview = await admin.GetUserDeletePreviewAsync(actor.Id, target.Id);
+    if (!preview.Succeeded)
+    {
+        Console.Error.WriteLine($"{preview.Code}: {preview.Message}");
+        return 1;
+    }
+
+    var resolutions = preview.Value!.SoleOwnedTeams.Select(t =>
+    {
+        if (t.TransferOnly || t.EligibleOwners.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"Team {t.Slug} must be transferred via UI (over cap or no eligible owners).");
+        }
+
+        return new Channeled.Application.Admin.DeleteUserTeamResolution(
+            t.TeamId, "transfer", t.EligibleOwners[0].UserId);
+    }).ToList();
+
+    var result = await admin.DeleteUserAsync(
+        actor.Id,
+        target.Id,
+        new Channeled.Application.Admin.DeleteUserRequest(actorPassword, resolutions),
+        new RequestContext("cli", "delete-user"));
+    if (!result.Succeeded)
+    {
+        Console.Error.WriteLine($"{result.Code}: {result.Message}");
+        return 1;
+    }
+
+    Console.WriteLine($"Deleted user {targetEmail}");
+    return 0;
+}
+
 if (args.Contains("ensure-user", StringComparer.OrdinalIgnoreCase))
 {
     await using var scope = app.Services.CreateAsyncScope();

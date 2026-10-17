@@ -26,6 +26,20 @@ One settings file plus environment overrides. Start from [`ops/channeled.env.exa
 | `PublicFileLinks__Enabled` | Kill-switch for anonymous file links (default **false**; `IOptionsMonitor`) |
 | `PublicFileLinks__HmacKey` / `PreviousHmacKey` | Ticket HMAC secrets (**not** in DB backups — store/restore separately) |
 | `Chat__PostsPerMinutePerUser` | Text-channel post rate limit (default 30) |
+| `ChannelDelete__MaxFilesPerTeamDelete` / `MaxMessagesPerTeamDelete` | Team delete totals (default 50000) |
+| `UserDelete__SweepIntervalSeconds` / `LatePhaseGraceSeconds` | Stuck user-delete sweep |
+
+### Account deletion and chat privacy
+
+Deleting a user **keeps** their team file uploads and text-channel message bodies. The UI shows **Deleted user** for authors/uploaders. This is intentional. Removing specific messages or files after the fact requires a **separate admin scrub tool** (not shipped yet). Personal files and avatars are discarded as part of account delete.
+
+CLI (same checks as the admin API; transfers sole-owned teams to the first eligible member unless you resolve over-cap teams in the UI first):
+
+```bash
+dotnet run --project src/Channeled.Api -- delete-user \
+  --actor-email admin@example.com --actor-password '…' \
+  --email user@example.com
+```
 
 ## Linux (systemd)
 

@@ -193,6 +193,7 @@ public class RestoreDrillTests
               "upload_sessions",
               "files",
               "folders",
+              "trash_batches",
               "channel_join_requests",
               "team_join_requests",
               "channel_members",

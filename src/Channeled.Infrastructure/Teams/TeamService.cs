@@ -164,7 +164,12 @@ public sealed partial class TeamService(
         return AppResult.Ok();
     }
 
-    public async Task<AppResult> DeleteTeamAsync(Guid userId, string slug, RequestContext context, CancellationToken ct = default)
+    public async Task<AppResult> DeleteTeamAsync(
+        Guid userId,
+        string slug,
+        DeleteTeamRequest request,
+        RequestContext context,
+        CancellationToken ct = default)
     {
         var loaded = await LoadTeamMembershipAsync(userId, slug, ct);
         if (loaded is null)
@@ -178,12 +183,218 @@ public sealed partial class TeamService(
             return NotFoundTeam();
         }
 
-        var deletedTeamId = loaded.Team.Id;
-        await ShareLinkRevoker.RevokeAsync(
-            db, clock, l => l.TeamId == deletedTeamId, ShareLinkRevoker.ReasonTeamDelete, userId, context, ct);
-        db.Teams.Remove(loaded.Team);
-        await WriteAuditAsync(userId, AuditEventType.TeamDelete, "team", loaded.Team.Id.ToString(), loaded.Team.Id, context, ct);
-        await db.SaveChangesAsync(ct);
+        if (request.ConfirmDiscard != true)
+        {
+            return AppResult.Fail(
+                ErrorCodes.Validation,
+                "Set confirmDiscard=true to permanently discard all team files and delete the team.");
+        }
+
+        var user = await userManager.FindByIdAsync(userId.ToString());
+        if (user is null || string.IsNullOrEmpty(request.Password)
+            || !await userManager.CheckPasswordAsync(user, request.Password))
+        {
+            return AppResult.Fail(ErrorCodes.InvalidPassword, "Password is incorrect.");
+        }
+
+        return await DeleteTeamCoreAsync(userId, loaded.Team.Id, context, ct);
+    }
+
+    public Task<AppResult> DeleteTeamInternalAsync(
+        Guid actorId,
+        Guid teamId,
+        RequestContext context,
+        CancellationToken ct = default) =>
+        DeleteTeamCoreAsync(actorId, teamId, context, ct);
+
+    private async Task<AppResult> DeleteTeamCoreAsync(
+        Guid actorId,
+        Guid teamId,
+        RequestContext context,
+        CancellationToken ct)
+    {
+        var opts = channelDeleteOptions.Value;
+
+        var channelIds = await db.Channels.AsNoTracking()
+            .Where(c => c.TeamId == teamId)
+            .Select(c => new { c.Id, c.Kind })
+            .ToListAsync(ct);
+
+        var fileChannelIds = channelIds.Where(c => c.Kind == ChannelKind.File).Select(c => c.Id).ToList();
+        var allChannelIds = channelIds.Select(c => c.Id).ToList();
+
+        var totalFiles = fileChannelIds.Count == 0
+            ? 0
+            : await db.Files.CountAsync(f => f.ChannelId != null && fileChannelIds.Contains(f.ChannelId.Value), ct);
+        var totalMessages = allChannelIds.Count == 0
+            ? 0
+            : await db.ChannelMessages.CountAsync(m => allChannelIds.Contains(m.ChannelId), ct);
+
+        if (totalFiles > opts.MaxFilesPerTeamDelete)
+        {
+            return AppResult.Fail(
+                ErrorCodes.TeamDeleteCapExceeded,
+                $"This team has {totalFiles:N0} files (max {opts.MaxFilesPerTeamDelete:N0}); delete or move channels first.");
+        }
+
+        if (totalMessages > opts.MaxMessagesPerTeamDelete)
+        {
+            return AppResult.Fail(
+                ErrorCodes.TeamDeleteCapExceeded,
+                $"This team has {totalMessages:N0} messages (max {opts.MaxMessagesPerTeamDelete:N0}); delete or move channels first.");
+        }
+
+        foreach (var ch in channelIds.Where(c => c.Kind == ChannelKind.File))
+        {
+            var channelFiles = await db.Files.CountAsync(f => f.ChannelId == ch.Id, ct);
+            if (channelFiles > opts.MaxFilesPerTxn)
+            {
+                return AppResult.Fail(
+                    ErrorCodes.TeamDeleteCapExceeded,
+                    $"A channel has {channelFiles:N0} files (max {opts.MaxFilesPerTxn:N0} per channel); delete or move that channel first.");
+            }
+        }
+
+        foreach (var ch in channelIds)
+        {
+            var channelMessages = await db.ChannelMessages.CountAsync(m => m.ChannelId == ch.Id, ct);
+            if (channelMessages > opts.MaxMessagesPerTxn)
+            {
+                return AppResult.Fail(
+                    ErrorCodes.TeamDeleteCapExceeded,
+                    $"A channel has {channelMessages:N0} messages (max {opts.MaxMessagesPerTxn:N0} per channel); delete that channel first.");
+            }
+        }
+
+        var teamSnapshot = await db.Teams.AsNoTracking().FirstOrDefaultAsync(t => t.Id == teamId, ct);
+        if (teamSnapshot is null)
+        {
+            return NotFoundTeam();
+        }
+
+        var teamName = teamSnapshot.Name;
+        var channelCount = channelIds.Count;
+        long totalBytes = 0;
+        if (fileChannelIds.Count > 0)
+        {
+            totalBytes = await db.Files.Where(f => f.ChannelId != null && fileChannelIds.Contains(f.ChannelId.Value))
+                .SumAsync(f => (long?)f.SizeBytes, ct) ?? 0;
+        }
+
+        try
+        {
+            await using var tx = await db.Database.BeginTransactionAsync(ct);
+
+#pragma warning disable EF1002
+            await db.Database.ExecuteSqlRawAsync(
+                $"SET LOCAL lock_timeout = '{SanitizeTimeout(opts.LockTimeout)}'",
+                ct);
+            await db.Database.ExecuteSqlRawAsync(
+                $"SET LOCAL statement_timeout = '{SanitizeTimeout(opts.StatementTimeout)}'",
+                ct);
+#pragma warning restore EF1002
+
+            var lockedTeam = await LockTeamAsync(teamId, ct);
+            if (lockedTeam is null)
+            {
+                return NotFoundTeam();
+            }
+
+            var liveChannelIds = await db.Channels.AsNoTracking()
+                .Where(c => c.TeamId == teamId)
+                .Select(c => c.Id)
+                .OrderBy(id => id)
+                .ToListAsync(ct);
+
+            if (liveChannelIds.Count > 0)
+            {
+                var locks = liveChannelIds.Select(id => (id, ForUpdate: true)).ToList();
+                var lockResult = await channelWriteGuard.LockOrderedAsync(locks, ct);
+                if (!lockResult.Succeeded)
+                {
+                    return lockResult;
+                }
+            }
+
+            if (!await db.Teams.AnyAsync(t => t.Id == teamId, ct))
+            {
+                return NotFoundTeam();
+            }
+
+            var channels = await db.Channels.Where(c => c.TeamId == teamId).ToListAsync(ct);
+            foreach (var channel in channels)
+            {
+                if (channel.Kind == ChannelKind.File)
+                {
+                    var discardResult = await DiscardChannelFilesInTxnAsync(
+                        channel.Id, teamId, opts.ObjectDeleteChunkSize, ct);
+                    if (!discardResult.Succeeded)
+                    {
+                        return discardResult;
+                    }
+                }
+                else
+                {
+                    await CollectAndRemoveSessionsAsync(channel.Id, enqueueDeletes: true, opts.ObjectDeleteChunkSize, ct);
+                }
+
+                await db.ChannelMessages.Where(m => m.ChannelId == channel.Id).ExecuteDeleteAsync(ct);
+                await db.Notifications.Where(n => n.ChannelId == channel.Id).ExecuteDeleteAsync(ct);
+            }
+
+            await ShareLinkRevoker.RevokeAsync(
+                db, clock, l => l.TeamId == teamId, ShareLinkRevoker.ReasonTeamDelete, actorId, context, ct);
+
+            lockedTeam.JoinTokenCiphertext = null;
+            lockedTeam.JoinTokenHash = null;
+            lockedTeam.JoinTokenPrefix = null;
+            lockedTeam.JoinTokenExpiresAt = null;
+
+            await db.TeamJoinRequests.Where(r => r.TeamId == teamId).ExecuteDeleteAsync(ct);
+            await db.Notifications.Where(n => n.TeamId == teamId).ExecuteDeleteAsync(ct);
+
+            var logoKey = lockedTeam.LogoObjectKey;
+            if (!string.IsNullOrEmpty(logoKey))
+            {
+                ObjectDeleteOutbox.Enqueue(db, clock.UtcNow, [logoKey], multiparts: null, opts.ObjectDeleteChunkSize);
+                lockedTeam.LogoObjectKey = null;
+                lockedTeam.LogoContentType = null;
+                lockedTeam.LogoUpdatedAt = null;
+            }
+
+            await WriteAuditAsync(
+                actorId,
+                AuditEventType.TeamDelete,
+                "team",
+                teamId.ToString(),
+                teamId: null,
+                context,
+                ct,
+                $"{{\"teamId\":\"{teamId}\",\"teamName\":{JsonString(teamName)},\"fileCount\":{totalFiles},\"byteCount\":{totalBytes},\"channelCount\":{channelCount},\"messageCount\":{totalMessages}}}");
+
+            db.Teams.Remove(lockedTeam);
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+        }
+        catch (PostgresException ex) when (ex.SqlState is PostgresErrorCodes.QueryCanceled or PostgresErrorCodes.LockNotAvailable)
+        {
+            return ex.SqlState == PostgresErrorCodes.LockNotAvailable
+                ? AppResult.Fail(ErrorCodes.LockTimeout, "Team is busy; retry shortly.")
+                : AppResult.Fail(ErrorCodes.Validation, "Team delete timed out; try again later.");
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException pg
+                                            && pg.SqlState is PostgresErrorCodes.QueryCanceled or PostgresErrorCodes.LockNotAvailable)
+        {
+            return pg.SqlState == PostgresErrorCodes.LockNotAvailable
+                ? AppResult.Fail(ErrorCodes.LockTimeout, "Team is busy; retry shortly.")
+                : AppResult.Fail(ErrorCodes.Validation, "Team delete timed out; try again later.");
+        }
+
+        foreach (var id in allChannelIds)
+        {
+            authStateChanged.NotifyChannel(id);
+        }
+
         return AppResult.Ok();
     }
 

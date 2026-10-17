@@ -10,7 +10,10 @@ public interface ITeamService
     Task<AppResult<TeamDto>> GetTeamAsync(Guid userId, string slug, CancellationToken ct = default);
     Task<AppResult<TeamDto>> UpdateTeamAsync(Guid userId, string slug, UpdateTeamRequest request, RequestContext context, CancellationToken ct = default);
     Task<AppResult> ArchiveTeamAsync(Guid userId, string slug, RequestContext context, CancellationToken ct = default);
-    Task<AppResult> DeleteTeamAsync(Guid userId, string slug, RequestContext context, CancellationToken ct = default);
+    Task<AppResult> DeleteTeamAsync(Guid userId, string slug, DeleteTeamRequest request, RequestContext context, CancellationToken ct = default);
+
+    /// <summary>Internal discard path used by admin user-delete (no owner password). Still enforces caps and locks.</summary>
+    Task<AppResult> DeleteTeamInternalAsync(Guid actorId, Guid teamId, RequestContext context, CancellationToken ct = default);
     Task<AppResult> TransferOwnershipAsync(Guid userId, string slug, Guid newOwnerUserId, RequestContext context, CancellationToken ct = default);
 
     Task<AppResult<IReadOnlyList<TeamMemberDto>>> ListMembersAsync(Guid userId, string slug, CancellationToken ct = default);

@@ -12,11 +12,13 @@ public sealed class FolderEntity
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
     public DateTimeOffset? DeletedAt { get; set; }
+    public Guid? DeletedBatchId { get; set; }
 
     /// <summary>Stored generated <c>COALESCE(ChannelId, OwnerUserId)</c>: one listing index set serves both scopes.</summary>
     public Guid ContainerId { get; private set; }
 
     public FolderEntity? Parent { get; set; }
+    public TrashBatchEntity? DeletedBatch { get; set; }
 }
 
 public sealed class FileEntity
@@ -34,11 +36,26 @@ public sealed class FileEntity
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
     public DateTimeOffset? DeletedAt { get; set; }
+    public Guid? DeletedBatchId { get; set; }
 
     /// <summary>Stored generated <c>COALESCE(ChannelId, OwnerUserId)</c>: one listing index set serves both scopes.</summary>
     public Guid ContainerId { get; private set; }
 
     public FolderEntity? Folder { get; set; }
+    public TrashBatchEntity? DeletedBatch { get; set; }
+}
+
+/// <summary>Retention clock for a trash cascade; purge queries this small table.</summary>
+public sealed class TrashBatchEntity
+{
+    public Guid Id { get; set; }
+    public DateTimeOffset DeletedAt { get; set; }
+    public string Scope { get; set; } = "channel"; // channel | personal
+    public Guid? ChannelId { get; set; }
+    public Guid? OwnerUserId { get; set; }
+    public int ItemCount { get; set; }
+    /// <summary>none | purging — allows idempotent crash recovery.</summary>
+    public string State { get; set; } = "none";
 }
 
 public sealed class FileStarEntity

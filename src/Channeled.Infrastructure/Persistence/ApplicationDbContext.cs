@@ -33,6 +33,7 @@ public sealed class ApplicationDbContext : IdentityDbContext<AppUser, AppRole, G
     public DbSet<TeamInvitationEntity> TeamInvitations => Set<TeamInvitationEntity>();
     public DbSet<FolderEntity> Folders => Set<FolderEntity>();
     public DbSet<FileEntity> Files => Set<FileEntity>();
+    public DbSet<TrashBatchEntity> TrashBatches => Set<TrashBatchEntity>();
     public DbSet<UploadSessionEntity> UploadSessions => Set<UploadSessionEntity>();
     public DbSet<UploadPartEntity> UploadParts => Set<UploadPartEntity>();
     public DbSet<FileStarEntity> FileStars => Set<FileStarEntity>();
@@ -61,6 +62,8 @@ public sealed class ApplicationDbContext : IdentityDbContext<AppUser, AppRole, G
             entity.Property(x => x.AvatarStorageKey).HasMaxLength(512);
             entity.Property(x => x.AvatarContentType).HasMaxLength(128);
             entity.Property(x => x.Status).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.DeletePhase).HasMaxLength(32).IsRequired().HasDefaultValue("none");
+            entity.HasIndex(x => x.DeletePhase);
             entity.HasIndex(x => x.NormalizedEmail).IsUnique();
             entity.Property(x => x.PersonalUsageBytes).HasDefaultValue(0L);
         });
@@ -273,12 +276,24 @@ public sealed class ApplicationDbContext : IdentityDbContext<AppUser, AppRole, G
             entity.HasIndex(x => new { x.UserId, x.ReadAt }).HasDatabaseName("ix_notifications_user_read");
         });
 
+        builder.Entity<TrashBatchEntity>(entity =>
+        {
+            entity.ToTable("trash_batches");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Scope).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.State).HasMaxLength(32).IsRequired();
+            entity.HasIndex(x => x.DeletedAt);
+            entity.HasIndex(x => new { x.State, x.DeletedAt });
+        });
+
         builder.Entity<FolderEntity>(entity =>
         {
             entity.ToTable("folders");
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
             entity.HasOne(x => x.Parent).WithMany().HasForeignKey(x => x.ParentId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.DeletedBatch).WithMany().HasForeignKey(x => x.DeletedBatchId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => x.DeletedBatchId);
             entity.Property(x => x.ContainerId).HasComputedColumnSql("COALESCE(\"ChannelId\", \"OwnerUserId\")", stored: true);
             entity.HasIndex(x => new { x.ChannelId, x.ParentId, x.Name });
             entity.HasIndex(x => new { x.OwnerUserId, x.ParentId, x.Name });
@@ -296,6 +311,8 @@ public sealed class ApplicationDbContext : IdentityDbContext<AppUser, AppRole, G
             entity.Property(x => x.Sha256).HasMaxLength(64).IsRequired();
             entity.Property(x => x.StorageKey).HasMaxLength(512).IsRequired();
             entity.HasOne(x => x.Folder).WithMany().HasForeignKey(x => x.FolderId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.DeletedBatch).WithMany().HasForeignKey(x => x.DeletedBatchId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => x.DeletedBatchId);
             entity.Property(x => x.ContainerId).HasComputedColumnSql("COALESCE(\"ChannelId\", \"OwnerUserId\")", stored: true);
             entity.HasIndex(x => new { x.ChannelId, x.FolderId, x.Name });
             entity.HasIndex(x => new { x.OwnerUserId, x.FolderId, x.Name });

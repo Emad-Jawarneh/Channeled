@@ -6,6 +6,7 @@ using Channeled.Application.Abstractions.Storage;
 using Channeled.Application.Abstractions.Time;
 using Channeled.Application.Admin;
 using Channeled.Application.Identity;
+using Channeled.Application.Teams;
 using Channeled.Domain.Audit;
 using Channeled.Domain.Errors;
 using Channeled.Domain.Identity;
@@ -13,20 +14,24 @@ using Channeled.Infrastructure.Files;
 using Channeled.Infrastructure.Identity;
 using Channeled.Infrastructure.Persistence;
 using Channeled.Infrastructure.PublicLinks;
+using Channeled.Infrastructure.Teams;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace Channeled.Infrastructure.Admin;
 
-public sealed class AdminService(
+public sealed partial class AdminService(
     ApplicationDbContext db,
     UserManager<AppUser> userManager,
     IClock clock,
     IFileStore store,
     IBackupService backups,
     ISystemHealthService health,
-    IOptions<BackupOptions> backupOptions) : IAdminService
+    IOptions<BackupOptions> backupOptions,
+    ITeamService teamService,
+    IOptions<ChannelDeleteOptions> channelDeleteOptions,
+    IOptions<UserDeleteOptions> userDeleteOptions) : IAdminService
 {
     public async Task<AppResult<AdminDashboardDto>> GetDashboardAsync(Guid actorId, CancellationToken ct = default)
     {
@@ -187,32 +192,6 @@ public sealed class AdminService(
         await WriteAuditAsync(actorId, AuditEventType.UserDisable, "user", user.Id.ToString(), null, context, ct);
         await db.SaveChangesAsync(ct);
         return AppResult.Ok();
-    }
-
-    public async Task<AppResult> DeleteUserAsync(Guid actorId, Guid userId, RequestContext context, CancellationToken ct = default)
-    {
-        if (!await IsAdminAsync(actorId, ct))
-        {
-            return NotFound();
-        }
-
-        if (actorId == userId)
-        {
-            return AppResult.Fail(ErrorCodes.Validation, "Cannot delete yourself.");
-        }
-
-        var user = await userManager.FindByIdAsync(userId.ToString());
-        if (user is null)
-        {
-            return NotFound();
-        }
-
-        await WriteAuditAsync(actorId, AuditEventType.UserDelete, "user", user.Id.ToString(), null, context, ct);
-        await db.SaveChangesAsync(ct);
-        var result = await userManager.DeleteAsync(user);
-        return result.Succeeded
-            ? AppResult.Ok()
-            : AppResult.Fail(ErrorCodes.Validation, string.Join("; ", result.Errors.Select(e => e.Description)));
     }
 
     public async Task<AppResult> ResetUserPasswordAsync(

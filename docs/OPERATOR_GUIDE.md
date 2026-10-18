@@ -2,6 +2,8 @@
 
 Native install only — **no Docker**.
 
+For as-built architecture (deletion lifecycles, jobs, config map), see [`system-design/`](system-design/README.md).
+
 ## Prerequisites
 
 - .NET 10 runtime (SDK for builds)

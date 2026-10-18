@@ -1,5 +1,7 @@
 # Architectural Decisions
 
+Narrative system design (as-built) lives in [`system-design/`](system-design/README.md). This file records dated decisions and reasons.
+
 ## 2026-10-12 — .NET 10 LTS
 
 **Decision:** Target `net10.0` (SDK 10.0.x on this machine).

@@ -6,7 +6,8 @@ Self-hosted, multi-team file-sharing platform.
 
 | Doc | Purpose |
 |-----|---------|
-| [`docs/AGENTS.md`](docs/AGENTS.md) | Product / engineering spec |
+| [`docs/system-design/`](docs/system-design/README.md) | **As-built system design** (architecture, authz, files, deletion, jobs, SPA) |
+| [`docs/AGENTS.md`](docs/AGENTS.md) | Product / engineering build prompt |
 | [`docs/PROGRESS.md`](docs/PROGRESS.md) | Milestone status and gate evidence |
 | [`docs/DECISIONS.md`](docs/DECISIONS.md) | Architectural decisions |
 | [`docs/OPERATOR_GUIDE.md`](docs/OPERATOR_GUIDE.md) | Ops install notes |

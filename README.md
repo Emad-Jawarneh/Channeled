@@ -1,4 +1,5 @@
 # Channeled
+<img width="1512" height="581" alt="image" src="https://github.com/user-attachments/assets/0fc3aeff-72ff-4604-b99d-65bb48133ba5" />
 
 Self-hosted file sharing for teams. Users belong to many teams, work in **file** or **text** channels, keep a private **My files** space, and optionally share anonymous file links. One API process, PostgreSQL, and a local or S3-compatible object store.
 

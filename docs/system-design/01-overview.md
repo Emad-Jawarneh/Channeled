@@ -12,7 +12,7 @@ Platform
  └── Personal space (“My files”) — per user, outside any team
 ```
 
-Operators run a single API process (optionally behind Caddy/nginx), PostgreSQL, and either a local filesystem object store or S3-compatible storage (MinIO, etc.). **Native install** is the primary production path; an optional **Docker Compose** stack lives at the repo root (`Dockerfile`, `docker-compose.yml`, `ops/docker/`).
+Operators run a single API process (optionally behind Caddy/nginx), PostgreSQL, and either a local filesystem object store or S3-compatible storage (MinIO, etc.). **Native install** is the primary production path; an optional **Docker Compose** stack lives at the repo root (`docker-compose.yml`, `ops/docker/`).
 
 ## Goals (as built)
 

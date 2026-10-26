@@ -1,6 +1,5 @@
-# Keep Railway on Railpack (railpack.json). A root Dockerfile is for local
-# docker compose; without this, Railway switches to Docker and the process
-# listens on 8080 while the platform routes to $PORT → crash loop.
+# Keep Railway on Railpack (railpack.json). The Compose image lives at
+# ops/docker/Dockerfile so Railway does not auto-detect a root Dockerfile.
 [build]
 builder = "RAILPACK"
 

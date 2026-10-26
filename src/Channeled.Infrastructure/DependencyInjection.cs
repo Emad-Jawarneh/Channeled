@@ -221,27 +221,56 @@ public static class DependencyInjection
     /// <summary>
     /// Railway / libpq often supply <c>postgresql://...</c> (or <c>DATABASE_URL</c>).
     /// Npgsql's EF path rejects URI form with "Format ... index 0"; convert to keyword form.
-    /// Prefers <c>DATABASE_URL</c> so PaaS injects beat a localhost value left in appsettings.
+    /// Prefers PaaS URLs / libpq env so Production never silently uses a localhost appsettings default.
     /// </summary>
     internal static string ResolvePostgresConnectionString(IConfiguration configuration)
     {
         var databaseUrl = FirstNonEmpty(
             configuration["DATABASE_URL"],
-            Environment.GetEnvironmentVariable("DATABASE_URL"));
+            Environment.GetEnvironmentVariable("DATABASE_URL"),
+            configuration["DATABASE_PRIVATE_URL"],
+            Environment.GetEnvironmentVariable("DATABASE_PRIVATE_URL"),
+            configuration["POSTGRES_URL"],
+            Environment.GetEnvironmentVariable("POSTGRES_URL"));
+        var fromLibpq = TryBuildConnectionStringFromLibpqEnv(configuration);
         var configured = configuration.GetConnectionString("Postgres");
 
         // Skip baked-in local defaults when a PaaS URL is present (Docker/Railway Production).
-        if (IsLocalDevPostgresPlaceholder(configured) && !string.IsNullOrWhiteSpace(databaseUrl))
+        var hasRemote = !string.IsNullOrWhiteSpace(databaseUrl) || !string.IsNullOrWhiteSpace(fromLibpq);
+        if (IsLocalDevPostgresPlaceholder(configured) && hasRemote)
         {
             configured = null;
         }
 
-        var raw = FirstNonEmpty(databaseUrl, configured)
+        var raw = FirstNonEmpty(databaseUrl, fromLibpq, configured)
                   ?? throw new InvalidOperationException(
-                      "Postgres is required. Set DATABASE_URL (Railway: link a Postgres service) "
-                      + "or ConnectionStrings__Postgres. Do not rely on the Development localhost default in Production.");
+                      "Postgres is required. On Railway: add a Postgres service, then on this app service set "
+                      + "DATABASE_URL=${{Postgres.DATABASE_URL}} (use the exact Postgres service name). "
+                      + "Or set ConnectionStrings__Postgres. Development localhost defaults are not used in Production.");
 
         return NormalizeNpgsqlConnectionString(raw);
+    }
+
+    /// <summary>Assemble keyword CS from Railway/libpq <c>PGHOST</c>/<c>PGUSER</c>/… when URL vars are absent.</summary>
+    internal static string? TryBuildConnectionStringFromLibpqEnv(IConfiguration configuration)
+    {
+        static string? Env(IConfiguration config, string key) =>
+            FirstNonEmpty(config[key], Environment.GetEnvironmentVariable(key));
+
+        var host = Env(configuration, "PGHOST");
+        var user = Env(configuration, "PGUSER");
+        var password = Env(configuration, "PGPASSWORD");
+        var database = Env(configuration, "PGDATABASE");
+        if (string.IsNullOrWhiteSpace(host)
+            || string.IsNullOrWhiteSpace(user)
+            || password is null
+            || string.IsNullOrWhiteSpace(database))
+        {
+            return null;
+        }
+
+        var port = Env(configuration, "PGPORT") ?? "5432";
+        return $"Host={host};Port={port};Database={database};Username={user};Password={password};SslMode=Prefer";
     }
 
     internal static string NormalizeNpgsqlConnectionString(string connectionString)

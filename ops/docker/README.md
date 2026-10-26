@@ -2,7 +2,7 @@
 
 Optional path. Native install (systemd / Windows service) remains fully supported — see [`../OPERATOR_GUIDE.md`](../OPERATOR_GUIDE.md).
 
-**Railway:** the repo root `Dockerfile` is for Compose. Production on Railway stays on **Railpack** via [`../../railway.toml`](../../railway.toml) (`builder = "RAILPACK"`). Without that, Railway would build the Dockerfile, listen on 8080, and crash while the platform routes to `$PORT`.
+**Railway:** this Dockerfile is Compose-only (`ops/docker/Dockerfile`). Production on Railway stays on **Railpack** via [`../../railway.toml`](../../railway.toml). Keep the Dockerfile out of the repo root so Railway does not auto-select Docker. Wire Postgres with `DATABASE_URL=${{Postgres.DATABASE_URL}}` on the app service (see Operator Guide).
 
 ## What you get
 

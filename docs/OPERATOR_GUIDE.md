@@ -45,7 +45,13 @@ One settings file plus environment overrides. Start from [`ops/channeled.env.exa
 
 ### Railway
 
-Use Railpack (`railway.toml` → `builder = "RAILPACK"`), not the root Dockerfile. Link a Postgres plugin to the service so Railway injects `DATABASE_URL`. Localhost Postgres defaults exist only under `ASPNETCORE_ENVIRONMENT=Development`. Also set `Operations__PublicUrl`, `Realtime__AllowedOrigins__0`, and Data Protection / file-store volume paths (see `railpack.json` deploy variables).
+1. Builder: `railway.toml` sets `builder = "RAILPACK"` (Compose image lives at `ops/docker/Dockerfile` so Railway does not pick Docker by mistake).
+2. Add a **Postgres** service in the same project (if you do not already have one).
+3. On the **app** service → **Variables** → add:
+   - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}`  
+     (replace `Postgres` with the exact service name shown in the canvas, e.g. `PostgreSQL`).
+4. Redeploy. Localhost Postgres defaults load only when `ASPNETCORE_ENVIRONMENT=Development`.
+5. Also set `Operations__PublicUrl`, `Realtime__AllowedOrigins__0`, and volume paths (see `railpack.json` deploy variables).
 
 ### Account deletion and chat privacy
 

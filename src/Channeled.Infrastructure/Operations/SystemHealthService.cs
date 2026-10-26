@@ -51,8 +51,22 @@ public sealed class SystemHealthService(
             detail = (detail is null ? "" : detail + "; ") + "disk: " + ex.Message;
         }
 
-        var pending = await db.Jobs.CountAsync(j => j.State == "pending" || j.State == "running", cancellationToken);
-        var dead = await db.Jobs.CountAsync(j => j.State == "dead", cancellationToken);
+        var pending = 0;
+        var dead = 0;
+        if (dbOk)
+        {
+            try
+            {
+                pending = await db.Jobs.CountAsync(j => j.State == "pending" || j.State == "running", cancellationToken);
+                dead = await db.Jobs.CountAsync(j => j.State == "dead", cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                dbOk = false;
+                detail = (detail is null ? "" : detail + "; ") + "jobs: " + ex.Message;
+            }
+        }
+
         var status = dbOk && storeOk && diskOk && dead == 0 ? "ok" : "degraded";
         if (dead > 0)
         {

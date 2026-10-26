@@ -523,11 +523,9 @@ app.Use(async (context, next) =>
     await next();
 });
 
-app.MapGet("/health", async Task<IResult> (ISystemHealthService health, CancellationToken ct) =>
-    {
-        var report = await health.CheckAsync(ct);
-        return Results.Json(report, statusCode: report.Status == "ok" ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable);
-    })
+// Liveness for Railway / Compose / proxies: must stay 200 whenever the process can answer.
+// Deep DB/store/disk status lives on /api/v1/health (may 503 when degraded).
+app.MapGet("/health", () => Results.Json(new { status = "ok", api = true }))
     .WithName("Health")
     .WithTags("Health")
     .AllowAnonymous();

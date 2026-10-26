@@ -97,7 +97,8 @@ Defaults: `src/Channeled.Api/appsettings.json`. Production: environment variable
 
 ## Health & metrics
 
-- `/health` and `/api/v1/health` — liveness/readiness style checks for proxies.
+- `/health` — liveness (always 200 if the process answers; used by Railway/Compose).
+- `/api/v1/health` — readiness (DB/store/disk/jobs; 503 when degraded).
 - `/metrics` — process metrics scrape endpoint.
 - Maintenance mode still allows health/metrics (and selected admin backup routes).
 

@@ -4,7 +4,8 @@ builder = "DOCKERFILE"
 dockerfilePath = "ops/docker/Dockerfile"
 
 [deploy]
+# Liveness only (/health always 200 once listening). Migrations run before listen.
 healthcheckPath = "/health"
-healthcheckTimeout = 120
+healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 5

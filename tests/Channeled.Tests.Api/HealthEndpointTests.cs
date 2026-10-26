@@ -15,11 +15,25 @@ public class HealthEndpointTests : IClassFixture<AuthApiFactory>
     }
 
     [Fact]
-    public async Task Health_returns_ok()
+    public async Task Health_liveness_returns_ok_without_dependency_probe()
     {
         var client = _factory.CreateClient();
 
         var response = await client.GetAsync("/health");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<LivenessBody>();
+        body.Should().NotBeNull();
+        body!.Status.Should().Be("ok");
+        body.Api.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Api_health_reports_database_and_store()
+    {
+        var client = _factory.CreateClient();
+
+        var response = await client.GetAsync("/api/v1/health");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<HealthBody>();
@@ -28,6 +42,8 @@ public class HealthEndpointTests : IClassFixture<AuthApiFactory>
         body.Database.Should().BeTrue();
         body.Store.Should().BeTrue();
     }
+
+    private sealed record LivenessBody(string Status, bool Api);
 
     private sealed record HealthBody(string Status, bool Api, bool Database, bool Store, bool Disk);
 }

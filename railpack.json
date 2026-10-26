@@ -32,7 +32,7 @@
     }
   },
   "deploy": {
-    "startCommand": "ASPNETCORE_URLS=http://0.0.0.0:${PORT:-3000} ./out/Channeled.Api",
+    "startCommand": "mkdir -p /app/data/object-store /app/data/backups /app/data/dp-keys && ASPNETCORE_URLS=http://0.0.0.0:${PORT:-3000} ./out/Channeled.Api",
     "variables": {
       "ASPNETCORE_ENVIRONMENT": "Production",
       "MigrateOnStartup": "true",
@@ -45,6 +45,7 @@
       "Backup__RootPath": "/app/data/backups",
       "Backup__AlertEmail": "ops@example.com",
       "Backup__LowDiskBytes": "1073741824",
+      "DataProtection__KeysPath": "/app/data/dp-keys",
 
       "Operations__PublicUrl": "https://channeled.up.railway.app",
       "Realtime__AllowedOrigins__0": "https://channeled.up.railway.app",

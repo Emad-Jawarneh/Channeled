@@ -114,13 +114,22 @@ public static class DependencyInjection
         });
 
         // Data Protection encrypts join tokens, download tickets, etc. Persist the key ring when
-        // DataProtection:KeysPath is set (required for durable cookies across container restarts).
+        // DataProtection:KeysPath is set (durable cookies across restarts). If the path is not
+        // writable (common on ephemeral PaaS mounts), fall back to the default ephemeral ring
+        // instead of crashing startup.
         var dataProtection = services.AddDataProtection();
         var keysPath = configuration["DataProtection:KeysPath"];
         if (!string.IsNullOrWhiteSpace(keysPath))
         {
-            Directory.CreateDirectory(keysPath);
-            dataProtection.PersistKeysToFileSystem(new DirectoryInfo(keysPath));
+            try
+            {
+                Directory.CreateDirectory(keysPath);
+                dataProtection.PersistKeysToFileSystem(new DirectoryInfo(keysPath));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                // Ephemeral keys: sessions reset on restart, but the process stays up.
+            }
         }
 
         services.AddSingleton<TeamJoinLinkProtector>();

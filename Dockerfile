@@ -1,4 +1,7 @@
 # syntax=docker/dockerfile:1
+#
+# Local / Compose image. Railway should keep using Railpack (see railway.toml);
+# if you deploy this Dockerfile on Railway anyway, entrypoint honors $PORT.
 
 # --- SPA -----------------------------------------------------------------
 FROM node:22-bookworm AS web
@@ -30,23 +33,27 @@ WORKDIR /app
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl \
  && rm -rf /var/lib/apt/lists/* \
- && mkdir -p /data/object-store /data/backups /data/dp-keys \
- && chown -R $APP_UID:$APP_UID /data
+ && mkdir -p /app/data/object-store /app/data/backups /app/data/dp-keys \
+ && chown -R $APP_UID:$APP_UID /app/data
 
 COPY --from=build /app/publish ./
 COPY --from=web /src/web/dist ./wwwroot
+COPY ops/docker/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh \
+ && chown $APP_UID:$APP_UID /app/entrypoint.sh
 
-ENV ASPNETCORE_URLS=http://0.0.0.0:8080 \
-    ASPNETCORE_ENVIRONMENT=Production \
+# Defaults for Compose. Do not hardcode ASPNETCORE_URLS — entrypoint uses $PORT.
+ENV ASPNETCORE_ENVIRONMENT=Production \
     MigrateOnStartup=true \
     FileStore__Kind=FileSystem \
-    FileStore__RootPath=/data/object-store \
-    Backup__RootPath=/data/backups \
-    DataProtection__KeysPath=/data/dp-keys
+    FileStore__RootPath=/app/data/object-store \
+    Backup__RootPath=/app/data/backups \
+    PORT=8080
 
 EXPOSE 8080
 USER $APP_UID
-HEALTHCHECK --interval=15s --timeout=5s --start-period=40s --retries=5 \
-  CMD curl -fsS http://127.0.0.1:8080/health || exit 1
 
-ENTRYPOINT ["dotnet", "Channeled.Api.dll"]
+# No HEALTHCHECK: Railway / Compose define their own; a Docker HEALTHCHECK on
+# the wrong port caused restart loops on Railway when it picked up this file.
+
+ENTRYPOINT ["/app/entrypoint.sh"]

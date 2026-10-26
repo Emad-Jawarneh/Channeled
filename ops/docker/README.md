@@ -2,6 +2,8 @@
 
 Optional path. Native install (systemd / Windows service) remains fully supported — see [`../OPERATOR_GUIDE.md`](../OPERATOR_GUIDE.md).
 
+**Railway:** the repo root `Dockerfile` is for Compose. Production on Railway stays on **Railpack** via [`../../railway.toml`](../../railway.toml) (`builder = "RAILPACK"`). Without that, Railway would build the Dockerfile, listen on 8080, and crash while the platform routes to `$PORT`.
+
 ## What you get
 
 | Service | Role |
@@ -81,6 +83,7 @@ docker run --rm -p 8080:8080 \
 ## Notes
 
 - `MigrateOnStartup=true` by default in the image.
-- Data Protection keys live under `/data/dp-keys` so auth cookies and join-link tokens survive recreating the container.
+- Data Protection keys live under `/app/data/dp-keys` (Compose sets `DataProtection__KeysPath`) so auth cookies and join-link tokens survive recreating the container.
+- The image entrypoint binds `ASPNETCORE_URLS` to `$PORT` (default 8080), so the same Dockerfile is safe on PaaS if you ever switch builders.
 - Public file link HMAC keys are **not** in Postgres dumps — keep `PUBLIC_FILE_LINKS_HMAC_KEY` in your secret store.
 - Playwright / `./ci.sh` still expect a native (or separately provisioned) Postgres; Docker Compose is for **running** the product, not replacing CI.

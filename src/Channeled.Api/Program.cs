@@ -374,7 +374,29 @@ using (var scope = app.Services.CreateScope())
     var migrateOnStart = app.Configuration.GetValue("MigrateOnStartup", app.Environment.IsDevelopment());
     if (migrateOnStart)
     {
-        await db.Database.MigrateAsync();
+        try
+        {
+            await db.Database.MigrateAsync();
+        }
+        catch (Exception ex) when (ex is Npgsql.NpgsqlException or InvalidOperationException)
+        {
+            var cs = app.Configuration.GetConnectionString("Postgres") ?? "(unset)";
+            var hostHint = "unknown";
+            foreach (var part in cs.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (part.StartsWith("Host=", StringComparison.OrdinalIgnoreCase))
+                {
+                    hostHint = part["Host=".Length..];
+                    break;
+                }
+            }
+
+            throw new InvalidOperationException(
+                $"Startup migration failed talking to Postgres host '{hostHint}'. "
+                + "In Production set DATABASE_URL (link Railway Postgres) or ConnectionStrings__Postgres — "
+                + "localhost defaults only load under Development.",
+                ex);
+        }
     }
 }
 

@@ -28,7 +28,7 @@ One settings file plus environment overrides. Start from [`ops/channeled.env.exa
 
 | Setting | Purpose |
 |---------|---------|
-| `ConnectionStrings__Postgres` | Database |
+| `ConnectionStrings__Postgres` / `DATABASE_URL` | Database (`DATABASE_URL` wins; Railway: link Postgres so the plugin injects it) |
 | `FileStore__Kind` / `RootPath` or S3 fields | Object store |
 | `Backup__RootPath` | Backup packages |
 | `Backup__RetainDaily` / `Weekly` / `Monthly` | Retention (7 / 4 / 3) |
@@ -42,6 +42,10 @@ One settings file plus environment overrides. Start from [`ops/channeled.env.exa
 | `Chat__PostsPerMinutePerUser` | Text-channel post rate limit (default 30) |
 | `ChannelDelete__MaxFilesPerTeamDelete` / `MaxMessagesPerTeamDelete` | Team delete totals (default 50000) |
 | `UserDelete__SweepIntervalSeconds` / `LatePhaseGraceSeconds` | Stuck user-delete sweep |
+
+### Railway
+
+Use Railpack (`railway.toml` → `builder = "RAILPACK"`), not the root Dockerfile. Link a Postgres plugin to the service so Railway injects `DATABASE_URL`. Localhost Postgres defaults exist only under `ASPNETCORE_ENVIRONMENT=Development`. Also set `Operations__PublicUrl`, `Realtime__AllowedOrigins__0`, and Data Protection / file-store volume paths (see `railpack.json` deploy variables).
 
 ### Account deletion and chat privacy
 

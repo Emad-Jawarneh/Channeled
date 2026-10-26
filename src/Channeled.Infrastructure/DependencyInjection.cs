@@ -221,13 +221,25 @@ public static class DependencyInjection
     /// <summary>
     /// Railway / libpq often supply <c>postgresql://...</c> (or <c>DATABASE_URL</c>).
     /// Npgsql's EF path rejects URI form with "Format ... index 0"; convert to keyword form.
+    /// Prefers <c>DATABASE_URL</c> so PaaS injects beat a localhost value left in appsettings.
     /// </summary>
     internal static string ResolvePostgresConnectionString(IConfiguration configuration)
     {
-        var raw = configuration.GetConnectionString("Postgres")
-                  ?? configuration["DATABASE_URL"]
+        var databaseUrl = FirstNonEmpty(
+            configuration["DATABASE_URL"],
+            Environment.GetEnvironmentVariable("DATABASE_URL"));
+        var configured = configuration.GetConnectionString("Postgres");
+
+        // Skip baked-in local defaults when a PaaS URL is present (Docker/Railway Production).
+        if (IsLocalDevPostgresPlaceholder(configured) && !string.IsNullOrWhiteSpace(databaseUrl))
+        {
+            configured = null;
+        }
+
+        var raw = FirstNonEmpty(databaseUrl, configured)
                   ?? throw new InvalidOperationException(
-                      "Connection string 'Postgres' (or DATABASE_URL) is required.");
+                      "Postgres is required. Set DATABASE_URL (Railway: link a Postgres service) "
+                      + "or ConnectionStrings__Postgres. Do not rely on the Development localhost default in Production.");
 
         return NormalizeNpgsqlConnectionString(raw);
     }
@@ -251,7 +263,76 @@ public static class DependencyInjection
         var password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : "";
         var database = Uri.UnescapeDataString(uri.AbsolutePath.TrimStart('/'));
         var port = uri.IsDefaultPort ? 5432 : uri.Port;
+        var sslMode = ResolveSslModeFromUriQuery(uri.Query);
 
-        return $"Host={uri.Host};Port={port};Database={database};Username={user};Password={password};SslMode=Disable";
+        return $"Host={uri.Host};Port={port};Database={database};Username={user};Password={password};SslMode={sslMode}";
+    }
+
+    private static string? FirstNonEmpty(params string?[] values)
+    {
+        foreach (var value in values)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Local appsettings / compose defaults that must not win over PaaS DATABASE_URL.</summary>
+    internal static bool IsLocalDevPostgresPlaceholder(string? connectionString)
+    {
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return false;
+        }
+
+        var n = connectionString.ToLowerInvariant();
+        var localHost = n.Contains("127.0.0.1", StringComparison.Ordinal)
+                        || n.Contains("localhost", StringComparison.Ordinal);
+        if (!localHost)
+        {
+            return false;
+        }
+
+        return n.Contains("database=channeled", StringComparison.Ordinal)
+               || n.Contains("channeled_dev", StringComparison.Ordinal);
+    }
+
+    private static string ResolveSslModeFromUriQuery(string query)
+    {
+        // Prefer works for local Docker and Railway private networking; honor explicit sslmode=.
+        const string fallback = "Prefer";
+        if (string.IsNullOrEmpty(query))
+        {
+            return fallback;
+        }
+
+        foreach (var part in query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var kv = part.Split('=', 2);
+            if (kv.Length != 2 || !kv[0].Equals("sslmode", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var value = Uri.UnescapeDataString(kv[1]);
+            if (value.Equals("disable", StringComparison.OrdinalIgnoreCase)
+                || value.Equals("allow", StringComparison.OrdinalIgnoreCase)
+                || value.Equals("prefer", StringComparison.OrdinalIgnoreCase)
+                || value.Equals("require", StringComparison.OrdinalIgnoreCase)
+                || value.Equals("verify-ca", StringComparison.OrdinalIgnoreCase)
+                || value.Equals("verify-full", StringComparison.OrdinalIgnoreCase))
+            {
+                // Npgsql enum uses VerifyCA / VerifyFull; keyword form accepts hyphenated libpq names via Prefer/Require mostly.
+                return value.Equals("verify-ca", StringComparison.OrdinalIgnoreCase) ? "VerifyCA"
+                    : value.Equals("verify-full", StringComparison.OrdinalIgnoreCase) ? "VerifyFull"
+                    : char.ToUpperInvariant(value[0]) + value[1..].ToLowerInvariant();
+            }
+        }
+
+        return fallback;
     }
 }

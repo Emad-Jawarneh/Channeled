@@ -38,8 +38,6 @@
       "MigrateOnStartup": "true",
       "Maintenance__Enabled": "false",
 
-      "ConnectionStrings__Postgres": "Host=postgres.railway.internal;Port=5432;Database=railway;Username=postgres;Password=UgZojuIgJFiQHQzmPWdsGlQHfbtIoCxi;SslMode=Disable",
-
       "FileStore__Kind": "FileSystem",
       "FileStore__RootPath": "/app/data/object-store",
       "Backup__RootPath": "/app/data/backups",

@@ -54,7 +54,7 @@ Defaults: `src/Channeled.Api/appsettings.json`. Production: environment variable
 
 | Section | Salient keys |
 |---------|--------------|
-| `ConnectionStrings:Postgres` | Also accepts `DATABASE_URL` normalization in DI |
+| `ConnectionStrings:Postgres` | Prefer `DATABASE_URL` when set; localhost default only in Development appsettings |
 | `MigrateOnStartup` | Apply EF migrations on boot |
 | `DisableBackgroundJobs` | Kill switch for hosted services |
 | `FileStore` | `Kind`, filesystem root **or** S3 endpoint/bucket/keys |

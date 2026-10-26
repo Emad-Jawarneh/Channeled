@@ -1,14 +1,26 @@
 # Operator Guide
 
-Native install only — **no Docker**.
+**Native install** (systemd / Windows service) is the primary production path. An optional **Docker Compose** stack is documented in [`docker/README.md`](docker/README.md).
 
 For as-built architecture (deletion lifecycles, jobs, config map), see [`system-design/`](system-design/README.md).
 
 ## Prerequisites
 
-- .NET 10 runtime (SDK for builds)
+- .NET 10 runtime (SDK for builds) — or Docker Engine 24+ / Compose v2 for the container path
 - PostgreSQL **15+** required (**16+** recommended); `pg_dump` / `pg_restore` on `PATH`. Share-link FKs use `ON DELETE SET NULL (file_id)` (PG 15+).
 - Optional: MinIO native binary, Caddy or nginx, Node 20+ (SPA build)
+
+## Docker (optional)
+
+```bash
+cp ops/docker/compose.env.example ops/docker/compose.env   # set POSTGRES_PASSWORD
+docker compose --env-file ops/docker/compose.env up -d --build
+docker compose --env-file ops/docker/compose.env exec api \
+  dotnet Channeled.Api.dll seed-operator \
+  --email you@example.com --password 'YourPassword1!' --name Operator
+```
+
+Details, MinIO profile, volumes, and TLS notes: [`docker/README.md`](docker/README.md).
 
 ## Configuration
 

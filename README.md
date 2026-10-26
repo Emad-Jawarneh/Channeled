@@ -1,6 +1,8 @@
 # Channeled
 
-Self-hosted file sharing for teams. Users belong to many teams, work in **file** or **text** channels, keep a private **My files** space, and optionally share anonymous file links. One API process, PostgreSQL, and a local or S3-compatible object store — **no Docker**.
+Self-hosted file sharing for teams. Users belong to many teams, work in **file** or **text** channels, keep a private **My files** space, and optionally share anonymous file links. One API process, PostgreSQL, and a local or S3-compatible object store.
+
+Deploy **natively** (recommended for production) or with **Docker Compose** (see below).
 
 ```text
 Platform → Team → Channel (file | text) → File / Message
@@ -77,7 +79,24 @@ Open the Vite URL (proxies `/api` to the API). Sign in → create a team → ope
 
 Useful routes: `/me/files`, `/search`, `/t/:team/…`, `/admin/*`, `/reset/:token`.
 
-### 3. Call the API (cookie + CSRF)
+### 3. Docker Compose (optional)
+
+```bash
+cp ops/docker/compose.env.example ops/docker/compose.env
+# Set POSTGRES_PASSWORD (and PUBLIC_URL if not localhost).
+
+docker compose --env-file ops/docker/compose.env up -d --build
+
+docker compose --env-file ops/docker/compose.env exec api \
+  dotnet Channeled.Api.dll seed-operator \
+  --email you@example.com \
+  --password 'YourPassword1!' \
+  --name Operator
+```
+
+App: http://localhost:8080 · Guide: [`ops/docker/README.md`](ops/docker/README.md) · MinIO: add `--profile minio` and set `FILE_STORE_KIND=S3Compatible` in `compose.env`.
+
+### 4. Call the API (cookie + CSRF)
 
 ```bash
 curl -c cookies.txt -X POST http://localhost:5048/api/v1/auth/login \
@@ -136,10 +155,12 @@ Full knob list: [`docs/OPERATOR_GUIDE.md`](docs/OPERATOR_GUIDE.md) and [`docs/sy
 src/Channeled.Domain|Application|Infrastructure|Api
 tests/Channeled.Tests.Unit|Integration|Api
 web/                 SPA + Playwright
-ops/                 Postgres/MinIO install, backup, proxy, systemd
+ops/                 Postgres/MinIO install, backup, proxy, systemd, docker/
 docs/                Spec, design, security, operator guide
 scripts/             e2e, load test, bench seed, OpenAPI client
 openapi/             Published OpenAPI document
+Dockerfile           Multi-stage API + SPA image
+docker-compose.yml   Postgres + API (+ optional MinIO profile)
 ci.sh                Fail-closed CI entrypoint
 ```
 

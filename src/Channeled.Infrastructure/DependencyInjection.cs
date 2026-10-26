@@ -31,6 +31,7 @@ using Channeled.Infrastructure.Security;
 using Channeled.Infrastructure.Storage;
 using Channeled.Infrastructure.Teams;
 using Channeled.Infrastructure.Time;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -112,8 +113,16 @@ public static class DependencyInjection
             o.ValidationInterval = TimeSpan.FromSeconds(5);
         });
 
-        // Data Protection encrypts team join tokens at rest (key ring location configured by the host if needed).
-        services.AddDataProtection();
+        // Data Protection encrypts join tokens, download tickets, etc. Persist the key ring when
+        // DataProtection:KeysPath is set (required for durable cookies across container restarts).
+        var dataProtection = services.AddDataProtection();
+        var keysPath = configuration["DataProtection:KeysPath"];
+        if (!string.IsNullOrWhiteSpace(keysPath))
+        {
+            Directory.CreateDirectory(keysPath);
+            dataProtection.PersistKeysToFileSystem(new DirectoryInfo(keysPath));
+        }
+
         services.AddSingleton<TeamJoinLinkProtector>();
 
         services.AddSingleton<IClock, SystemClock>();

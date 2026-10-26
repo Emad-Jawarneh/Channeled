@@ -11,6 +11,7 @@ logs/
 appsettings.*.local.json
 .env
 .env.*
+ops/docker/compose.env
 
 # IDE
 .idea/

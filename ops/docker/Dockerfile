@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 #
-# Local / Compose image. Railway should keep using Railpack (see railway.toml);
-# if you deploy this Dockerfile on Railway anyway, entrypoint honors $PORT.
+# Used by docker compose and Railway (see railway.toml → DOCKERFILE).
+# Entrypoint binds ASPNETCORE_URLS to $PORT (Railway injects PORT).
 
 # --- SPA -----------------------------------------------------------------
 FROM node:22-bookworm AS web
@@ -43,17 +43,19 @@ RUN chmod +x /app/entrypoint.sh \
  && chown $APP_UID:$APP_UID /app/entrypoint.sh
 
 # Defaults for Compose. Do not hardcode ASPNETCORE_URLS — entrypoint uses $PORT.
+# Postgres: set DATABASE_URL or ConnectionStrings__Postgres at deploy time
+# (Railway: Variables → DATABASE_URL = ${{Postgres.DATABASE_URL}}).
 ENV ASPNETCORE_ENVIRONMENT=Production \
     MigrateOnStartup=true \
     FileStore__Kind=FileSystem \
     FileStore__RootPath=/app/data/object-store \
     Backup__RootPath=/app/data/backups \
+    DataProtection__KeysPath=/app/data/dp-keys \
     PORT=8080
 
 EXPOSE 8080
 USER $APP_UID
 
-# No HEALTHCHECK: Railway / Compose define their own; a Docker HEALTHCHECK on
-# the wrong port caused restart loops on Railway when it picked up this file.
+# No HEALTHCHECK: Railway / Compose define their own.
 
 ENTRYPOINT ["/app/entrypoint.sh"]

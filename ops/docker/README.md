@@ -2,7 +2,7 @@
 
 Optional path. Native install (systemd / Windows service) remains fully supported — see [`../OPERATOR_GUIDE.md`](../OPERATOR_GUIDE.md).
 
-**Railway:** this Dockerfile is Compose-only (`ops/docker/Dockerfile`). Production on Railway stays on **Railpack** via [`../../railway.toml`](../../railway.toml). Keep the Dockerfile out of the repo root so Railway does not auto-select Docker. Wire Postgres with `DATABASE_URL=${{Postgres.DATABASE_URL}}` on the app service (see Operator Guide).
+**Railway:** [`../../railway.toml`](../../railway.toml) builds this Dockerfile (`builder = "DOCKERFILE"`). You still must set `DATABASE_URL=${{Postgres.DATABASE_URL}}` on the app service (see Operator Guide) — the image does not embed DB credentials.
 
 ## What you get
 

@@ -1,10 +1,10 @@
-# Keep Railway on Railpack (railpack.json). The Compose image lives at
-# ops/docker/Dockerfile so Railway does not auto-detect a root Dockerfile.
+# Deploy with the Compose Dockerfile. Entrypoint binds ASPNETCORE_URLS to $PORT.
 [build]
-builder = "RAILPACK"
+builder = "DOCKERFILE"
+dockerfilePath = "ops/docker/Dockerfile"
 
 [deploy]
 healthcheckPath = "/health"
-healthcheckTimeout = 30
+healthcheckTimeout = 120
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 5

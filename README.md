@@ -160,7 +160,7 @@ ops/                 Postgres/MinIO install, backup, proxy, systemd, docker/
 docs/                Spec, design, security, operator guide
 scripts/             e2e, load test, bench seed, OpenAPI client
 openapi/             Published OpenAPI document
-ops/docker/Dockerfile  Multi-stage API + SPA image (Compose; Railway uses Railpack)
+ops/docker/Dockerfile  Multi-stage API + SPA image (Compose + Railway)
 docker-compose.yml   Postgres + API (+ optional MinIO profile)
 ci.sh                Fail-closed CI entrypoint
 ```

@@ -43,15 +43,18 @@ One settings file plus environment overrides. Start from [`ops/channeled.env.exa
 | `ChannelDelete__MaxFilesPerTeamDelete` / `MaxMessagesPerTeamDelete` | Team delete totals (default 50000) |
 | `UserDelete__SweepIntervalSeconds` / `LatePhaseGraceSeconds` | Stuck user-delete sweep |
 
-### Railway
+### Railway (Docker)
 
-1. Builder: `railway.toml` sets `builder = "RAILPACK"` (Compose image lives at `ops/docker/Dockerfile` so Railway does not pick Docker by mistake).
-2. Add a **Postgres** service in the same project (if you do not already have one).
-3. On the **app** service → **Variables** → add:
+`railway.toml` builds `ops/docker/Dockerfile`. The image entrypoint listens on Railway’s `$PORT`.
+
+1. Add a **Postgres** service in the same project (if missing).
+2. On the **app** service → **Variables** → New Variable:
    - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}`  
-     (replace `Postgres` with the exact service name shown in the canvas, e.g. `PostgreSQL`).
-4. Redeploy. Localhost Postgres defaults load only when `ASPNETCORE_ENVIRONMENT=Development`.
-5. Also set `Operations__PublicUrl`, `Realtime__AllowedOrigins__0`, and volume paths (see `railpack.json` deploy variables).
+     (replace `Postgres` with the exact service name on the canvas, e.g. `PostgreSQL`).
+   Without this, the container exits immediately — Docker cannot invent a DB URL.
+3. Set `Operations__PublicUrl` and `Realtime__AllowedOrigins__0` to your public `https://….up.railway.app` URL.
+4. Attach a volume at `/app/data` (object store, backups, Data Protection keys).
+5. Redeploy.
 
 ### Account deletion and chat privacy
 
